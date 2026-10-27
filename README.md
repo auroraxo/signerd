@@ -2,7 +2,7 @@
 
 Scoped signing daemon for Solana: the ssh-agent pattern, applied to Solana keys. signerd signs only the subset of transactions it can fully verify offline; everything else gets a structured refusal — and that refusal is the feature.
 
-**Status: early prototype (October 2026), NOT a signing service or security-reviewed wallet.** The scope was narrowed on 2026-10-26 after an adversarial review (see Safety boundary). On 2026-10-27 the first tested *legacy System-transfer-only* refusal checker and its atomic expenditure/replay ledger were added; the rest of the v1 envelope below remains a plan.
+**Status: v0 prototype (October 2026), NOT a signing service or security-reviewed wallet.** The scope was narrowed on 2026-10-26 after an adversarial review (see Safety boundary). On 2026-10-27 the first tested *legacy System-transfer-only* refusal checker and its atomic expenditure/replay ledger were added; on 2026-10-27/28 the local daemon (Unix socket, encrypted keystore, grant file) was added. **The daemon holds a real key and produces real signatures — it has not passed an independent adversarial review, and no real funds should use it yet.** The rest of the v1 envelope below remains a plan.
 
 ## The idea
 
@@ -41,10 +41,15 @@ A later, explicitly labeled `--simulate` mode may add RPC-backed checking for th
 ## Shape
 
 ```bash
-signerd init
-signerd key add ops --from ~/.config/solana/id.json
-signerd grant create ops --name ops-24h \
-  --dest ./allowlist.txt --mints ./mints.txt --max-sol 0.5 --ttl 24h
+# one-time setup: an encrypted keystore and a grant file
+signerd keygen --keystore ~/.config/signerd/ops.key --passphrase-file ~/.config/signerd/pass
+signerd run --keystore ~/.config/signerd/ops.key --passphrase-file ~/.config/signerd/pass \
+            --grants ~/.config/signerd/grants.json \
+            --ledger ~/.local/share/signerd/journal.jsonl \
+            --socket ~/.local/share/signerd/signerd.sock
+
+# a client: no key material, only a grant name and the transaction bytes
+signerd sign --socket ~/.local/share/signerd/signerd.sock --grant ops-24h --tx tx.bin
 ```
 
 ```ts
@@ -53,6 +58,15 @@ const signature = await signer.sign(transaction);  // or: { refused: "alt" }
 ```
 
 The planned core is a Rust daemon, a TypeScript SDK, and a built-in MCP server. `--dry` runs the same scope path without producing a real signature.
+
+### What the v0 daemon does today
+
+- **`src/keystore.js`** — encrypted keystore: scrypt (N=16384) + AES-256-GCM, file mode 0600. A keystore with any group/other permission bit is refused even though decryption would succeed; a wrong passphrase and a tampered ciphertext are indistinguishable (`keystore_auth_failed`).
+- **`src/grantfile.js`** — one strict grant file. Unknown fields are refused (a typo in a security file is a mistake, not an extra rule), grant names may not reach `Object.prototype`, and the loaded grants live on a null prototype.
+- **`src/daemon.js`** — a Unix socket (mode 0600) speaking newline-framed JSON. A request carries a grant **name** and base64 wire bytes; the response carries a signature or a machine-readable refusal. The socket is a capability: only the owner can talk to it.
+- **`src/signer.js`** — the signing path. Order is deliberate: grant/key mismatch is refused *before* any ledger write, the ledger fsyncs *before* signing, and the returned bytes are checked to differ from the approved wire only inside the 64-byte signature slot and to verify under Node's OpenSSL ed25519 implementation. If signing or verification fails after approval, the budget is burned and **nothing** is signed — the conservative direction.
+
+The v0 daemon still only speaks the narrow legacy System-transfer envelope of `src/policy.js`: one instruction, three accounts, one signer, no ALT, no CPI, no Token-2022, no authority change.
 
 ## Free and paid
 
@@ -97,10 +111,10 @@ npm ci
 npm test
 ```
 
-**Not safe for real keys yet.** There is no daemon, keystore, socket authentication, or grant isolation. The prototype does **not** sign or submit transactions, and it has no independent adversarial review of the implemented code (the first review attempt of the policy prototype timed out; a second independent false-allow probe of `src/policy.js` was commissioned). Its per-transaction cap and the ledger's fee arithmetic do not replace on-chain simulation, and the ledger does not bind transaction lifetime (blockhash freshness) — a stale blockhash simply fails on-chain. Do not compose its `allowed` boolean with a real signer until these boundaries have been implemented and reviewed.
+**Not safe for real keys yet.** The policy prototype is unit-tested and the daemon is tested end-to-end over a real socket (52 tests: 23 policy/ledger, 9 daemon, 8 signer, 7 grant file, 5 keystore), but the daemon's signing path has **not** yet passed an independent adversarial review. Do not point it at a key with funds. It has no authentication beyond the socket's file mode, no key rotation, no cross-process lock on the journal, and the ledger does not bind transaction lifetime (blockhash freshness) — a stale blockhash simply fails on-chain.
 
 ## Next qualification
 
-1. Independent wire-format/adversarial review of both `src/policy.js` and `src/ledger.js` (the false-allow probe covers the policy; the ledger's journal/atomicity semantics still need review) before attaching a key or exposing a socket.
+1. Independent adversarial review of the daemon's signing path (`src/signer.js`, `src/daemon.js`, `src/keystore.js`, `src/grantfile.js`) before pointing it at a key with funds. The policy/ledger path already had one; the new code does not yet.
 2. Expand supported instructions only when the fee and authority effects can be bounded; refuse anything undecidable, rather than widening policy to pass tests.
 3. Migrate own key-loading sites that fit the reviewed envelope as user zero; then run the 30-day restart/over-limit/refusal test. No outside users yet.

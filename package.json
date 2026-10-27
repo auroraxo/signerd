@@ -1,9 +1,12 @@
 {
   "name": "signerd",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "private": true,
-  "description": "Refusal-first prototype; no signer yet.",
-  "main": "src/policy.js",
+  "description": "Refusal-first prototype: Unix-socket signing daemon, grant file, encrypted keystore. Not a reviewed wallet.",
+  "main": "src/daemon.js",
+  "bin": {
+    "signerd": "bin/signerd.js"
+  },
   "scripts": {
     "test": "node --test",
     "test:crash": "node scripts/crash-consistency.js 25"
