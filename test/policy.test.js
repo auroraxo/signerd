@@ -49,6 +49,9 @@ test('time and grant fail closed', () => {
   deny(legacy(transfer()), 'invalid_grant', { ...grant, maxLamports: '-1' });
   deny(legacy(transfer()), 'invalid_grant', { ...grant, maxLamports: '18446744073709551616' });
   deny(legacy(transfer()), 'invalid_grant', { ...grant, destination: 'not a public key' });
+  deny(legacy(transfer()), 'invalid_grant', { ...grant, expiresAt: '2026-02-30T10:00:00Z' });
+  assert.deepEqual(verdict(legacy(transfer()), { ...grant, expiresAt: '2026-10-28T10:00:00.000Z' }),
+    { allowed: true, amountLamports: '42' });
   assert.deepEqual(evaluate(legacy(transfer()), grant, new Date(NaN)), { allowed: false, refused: 'invalid_clock' });
 });
 test('no second instruction, including a small transfer, price-fee drain, or Memo', () => {

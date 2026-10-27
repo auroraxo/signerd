@@ -40,9 +40,15 @@ function evaluate(raw, grant, now = new Date()) {
   const signer = parseKey(grant?.signer);
   const destination = parseKey(grant?.destination);
   const maximum = parseLamports(grant?.maxLamports);
-  const expiry = typeof grant?.expiresAt === 'string' && /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d{1,3})?Z$/.test(grant.expiresAt)
-    ? Date.parse(grant.expiresAt) : NaN;
-  if (!signer || !destination || maximum === null || !Number.isFinite(expiry)) return refused('invalid_grant');
+  const timestamp = typeof grant?.expiresAt === 'string' && /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d{1,3})?Z$/.test(grant.expiresAt)
+    ? grant.expiresAt : null;
+  const expiry = timestamp === null ? NaN : Date.parse(timestamp);
+  // Date.parse normalizes impossible calendar dates (e.g. February 30) instead
+  // of rejecting them. A normalized expiry could silently extend a grant.
+  const canonical = Number.isFinite(expiry) ? new Date(expiry).toISOString() : null;
+  if (!signer || !destination || maximum === null || !Number.isFinite(expiry) ||
+      canonical !== timestamp.replace(/(\.\d{1,3})?Z$/, (_, fraction) =>
+        `${fraction ? (fraction + '000').slice(0, 4) : '.000'}Z`)) return refused('invalid_grant');
   if (!(now instanceof Date) || !Number.isFinite(now.getTime())) return refused('invalid_clock');
   if (now.getTime() >= expiry) return refused('expired');
 
