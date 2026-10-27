@@ -81,6 +81,15 @@ Checked on 2026-10-24/26: 21 files across six of my own repositories load key ma
 
 The atomicity claim is falsified, not asserted: `npm run test:crash` spawns a child that approves transfers in a loop, SIGKILLs it at pseudo-random points (25 rounds), and asserts that every approval the child *reported* is durable in the journal afterward — i.e. the journal is a superset of what any caller was told, and it still loads after a torn append.
 
+### Independent adversarial probe (2026-10-27)
+
+An independent worker ran 132 adversarial cases (raw message construction, data-field shifts, wire malleability, grant manipulation, re-serialization tampering, hidden instructions) against the implemented code. Findings and disposition:
+
+- **Fixed — prototype-polluted grant fields**: a grant missing `expiresAt` / `windowMaxLamports` silently inherited the value from a polluted `Object.prototype`, changing the verdict. All grant fields are now read from **own properties only** (`ownField`), and accessors (getters) are refused so a TOCTOU getter cannot report the cap twice.
+- **Fixed — hostile clock**: a `Date` subclass overriding `getTime()` could make an expired grant look current. The clock is now read once, and only from a genuine `Date` (`readClock`); subclasses are refused.
+- **By design, not a defect**: amount `0` is allowed (it moves nothing, and the ledger still charges its 5000-lamport fee); operator-chosen grant values (`maxLamports = u64max`, far-future `expiresAt`) are honored as written; signature bytes are deliberately not verified — the policy attests to the *message*, and the future signing path decides what to sign; a flipped blockhash byte passes because the blockhash is not (and cannot be) validated offline — it merely fails on-chain.
+- The probe worker timed out before writing its own report; the raw case log survived (`allowed`/`refusedCounts`/`errors` + per-case detail), and both defects above were independently reproduced and then regression-tested before being called fixed.
+
 It does **not** parse transactions, hold keys, or sign. Single writer per journal file; no cross-process lock; journal grows without bound.
 
 ```bash

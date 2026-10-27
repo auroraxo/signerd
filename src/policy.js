@@ -27,6 +27,31 @@ function parseKey(value) {
 }
 
 /**
+ * Read a grant field from the object's OWN properties only, as a plain data
+ * value. Inherited or accessor properties are refused: a polluted
+ * Object.prototype must never be able to supply a grant field, and a getter
+ * could return a different value on a second read (TOCTOU).
+ */
+function ownField(source, key) {
+  if (source === null || typeof source !== 'object') return { ok: false };
+  const descriptor = Object.getOwnPropertyDescriptor(source, key);
+  if (!descriptor || !('value' in descriptor)) return { ok: false };
+  return { ok: true, value: descriptor.value };
+}
+
+/**
+ * Read the clock exactly once, and only from a real Date. A Date subclass can
+ * override getTime() to lie about "now"; the caller must not be able to
+ * resurrect an expired grant by passing a forged clock.
+ */
+function readClock(now) {
+  if (!(now instanceof Date)) return NaN;
+  if (Object.getPrototypeOf(now) !== Date.prototype) return NaN;
+  const value = now.getTime();
+  return Number.isFinite(value) ? value : NaN;
+}
+
+/**
  * A deliberately tiny policy evaluation, NOT a signer or a secure daemon.
  * Only a single legacy SystemProgram.transfer with exactly three static keys
  * and one signer can pass. An allowed verdict authorizes nothing beyond this
@@ -37,11 +62,19 @@ function evaluate(raw, grant, now = new Date()) {
   if (!Buffer.isBuffer(raw) && !(raw instanceof Uint8Array)) return refused('invalid_wire');
   const wire = Buffer.from(raw);
   if (!wire.length || wire.length > MAX_WIRE_BYTES) return refused('invalid_wire');
-  const signer = parseKey(grant?.signer);
-  const destination = parseKey(grant?.destination);
-  const maximum = parseLamports(grant?.maxLamports);
-  const timestamp = typeof grant?.expiresAt === 'string' && /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d{1,3})?Z$/.test(grant.expiresAt)
-    ? grant.expiresAt : null;
+  const signerField = ownField(grant, 'signer');
+  const destinationField = ownField(grant, 'destination');
+  const maximumField = ownField(grant, 'maxLamports');
+  const expiryField = ownField(grant, 'expiresAt');
+  if (!signerField.ok || !destinationField.ok || !maximumField.ok || !expiryField.ok) {
+    return refused('invalid_grant');
+  }
+  const signer = parseKey(signerField.value);
+  const destination = parseKey(destinationField.value);
+  const maximum = parseLamports(maximumField.value);
+  const timestamp = typeof expiryField.value === 'string' &&
+    /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d{1,3})?Z$/.test(expiryField.value)
+    ? expiryField.value : null;
   const expiry = timestamp === null ? NaN : Date.parse(timestamp);
   // Date.parse normalizes impossible calendar dates (e.g. February 30) instead
   // of rejecting them. A normalized expiry could silently extend a grant.
@@ -49,8 +82,9 @@ function evaluate(raw, grant, now = new Date()) {
   if (!signer || !destination || maximum === null || !Number.isFinite(expiry) ||
       canonical !== timestamp.replace(/(\.\d{1,3})?Z$/, (_, fraction) =>
         `${fraction ? (fraction + '000').slice(0, 4) : '.000'}Z`)) return refused('invalid_grant');
-  if (!(now instanceof Date) || !Number.isFinite(now.getTime())) return refused('invalid_clock');
-  if (now.getTime() >= expiry) return refused('expired');
+  const nowMs = readClock(now);
+  if (!Number.isFinite(nowMs)) return refused('invalid_clock');
+  if (nowMs >= expiry) return refused('expired');
 
   let transaction;
   try {
@@ -85,4 +119,4 @@ function evaluate(raw, grant, now = new Date()) {
   return { allowed: true, amountLamports: amount.toString() };
 }
 
-module.exports = { evaluate };
+module.exports = { evaluate, ownField, readClock };

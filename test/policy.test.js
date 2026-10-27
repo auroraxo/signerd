@@ -92,6 +92,34 @@ test('all versioned messages are refused, with or without ALT lookups', () => {
   assert.equal(withAlt.message.addressTableLookups.length, 1);
   deny(withAlt.serialize(), 'version_or_alt');
 });
+test('hostile clock and prototype-polluted grant fields are refused (probe regressions)', () => {
+  // A Date subclass can lie about "now" to resurrect an expired grant.
+  class FakeNow extends Date { getTime() { return now.getTime(); } }
+  const expired = { ...grant, expiresAt: '2026-10-26T10:00:00Z' };
+  assert.deepEqual(evaluate(legacy(transfer()), expired, new FakeNow()),
+    { allowed: false, refused: 'invalid_clock' });
+  // A real Date with an expired grant is still 'expired' (control).
+  assert.deepEqual(evaluate(legacy(transfer()), expired, now),
+    { allowed: false, refused: 'expired' });
+  // Grant fields must come from own properties: an expired or partial grant
+  // must not be completed by values sitting on Object.prototype.
+  const partial = { signer: grant.signer, destination: grant.destination, maxLamports: '42' };
+  const saved = Object.prototype.expiresAt;
+  Object.prototype.expiresAt = '2026-10-28T10:00:00Z';
+  try {
+    assert.deepEqual(evaluate(legacy(transfer()), partial, now),
+      { allowed: false, refused: 'invalid_grant' });
+  } finally {
+    if (saved === undefined) delete Object.prototype.expiresAt;
+    else Object.prototype.expiresAt = saved;
+  }
+  // A getter could return 42 on the cap read and something else later.
+  const toctou = { ...grant };
+  Object.defineProperty(toctou, 'maxLamports', { get() { return '42'; } });
+  assert.deepEqual(evaluate(legacy(transfer()), toctou, now),
+    { allowed: false, refused: 'invalid_grant' });
+});
+
 test('invalid, trailing, and oversized wire formats are refused', () => {
   const raw = legacy(transfer());
   deny(Buffer.from([1, 2, 3]), 'invalid_wire');

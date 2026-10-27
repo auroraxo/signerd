@@ -1,0 +1,1283 @@
+{
+  "date": "2026-10-27",
+  "source": "independent adversarial false-allow probe of src/policy.js (132 cases); worker timed out before its REPORT.md, raw case log preserved here",
+  "totals": {
+    "allowed": 28,
+    "refusedCounts": {
+      "amount": 8,
+      "envelope": 12,
+      "invalid_wire": 9,
+      "signer_or_fee_payer": 4,
+      "duplicate_key": 3,
+      "destination": 2,
+      "instruction_accounts": 15,
+      "instruction_data": 11,
+      "noncanonical_wire": 7,
+      "invalid_grant": 24,
+      "expired": 5,
+      "version_or_alt": 1
+    },
+    "errors": 3,
+    "detailCases": 132
+  },
+  "summary": {
+    "allowed": [
+      {
+        "name": "B0 baseline: canonical valid transfer",
+        "cls": "baseline",
+        "amount": "42",
+        "knownAllowed": true
+      },
+      {
+        "name": "C2 data tag=2 amount=cap (sanity-allowed)",
+        "cls": "2-data-field",
+        "amount": "42",
+        "knownAllowed": true
+      },
+      {
+        "name": "C2 data tag=2 amount=0",
+        "cls": "2-data-field",
+        "amount": "0",
+        "knownAllowed": false
+      },
+      {
+        "name": "C2 amount=41",
+        "cls": "2-data-field",
+        "amount": "41",
+        "knownAllowed": true
+      },
+      {
+        "name": "C2 amount=42",
+        "cls": "2-data-field",
+        "amount": "42",
+        "knownAllowed": true
+      },
+      {
+        "name": "C3 amount 0",
+        "cls": "3-amount-edge",
+        "amount": "0",
+        "knownAllowed": true
+      },
+      {
+        "name": "C3 amount cap",
+        "cls": "3-amount-edge",
+        "amount": "42",
+        "knownAllowed": true
+      },
+      {
+        "name": "C4 zero-signature (all-zero sig bytes) canonical",
+        "cls": "4-wire-malleability",
+        "amount": "42",
+        "knownAllowed": true
+      },
+      {
+        "name": "C4 arbitrary signature bytes 0xAA..AA",
+        "cls": "4-wire-malleability",
+        "amount": "42",
+        "knownAllowed": true
+      },
+      {
+        "name": "C5 maxLamports = \"18446744073709551615\" (u64max)",
+        "cls": "5-grant-manipulation",
+        "amount": "42",
+        "knownAllowed": false
+      },
+      {
+        "name": "C5 expiresAt \"9999-12-31T23:59:59Z\"",
+        "cls": "5-grant-manipulation",
+        "amount": "42",
+        "knownAllowed": false
+      },
+      {
+        "name": "C5 expiresAt \"2026-10-28T10:00:00.001Z\" (valid frac)",
+        "cls": "5-grant-manipulation",
+        "amount": "42",
+        "knownAllowed": true
+      },
+      {
+        "name": "C5 now far past (1970)",
+        "cls": "5-grant-manipulation",
+        "amount": "42",
+        "knownAllowed": true
+      },
+      {
+        "name": "C5 now just before expiry",
+        "cls": "5-grant-manipulation",
+        "amount": "42",
+        "knownAllowed": true
+      },
+      {
+        "name": "C5 now = Date subclass w/ overridden getTime (getTime=0, valid grant)",
+        "cls": "5-grant-manipulation",
+        "amount": "42",
+        "knownAllowed": false
+      },
+      {
+        "name": "C5 grant = Object.create(null)",
+        "cls": "5-grant-manipulation",
+        "amount": "42",
+        "knownAllowed": true
+      },
+      {
+        "name": "C5 grant has extra attacker fields",
+        "cls": "5-grant-manipulation",
+        "amount": "42",
+        "knownAllowed": true
+      },
+      {
+        "name": "C5 polluted Object.prototype.expiresAt, grant.expiresAt missing",
+        "cls": "5-grant-manipulation",
+        "amount": "42",
+        "knownAllowed": false
+      },
+      {
+        "name": "C5 grant with __proto__ maxLamports in literal",
+        "cls": "5-grant-manipulation",
+        "amount": "42",
+        "knownAllowed": false
+      },
+      {
+        "name": "C5 grant with getter returning 42 then u64max",
+        "cls": "5-grant-manipulation",
+        "amount": "42",
+        "knownAllowed": true
+      },
+      {
+        "name": "C5 Date-subclass getTime()=0 (grant already expired at real now)",
+        "cls": "5-grant-manipulation",
+        "amount": "42",
+        "knownAllowed": false
+      },
+      {
+        "name": "C5 Date-subclass getTime finite then 0 (TOCTOU on expired grant)",
+        "cls": "5-grant-manipulation",
+        "amount": "42",
+        "knownAllowed": false
+      },
+      {
+        "name": "C6 tampered signature byte (flip sig bit) - noncanonical?",
+        "cls": "6-reserialize",
+        "amount": "42",
+        "knownAllowed": false
+      },
+      {
+        "name": "C6 flipped message byte (blockhash) after sign",
+        "cls": "6-reserialize",
+        "amount": "42",
+        "knownAllowed": false
+      },
+      {
+        "name": "C7 one instruction with extra account list? -> uses raw wire count 1 but data holds second ix",
+        "cls": "7-hidden-instruction",
+        "amount": "42",
+        "knownAllowed": false
+      },
+      {
+        "name": "CX data is base58 of 12 bytes but instruction.data interpreted... via raw wire all normal",
+        "cls": "x-extra",
+        "amount": "42",
+        "knownAllowed": false
+      },
+      {
+        "name": "CX amount = cap with u64 wraparound representation (0x2A + high zeros)",
+        "cls": "x-extra",
+        "amount": "42",
+        "knownAllowed": true
+      },
+      {
+        "name": "CX grant maxLamports=0 amount=0",
+        "cls": "x-extra",
+        "amount": "0",
+        "knownAllowed": true
+      }
+    ],
+    "refusedCounts": {
+      "amount": 8,
+      "envelope": 12,
+      "invalid_wire": 9,
+      "signer_or_fee_payer": 4,
+      "duplicate_key": 3,
+      "destination": 2,
+      "instruction_accounts": 15,
+      "instruction_data": 11,
+      "noncanonical_wire": 7,
+      "invalid_grant": 24,
+      "expired": 5,
+      "version_or_alt": 1
+    },
+    "errors": [
+      {
+        "name": "C3 amount u64max+1 (bigint, web3 accepts?)",
+        "attackClass": "3-amount-edge",
+        "verdict": {
+          "threw": "Codec [u64] expected number to be in the range [0, 18446744073709551615], got 18446744073709551616."
+        }
+      },
+      {
+        "name": "C3 amount negative -1",
+        "attackClass": "3-amount-edge",
+        "verdict": {
+          "threw": "Codec [u64] expected number to be in the range [0, 18446744073709551615], got -1."
+        }
+      },
+      {
+        "name": "C6 legacy tx with 2 signatures added",
+        "attackClass": "6-reserialize",
+        "verdict": {
+          "threw": "unknown signer: 7b38CBGVR7Xni372hXR2R7WVZhC7itN81uwSkSEyfnBN"
+        }
+      }
+    ]
+  },
+  "detail": [
+    {
+      "name": "B0 baseline: canonical valid transfer",
+      "attackClass": "baseline",
+      "verdict": {
+        "allowed": true,
+        "amountLamports": "42"
+      }
+    },
+    {
+      "name": "B1 baseline: amount 43 > cap",
+      "attackClass": "baseline",
+      "verdict": {
+        "allowed": false,
+        "refused": "amount"
+      }
+    },
+    {
+      "name": "C1 header numRequiredSignatures=2 (add second signer)",
+      "attackClass": "1-raw-message",
+      "verdict": {
+        "allowed": false,
+        "refused": "envelope"
+      }
+    },
+    {
+      "name": "C1 header numReadonlyUnsignedAccounts=0 (dest+program both writable)",
+      "attackClass": "1-raw-message",
+      "verdict": {
+        "allowed": false,
+        "refused": "envelope"
+      }
+    },
+    {
+      "name": "C1 header numReadonlyUnsignedAccounts=2 (dest readonly)",
+      "attackClass": "1-raw-message",
+      "verdict": {
+        "allowed": false,
+        "refused": "envelope"
+      }
+    },
+    {
+      "name": "C1 header numReadonlySignedAccounts=1 (source readonly signer)",
+      "attackClass": "1-raw-message",
+      "verdict": {
+        "allowed": false,
+        "refused": "envelope"
+      }
+    },
+    {
+      "name": "C1 header numRequiredSignatures=0",
+      "attackClass": "1-raw-message",
+      "verdict": {
+        "allowed": false,
+        "refused": "envelope"
+      }
+    },
+    {
+      "name": "C1 header req=1 roU=0",
+      "attackClass": "1-raw-message",
+      "verdict": {
+        "allowed": false,
+        "refused": "envelope"
+      }
+    },
+    {
+      "name": "C1 req=2 with 2 zero sigs",
+      "attackClass": "1-raw-message",
+      "verdict": {
+        "allowed": false,
+        "refused": "envelope"
+      }
+    },
+    {
+      "name": "C1 req=1 declared but 2 sigs on wire",
+      "attackClass": "1-raw-message",
+      "verdict": {
+        "allowed": false,
+        "refused": "invalid_wire"
+      }
+    },
+    {
+      "name": "C1 req=1 declared but 0 sigs on wire",
+      "attackClass": "1-raw-message",
+      "verdict": {
+        "allowed": false,
+        "refused": "invalid_wire"
+      }
+    },
+    {
+      "name": "C1 keys order [dest, source, system] (dest is payer)",
+      "attackClass": "1-raw-message",
+      "verdict": {
+        "allowed": false,
+        "refused": "signer_or_fee_payer"
+      }
+    },
+    {
+      "name": "C1 keys order [system, source, dest]",
+      "attackClass": "1-raw-message",
+      "verdict": {
+        "allowed": false,
+        "refused": "signer_or_fee_payer"
+      }
+    },
+    {
+      "name": "C1 duplicate key: keys[1]==keys[0] (dest==source)",
+      "attackClass": "1-raw-message",
+      "verdict": {
+        "allowed": false,
+        "refused": "duplicate_key"
+      }
+    },
+    {
+      "name": "C1 duplicate key: keys[2]==keys[1] (program==dest)",
+      "attackClass": "1-raw-message",
+      "verdict": {
+        "allowed": false,
+        "refused": "duplicate_key"
+      }
+    },
+    {
+      "name": "C1 keys[1] is SystemProgram (dest slot holds program)",
+      "attackClass": "1-raw-message",
+      "verdict": {
+        "allowed": false,
+        "refused": "destination"
+      }
+    },
+    {
+      "name": "C1 duplicate key: keys[2]==keys[0] (program==signer)",
+      "attackClass": "1-raw-message",
+      "verdict": {
+        "allowed": false,
+        "refused": "duplicate_key"
+      }
+    },
+    {
+      "name": "C1 programIdIndex=0 (signer is program)",
+      "attackClass": "1-raw-message",
+      "verdict": {
+        "allowed": false,
+        "refused": "instruction_accounts"
+      }
+    },
+    {
+      "name": "C1 programIdIndex=1",
+      "attackClass": "1-raw-message",
+      "verdict": {
+        "allowed": false,
+        "refused": "instruction_accounts"
+      }
+    },
+    {
+      "name": "C1 programIdIndex=3 (out of range -> undefined)",
+      "attackClass": "1-raw-message",
+      "verdict": {
+        "allowed": false,
+        "refused": "instruction_accounts"
+      }
+    },
+    {
+      "name": "C1 programIdIndex=255",
+      "attackClass": "1-raw-message",
+      "verdict": {
+        "allowed": false,
+        "refused": "instruction_accounts"
+      }
+    },
+    {
+      "name": "C1 instruction accounts [0,0]",
+      "attackClass": "1-raw-message",
+      "verdict": {
+        "allowed": false,
+        "refused": "instruction_accounts"
+      }
+    },
+    {
+      "name": "C1 instruction accounts [0,2]",
+      "attackClass": "1-raw-message",
+      "verdict": {
+        "allowed": false,
+        "refused": "instruction_accounts"
+      }
+    },
+    {
+      "name": "C1 instruction accounts [1,0]",
+      "attackClass": "1-raw-message",
+      "verdict": {
+        "allowed": false,
+        "refused": "instruction_accounts"
+      }
+    },
+    {
+      "name": "C1 instruction accounts [1,2]",
+      "attackClass": "1-raw-message",
+      "verdict": {
+        "allowed": false,
+        "refused": "instruction_accounts"
+      }
+    },
+    {
+      "name": "C1 instruction accounts [2,0]",
+      "attackClass": "1-raw-message",
+      "verdict": {
+        "allowed": false,
+        "refused": "instruction_accounts"
+      }
+    },
+    {
+      "name": "C1 instruction accounts [2,1]",
+      "attackClass": "1-raw-message",
+      "verdict": {
+        "allowed": false,
+        "refused": "instruction_accounts"
+      }
+    },
+    {
+      "name": "C1 instruction accounts [0]",
+      "attackClass": "1-raw-message",
+      "verdict": {
+        "allowed": false,
+        "refused": "instruction_accounts"
+      }
+    },
+    {
+      "name": "C1 instruction accounts [1]",
+      "attackClass": "1-raw-message",
+      "verdict": {
+        "allowed": false,
+        "refused": "instruction_accounts"
+      }
+    },
+    {
+      "name": "C1 instruction accounts [0,1,2]",
+      "attackClass": "1-raw-message",
+      "verdict": {
+        "allowed": false,
+        "refused": "instruction_accounts"
+      }
+    },
+    {
+      "name": "C1 instruction accounts [3,1]",
+      "attackClass": "1-raw-message",
+      "verdict": {
+        "allowed": false,
+        "refused": "instruction_accounts"
+      }
+    },
+    {
+      "name": "C1 instruction accounts [0,255]",
+      "attackClass": "1-raw-message",
+      "verdict": {
+        "allowed": false,
+        "refused": "instruction_accounts"
+      }
+    },
+    {
+      "name": "C1 4 static keys (extra writable account)",
+      "attackClass": "1-raw-message",
+      "verdict": {
+        "allowed": false,
+        "refused": "envelope"
+      }
+    },
+    {
+      "name": "C1 2 static keys only",
+      "attackClass": "1-raw-message",
+      "verdict": {
+        "allowed": false,
+        "refused": "envelope"
+      }
+    },
+    {
+      "name": "C2 data tag=1 (Assign) 12 bytes",
+      "attackClass": "2-data-field",
+      "verdict": {
+        "allowed": false,
+        "refused": "instruction_data"
+      }
+    },
+    {
+      "name": "C2 data tag=0 (CreateAccount) 12 bytes",
+      "attackClass": "2-data-field",
+      "verdict": {
+        "allowed": false,
+        "refused": "instruction_data"
+      }
+    },
+    {
+      "name": "C2 data tag=3 (CreateAccountWithSeed) 12 bytes",
+      "attackClass": "2-data-field",
+      "verdict": {
+        "allowed": false,
+        "refused": "instruction_data"
+      }
+    },
+    {
+      "name": "C2 data tag=0xffffffff",
+      "attackClass": "2-data-field",
+      "verdict": {
+        "allowed": false,
+        "refused": "instruction_data"
+      }
+    },
+    {
+      "name": "C2 data tag=2 amount>cap",
+      "attackClass": "2-data-field",
+      "verdict": {
+        "allowed": false,
+        "refused": "amount"
+      }
+    },
+    {
+      "name": "C2 data tag=2 amount=cap (sanity-allowed)",
+      "attackClass": "2-data-field",
+      "verdict": {
+        "allowed": true,
+        "amountLamports": "42"
+      }
+    },
+    {
+      "name": "C2 data tag=2 amount=0",
+      "attackClass": "2-data-field",
+      "verdict": {
+        "allowed": true,
+        "amountLamports": "0"
+      }
+    },
+    {
+      "name": "C2 data tag=2 amount=u64max",
+      "attackClass": "2-data-field",
+      "verdict": {
+        "allowed": false,
+        "refused": "amount"
+      }
+    },
+    {
+      "name": "C2 data length 13 (tag2 + u64 + pad)",
+      "attackClass": "2-data-field",
+      "verdict": {
+        "allowed": false,
+        "refused": "instruction_data"
+      }
+    },
+    {
+      "name": "C2 data length 11 (short)",
+      "attackClass": "2-data-field",
+      "verdict": {
+        "allowed": false,
+        "refused": "instruction_data"
+      }
+    },
+    {
+      "name": "C2 data length 16",
+      "attackClass": "2-data-field",
+      "verdict": {
+        "allowed": false,
+        "refused": "instruction_data"
+      }
+    },
+    {
+      "name": "C2 data empty data",
+      "attackClass": "2-data-field",
+      "verdict": {
+        "allowed": false,
+        "refused": "instruction_data"
+      }
+    },
+    {
+      "name": "C2 data length 4 only tag",
+      "attackClass": "2-data-field",
+      "verdict": {
+        "allowed": false,
+        "refused": "instruction_data"
+      }
+    },
+    {
+      "name": "C2 data 12 bytes zero",
+      "attackClass": "2-data-field",
+      "verdict": {
+        "allowed": false,
+        "refused": "instruction_data"
+      }
+    },
+    {
+      "name": "C2 data tag=2 amount=43 but high-bit (negative-as-u64) 0xFFFFFFFFFFFFFFE0",
+      "attackClass": "2-data-field",
+      "verdict": {
+        "allowed": false,
+        "refused": "amount"
+      }
+    },
+    {
+      "name": "C2 amount=41",
+      "attackClass": "2-data-field",
+      "verdict": {
+        "allowed": true,
+        "amountLamports": "41"
+      }
+    },
+    {
+      "name": "C2 amount=42",
+      "attackClass": "2-data-field",
+      "verdict": {
+        "allowed": true,
+        "amountLamports": "42"
+      }
+    },
+    {
+      "name": "C2 amount=43",
+      "attackClass": "2-data-field",
+      "verdict": {
+        "allowed": false,
+        "refused": "amount"
+      }
+    },
+    {
+      "name": "C3 amount 0",
+      "attackClass": "3-amount-edge",
+      "verdict": {
+        "allowed": true,
+        "amountLamports": "0"
+      }
+    },
+    {
+      "name": "C3 amount cap",
+      "attackClass": "3-amount-edge",
+      "verdict": {
+        "allowed": true,
+        "amountLamports": "42"
+      }
+    },
+    {
+      "name": "C3 amount cap+1",
+      "attackClass": "3-amount-edge",
+      "verdict": {
+        "allowed": false,
+        "refused": "amount"
+      }
+    },
+    {
+      "name": "C3 amount u64max",
+      "attackClass": "3-amount-edge",
+      "verdict": {
+        "allowed": false,
+        "refused": "amount"
+      }
+    },
+    {
+      "name": "C3 amount u64max+1 (bigint, web3 accepts?)",
+      "attackClass": "3-amount-edge",
+      "verdict": {
+        "threw": "Codec [u64] expected number to be in the range [0, 18446744073709551615], got 18446744073709551616."
+      }
+    },
+    {
+      "name": "C3 amount negative -1",
+      "attackClass": "3-amount-edge",
+      "verdict": {
+        "threw": "Codec [u64] expected number to be in the range [0, 18446744073709551615], got -1."
+      }
+    },
+    {
+      "name": "C4 leading zero byte",
+      "attackClass": "4-wire-malleability",
+      "verdict": {
+        "allowed": false,
+        "refused": "invalid_wire"
+      }
+    },
+    {
+      "name": "C4 trailing zero byte",
+      "attackClass": "4-wire-malleability",
+      "verdict": {
+        "allowed": false,
+        "refused": "noncanonical_wire"
+      }
+    },
+    {
+      "name": "C4 trailing 4 zero bytes",
+      "attackClass": "4-wire-malleability",
+      "verdict": {
+        "allowed": false,
+        "refused": "noncanonical_wire"
+      }
+    },
+    {
+      "name": "C4 empty buffer",
+      "attackClass": "4-wire-malleability",
+      "verdict": {
+        "allowed": false,
+        "refused": "invalid_wire"
+      }
+    },
+    {
+      "name": "C4 zero-signature (all-zero sig bytes) canonical",
+      "attackClass": "4-wire-malleability",
+      "verdict": {
+        "allowed": true,
+        "amountLamports": "42"
+      }
+    },
+    {
+      "name": "C4 garbage 1232 bytes",
+      "attackClass": "4-wire-malleability",
+      "verdict": {
+        "allowed": false,
+        "refused": "noncanonical_wire"
+      }
+    },
+    {
+      "name": "C4 garbage 1 byte",
+      "attackClass": "4-wire-malleability",
+      "verdict": {
+        "allowed": false,
+        "refused": "invalid_wire"
+      }
+    },
+    {
+      "name": "C4 exactly 1232 bytes (valid wire, data padded)",
+      "attackClass": "4-wire-malleability",
+      "verdict": {
+        "allowed": false,
+        "refused": "instruction_data"
+      }
+    },
+    {
+      "name": "C4 exactly 1233 bytes (valid structure, over limit)",
+      "attackClass": "4-wire-malleability",
+      "verdict": {
+        "allowed": false,
+        "refused": "invalid_wire"
+      }
+    },
+    {
+      "name": "C4 1233 bytes",
+      "attackClass": "4-wire-malleability",
+      "verdict": {
+        "allowed": false,
+        "refused": "invalid_wire"
+      }
+    },
+    {
+      "name": "C4 non-minimal varint instruction count (0x81 0x00)",
+      "attackClass": "4-wire-malleability",
+      "verdict": {
+        "allowed": false,
+        "refused": "noncanonical_wire"
+      }
+    },
+    {
+      "name": "C4 non-minimal varint sig count (0x81 0x00)",
+      "attackClass": "4-wire-malleability",
+      "verdict": {
+        "allowed": false,
+        "refused": "noncanonical_wire"
+      }
+    },
+    {
+      "name": "C4 arbitrary signature bytes 0xAA..AA",
+      "attackClass": "4-wire-malleability",
+      "verdict": {
+        "allowed": true,
+        "amountLamports": "42"
+      }
+    },
+    {
+      "name": "C4 prefix byte 0x80 (v0, req=0) over legacy message",
+      "attackClass": "4-wire-malleability",
+      "verdict": {
+        "allowed": false,
+        "refused": "invalid_wire"
+      }
+    },
+    {
+      "name": "C4 v0 prefix byte (0x80|1) over legacy message",
+      "attackClass": "4-wire-malleability",
+      "verdict": {
+        "allowed": false,
+        "refused": "invalid_wire"
+      }
+    },
+    {
+      "name": "C5 maxLamports = 42 (number)",
+      "attackClass": "5-grant-manipulation",
+      "verdict": {
+        "allowed": false,
+        "refused": "invalid_grant"
+      }
+    },
+    {
+      "name": "C5 maxLamports = \" 42\"",
+      "attackClass": "5-grant-manipulation",
+      "verdict": {
+        "allowed": false,
+        "refused": "invalid_grant"
+      }
+    },
+    {
+      "name": "C5 maxLamports = \"42 \"",
+      "attackClass": "5-grant-manipulation",
+      "verdict": {
+        "allowed": false,
+        "refused": "invalid_grant"
+      }
+    },
+    {
+      "name": "C5 maxLamports = \"+42\"",
+      "attackClass": "5-grant-manipulation",
+      "verdict": {
+        "allowed": false,
+        "refused": "invalid_grant"
+      }
+    },
+    {
+      "name": "C5 maxLamports = \"042\"",
+      "attackClass": "5-grant-manipulation",
+      "verdict": {
+        "allowed": false,
+        "refused": "invalid_grant"
+      }
+    },
+    {
+      "name": "C5 maxLamports = \"42.0\"",
+      "attackClass": "5-grant-manipulation",
+      "verdict": {
+        "allowed": false,
+        "refused": "invalid_grant"
+      }
+    },
+    {
+      "name": "C5 maxLamports = \"1e3\"",
+      "attackClass": "5-grant-manipulation",
+      "verdict": {
+        "allowed": false,
+        "refused": "invalid_grant"
+      }
+    },
+    {
+      "name": "C5 maxLamports = \"１２\" (fullwidth digits)",
+      "attackClass": "5-grant-manipulation",
+      "verdict": {
+        "allowed": false,
+        "refused": "invalid_grant"
+      }
+    },
+    {
+      "name": "C5 maxLamports = \"42\\n\"",
+      "attackClass": "5-grant-manipulation",
+      "verdict": {
+        "allowed": false,
+        "refused": "invalid_grant"
+      }
+    },
+    {
+      "name": "C5 maxLamports = \"\" ",
+      "attackClass": "5-grant-manipulation",
+      "verdict": {
+        "allowed": false,
+        "refused": "invalid_grant"
+      }
+    },
+    {
+      "name": "C5 maxLamports = \"18446744073709551615\" (u64max)",
+      "attackClass": "5-grant-manipulation",
+      "verdict": {
+        "allowed": true,
+        "amountLamports": "42"
+      }
+    },
+    {
+      "name": "C5 maxLamports = \"99999999999999999999999\" ",
+      "attackClass": "5-grant-manipulation",
+      "verdict": {
+        "allowed": false,
+        "refused": "invalid_grant"
+      }
+    },
+    {
+      "name": "C5 maxLamports = \"-0\"",
+      "attackClass": "5-grant-manipulation",
+      "verdict": {
+        "allowed": false,
+        "refused": "invalid_grant"
+      }
+    },
+    {
+      "name": "C5 destination = signer key (self transfer)",
+      "attackClass": "5-grant-manipulation",
+      "verdict": {
+        "allowed": false,
+        "refused": "destination"
+      }
+    },
+    {
+      "name": "C5 destination uppercase base58",
+      "attackClass": "5-grant-manipulation",
+      "verdict": {
+        "allowed": false,
+        "refused": "invalid_grant"
+      }
+    },
+    {
+      "name": "C5 signer = SystemProgram",
+      "attackClass": "5-grant-manipulation",
+      "verdict": {
+        "allowed": false,
+        "refused": "signer_or_fee_payer"
+      }
+    },
+    {
+      "name": "C5 expiresAt missing",
+      "attackClass": "5-grant-manipulation",
+      "verdict": {
+        "allowed": false,
+        "refused": "invalid_grant"
+      }
+    },
+    {
+      "name": "C5 expiresAt not a string (epoch ms number)",
+      "attackClass": "5-grant-manipulation",
+      "verdict": {
+        "allowed": false,
+        "refused": "invalid_grant"
+      }
+    },
+    {
+      "name": "C5 expiresAt \"2026-10-28T10:00:00+02:00\"",
+      "attackClass": "5-grant-manipulation",
+      "verdict": {
+        "allowed": false,
+        "refused": "invalid_grant"
+      }
+    },
+    {
+      "name": "C5 expiresAt \"2026-10-28 10:00:00Z\" (space)",
+      "attackClass": "5-grant-manipulation",
+      "verdict": {
+        "allowed": false,
+        "refused": "invalid_grant"
+      }
+    },
+    {
+      "name": "C5 expiresAt \"2026-10-28T10:00:00.000000Z\" (6-digit fraction)",
+      "attackClass": "5-grant-manipulation",
+      "verdict": {
+        "allowed": false,
+        "refused": "invalid_grant"
+      }
+    },
+    {
+      "name": "C5 expiresAt \"2026-02-29T10:00:00Z\" (2026 not leap, normalizes->Mar1)",
+      "attackClass": "5-grant-manipulation",
+      "verdict": {
+        "allowed": false,
+        "refused": "invalid_grant"
+      }
+    },
+    {
+      "name": "C5 expiresAt \"0000-01-01T00:00:00Z\"",
+      "attackClass": "5-grant-manipulation",
+      "verdict": {
+        "allowed": false,
+        "refused": "expired"
+      }
+    },
+    {
+      "name": "C5 expiresAt \"9999-12-31T23:59:59Z\"",
+      "attackClass": "5-grant-manipulation",
+      "verdict": {
+        "allowed": true,
+        "amountLamports": "42"
+      }
+    },
+    {
+      "name": "C5 expiresAt \"1970-01-01T00:00:00Z\"",
+      "attackClass": "5-grant-manipulation",
+      "verdict": {
+        "allowed": false,
+        "refused": "expired"
+      }
+    },
+    {
+      "name": "C5 expiresAt \"2026-10-28T10:00:00.001Z\" (valid frac)",
+      "attackClass": "5-grant-manipulation",
+      "verdict": {
+        "allowed": true,
+        "amountLamports": "42"
+      }
+    },
+    {
+      "name": "C5 now far future (2030)",
+      "attackClass": "5-grant-manipulation",
+      "verdict": {
+        "allowed": false,
+        "refused": "expired"
+      }
+    },
+    {
+      "name": "C5 now far past (1970)",
+      "attackClass": "5-grant-manipulation",
+      "verdict": {
+        "allowed": true,
+        "amountLamports": "42"
+      }
+    },
+    {
+      "name": "C5 now == expiry",
+      "attackClass": "5-grant-manipulation",
+      "verdict": {
+        "allowed": false,
+        "refused": "expired"
+      }
+    },
+    {
+      "name": "C5 now just before expiry",
+      "attackClass": "5-grant-manipulation",
+      "verdict": {
+        "allowed": true,
+        "amountLamports": "42"
+      }
+    },
+    {
+      "name": "C5 now = Date subclass w/ overridden getTime (getTime=0, valid grant)",
+      "attackClass": "5-grant-manipulation",
+      "verdict": {
+        "allowed": true,
+        "amountLamports": "42"
+      }
+    },
+    {
+      "name": "C5 grant = Object.create(null)",
+      "attackClass": "5-grant-manipulation",
+      "verdict": {
+        "allowed": true,
+        "amountLamports": "42"
+      }
+    },
+    {
+      "name": "C5 grant has extra attacker fields",
+      "attackClass": "5-grant-manipulation",
+      "verdict": {
+        "allowed": true,
+        "amountLamports": "42"
+      }
+    },
+    {
+      "name": "C5 polluted Object.prototype.signer, grant.signer missing",
+      "attackClass": "5-grant-manipulation",
+      "verdict": {
+        "allowed": false,
+        "refused": "signer_or_fee_payer"
+      }
+    },
+    {
+      "name": "C5 polluted Object.prototype.maxLamports, grant.maxLamports missing",
+      "attackClass": "5-grant-manipulation",
+      "verdict": {
+        "allowed": false,
+        "refused": "invalid_grant"
+      }
+    },
+    {
+      "name": "C5 polluted Object.prototype.expiresAt, grant.expiresAt missing",
+      "attackClass": "5-grant-manipulation",
+      "verdict": {
+        "allowed": true,
+        "amountLamports": "42"
+      }
+    },
+    {
+      "name": "C5 grant with __proto__ maxLamports in literal",
+      "attackClass": "5-grant-manipulation",
+      "verdict": {
+        "allowed": true,
+        "amountLamports": "42"
+      }
+    },
+    {
+      "name": "C5 grant with getter returning 42 then u64max",
+      "attackClass": "5-grant-manipulation",
+      "verdict": {
+        "allowed": true,
+        "amountLamports": "42"
+      }
+    },
+    {
+      "name": "C5 Date-subclass getTime()=0 (grant already expired at real now)",
+      "attackClass": "5-grant-manipulation",
+      "verdict": {
+        "allowed": true,
+        "amountLamports": "42"
+      }
+    },
+    {
+      "name": "C5 control: expired grant w/ plain Date",
+      "attackClass": "5-grant-manipulation",
+      "verdict": {
+        "allowed": false,
+        "refused": "expired"
+      }
+    },
+    {
+      "name": "C5 Date-subclass getTime finite then 0 (TOCTOU on expired grant)",
+      "attackClass": "5-grant-manipulation",
+      "verdict": {
+        "allowed": true,
+        "amountLamports": "42"
+      }
+    },
+    {
+      "name": "C5 destination with extra leading \"1\" (non-canonical base58)",
+      "attackClass": "5-grant-manipulation",
+      "verdict": {
+        "allowed": false,
+        "refused": "invalid_grant"
+      }
+    },
+    {
+      "allowed": false,
+      "refused": "invalid_grant"
+    },
+    {
+      "name": "C5 grant is an array",
+      "attackClass": "5-grant-manipulation",
+      "verdict": {
+        "allowed": false,
+        "refused": "invalid_grant"
+      }
+    },
+    {
+      "name": "C5 grant is null",
+      "attackClass": "5-grant-manipulation",
+      "verdict": {
+        "allowed": false,
+        "refused": "invalid_grant"
+      }
+    },
+    {
+      "name": "C6 tampered signature byte (flip sig bit) - noncanonical?",
+      "attackClass": "6-reserialize",
+      "verdict": {
+        "allowed": true,
+        "amountLamports": "42"
+      }
+    },
+    {
+      "name": "C6 flipped message byte (blockhash) after sign",
+      "attackClass": "6-reserialize",
+      "verdict": {
+        "allowed": true,
+        "amountLamports": "42"
+      }
+    },
+    {
+      "name": "C6 v0 msg no ALT (canonical bytes but v0)",
+      "attackClass": "6-reserialize",
+      "verdict": {
+        "allowed": false,
+        "refused": "version_or_alt"
+      }
+    },
+    {
+      "name": "C6 legacy tx with 2 signatures added",
+      "attackClass": "6-reserialize",
+      "verdict": {
+        "threw": "unknown signer: 7b38CBGVR7Xni372hXR2R7WVZhC7itN81uwSkSEyfnBN"
+      }
+    },
+    {
+      "name": "C7 two instructions (transfer + transfer 1)",
+      "attackClass": "7-hidden-instruction",
+      "verdict": {
+        "allowed": false,
+        "refused": "envelope"
+      }
+    },
+    {
+      "name": "C7 one instruction with extra account list? -> uses raw wire count 1 but data holds second ix",
+      "attackClass": "7-hidden-instruction",
+      "verdict": {
+        "allowed": true,
+        "amountLamports": "42"
+      }
+    },
+    {
+      "name": "C7 raw wire with instruction count = 2",
+      "attackClass": "7-hidden-instruction",
+      "verdict": {
+        "allowed": false,
+        "refused": "envelope"
+      }
+    },
+    {
+      "name": "C7 trailing bytes appended inside message (extra ix bytes after count=1)",
+      "attackClass": "7-hidden-instruction",
+      "verdict": {
+        "allowed": false,
+        "refused": "noncanonical_wire"
+      }
+    },
+    {
+      "name": "C7 non-minimal varint account count (0x81 0x00)=1... but we need 3",
+      "attackClass": "7-hidden-instruction",
+      "verdict": {
+        "allowed": false,
+        "refused": "noncanonical_wire"
+      }
+    },
+    {
+      "name": "CX SystemProgram.allocate 12-byte? (ix tag 8)",
+      "attackClass": "x-extra",
+      "verdict": {
+        "allowed": false,
+        "refused": "envelope"
+      }
+    },
+    {
+      "name": "CX data is base58 of 12 bytes but instruction.data interpreted... via raw wire all normal",
+      "attackClass": "x-extra",
+      "verdict": {
+        "allowed": true,
+        "amountLamports": "42"
+      }
+    },
+    {
+      "name": "CX amount = cap with u64 wraparound representation (0x2A + high zeros)",
+      "attackClass": "x-extra",
+      "verdict": {
+        "allowed": true,
+        "amountLamports": "42"
+      }
+    },
+    {
+      "name": "CX grant maxLamports=0 amount=0",
+      "attackClass": "x-extra",
+      "verdict": {
+        "allowed": true,
+        "amountLamports": "0"
+      }
+    },
+    {
+      "name": "CX grant maxLamports=0 amount=1",
+      "attackClass": "x-extra",
+      "verdict": {
+        "allowed": false,
+        "refused": "amount"
+      }
+    }
+  ]
+}

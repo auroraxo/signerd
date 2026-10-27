@@ -217,6 +217,25 @@ test('grants for DIFFERENT destinations keep independent budgets', () => {
   assert.equal(gate(w2, grantOther, now, ledger).allowed, true); // other scope untouched
 });
 
+test('hostile clock and prototype-polluted window fields are refused', () => {
+  const ledger = tmpLedger();
+  class FakeNow extends Date { getTime() { return now.getTime(); } }
+  const expired = { ...grant, expiresAt: '2026-10-26T10:00:00Z' };
+  assert.equal(gate(legacy(transfer()), expired, new FakeNow(), ledger).refused, 'invalid_clock');
+  // window cap sitting on Object.prototype must not be usable
+  const partial = { signer: grant.signer, destination: grant.destination,
+    maxLamports: '42', expiresAt: grant.expiresAt, windowSeconds: '3600' };
+  const saved = Object.prototype.windowMaxLamports;
+  Object.prototype.windowMaxLamports = '999999999999';
+  try {
+    assert.equal(gate(legacy(transfer()), partial, now, ledger).refused, 'invalid_grant_window');
+  } finally {
+    if (saved === undefined) delete Object.prototype.windowMaxLamports;
+    else Object.prototype.windowMaxLamports = saved;
+  }
+  assert.deepEqual(ledger.snapshot(), { records: 0, seq: 0, fingerprints: 0 });
+});
+
 test('clock regressions cannot shrink the window spend', () => {
   const ledger = tmpLedger();
   const t0 = now;
