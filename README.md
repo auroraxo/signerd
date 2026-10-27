@@ -79,6 +79,8 @@ Checked on 2026-10-24/26: 21 files across six of my own repositories load key ma
 - **Fail closed**: an unreadable or corrupt journal makes the constructor throw; a torn final line (crash mid-append) is dropped and repaired, never parsed; an fsync failure during approval returns `ledger_write_failed` with nothing entering in-memory state; window refusals occur before any write.
 - **Clock safety**: a backwards clock cannot shrink recorded window spend.
 
+The atomicity claim is falsified, not asserted: `npm run test:crash` spawns a child that approves transfers in a loop, SIGKILLs it at pseudo-random points (25 rounds), and asserts that every approval the child *reported* is durable in the journal afterward — i.e. the journal is a superset of what any caller was told, and it still loads after a torn append.
+
 It does **not** parse transactions, hold keys, or sign. Single writer per journal file; no cross-process lock; journal grows without bound.
 
 ```bash

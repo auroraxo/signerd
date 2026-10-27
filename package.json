@@ -5,7 +5,8 @@
   "description": "Refusal-first prototype; no signer yet.",
   "main": "src/policy.js",
   "scripts": {
-    "test": "node --test"
+    "test": "node --test",
+    "test:crash": "node scripts/crash-consistency.js 25"
   },
   "repository": {
     "type": "git",
