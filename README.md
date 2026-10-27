@@ -2,7 +2,7 @@
 
 Scoped signing daemon for Solana: the ssh-agent pattern, applied to Solana keys. signerd signs only the subset of transactions it can fully verify offline; everything else gets a structured refusal — and that refusal is the feature.
 
-**Status: early policy-only prototype (October 2026), NOT a signing service or security-reviewed wallet.** The scope was narrowed on 2026-10-26 after an adversarial review (see Safety boundary). On 2026-10-27 the first tested *legacy System-transfer-only* refusal checker was added; the rest of the v1 envelope below remains a plan.
+**Status: early prototype (October 2026), NOT a signing service or security-reviewed wallet.** The scope was narrowed on 2026-10-26 after an adversarial review (see Safety boundary). On 2026-10-27 the first tested *legacy System-transfer-only* refusal checker and its atomic expenditure/replay ledger were added; the rest of the v1 envelope below remains a plan.
 
 ## The idea
 
@@ -72,15 +72,24 @@ Checked on 2026-10-24/26: 21 files across six of my own repositories load key ma
 
 `src/policy.js` evaluates serialized transactions with `evaluate(wire, grant, now)` and returns `{ allowed: true, amountLamports: "…" }` or `{ allowed: false, refused: "…" }`. It deliberately permits **only one** legacy System Program transfer from the grant signer/fee payer to one fixed destination under a string-encoded lamport cap. The sole signer must be the source and fee payer; the only keys must be source, destination, and System Program. V0 is refused even without ALTs. Any extra instruction (including ComputeBudget/priority-price drain), SPL Token/Token-2022 instruction, authority change, CPI-capable program, invalid grant, expired grant, or noncanonical wire is refused. The tests generate disposable keys locally and cover both the one allowed case and the known attack classes.
 
+`src/ledger.js` is the accounting layer that must sit between a positive verdict and any future signature. `gate(wire, grant, now, ledger)` refuses with `ledger_unavailable` when no ledger is attached, so a policy verdict alone never spends budget. The ledger keeps an append-only JSONL journal, fsyncs it **before** returning an approval, and charges each approval `amount + 5000` lamports (the envelope allows exactly one signature and no ComputeBudget instruction, so the base fee is fixed and no priority fee can be attached) against a rolling per-scope window:
+
+- **Scope-keyed budget**: spend is counted per signer+destination pair, so two grants aimed at the same destination share one window cap instead of each getting a fresh one.
+- **Replay**: identical wire bytes are approved at most once, ever, across restarts (SHA-256 set persisted in the journal).
+- **Fail closed**: an unreadable or corrupt journal makes the constructor throw; a torn final line (crash mid-append) is dropped and repaired, never parsed; an fsync failure during approval returns `ledger_write_failed` with nothing entering in-memory state; window refusals occur before any write.
+- **Clock safety**: a backwards clock cannot shrink recorded window spend.
+
+It does **not** parse transactions, hold keys, or sign. Single writer per journal file; no cross-process lock; journal grows without bound.
+
 ```bash
 npm ci
 npm test
 ```
 
-**Not safe for real keys yet.** There is no daemon, keystore, socket authentication, grant isolation, stateful spend/window accounting, replay protection, transaction lifetime check, independent parser/audit, or user-zero migration. The prototype does **not** sign or submit transactions. Its per-transaction cap does not bound repeat spending, and it does not bound base transaction fees. Do not compose its `allowed` boolean with a real signer until these boundaries have been implemented and reviewed.
+**Not safe for real keys yet.** There is no daemon, keystore, socket authentication, or grant isolation. The prototype does **not** sign or submit transactions, and it has no independent adversarial review of the implemented code (the first review attempt of the policy prototype timed out; a second independent false-allow probe of `src/policy.js` was commissioned). Its per-transaction cap and the ledger's fee arithmetic do not replace on-chain simulation, and the ledger does not bind transaction lifetime (blockhash freshness) — a stale blockhash simply fails on-chain. Do not compose its `allowed` boolean with a real signer until these boundaries have been implemented and reviewed.
 
 ## Next qualification
 
-1. Independent wire-format/adversarial review and daemon-owned atomic replay/window accounting before attaching a key or exposing a socket.
+1. Independent wire-format/adversarial review of both `src/policy.js` and `src/ledger.js` (the false-allow probe covers the policy; the ledger's journal/atomicity semantics still need review) before attaching a key or exposing a socket.
 2. Expand supported instructions only when the fee and authority effects can be bounded; refuse anything undecidable, rather than widening policy to pass tests.
 3. Migrate own key-loading sites that fit the reviewed envelope as user zero; then run the 30-day restart/over-limit/refusal test. No outside users yet.
