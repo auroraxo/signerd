@@ -89,6 +89,24 @@ function loadKeystore({ file, passphrase }) {
     throw fail('keystore_invalid');
   }
   if (salt.length !== 16 || iv.length !== 12 || tag.length !== 16) throw fail('keystore_invalid');
+  // A keystore inside a directory that others can write can be swapped out
+  // before it is read: the attacker substitutes their own key and the daemon
+  // signs with it. A sticky directory (like /tmp) is fine, because there only
+  // the file's own owner may remove it.
+  //
+  // The check covers BOTH group-writable and world-writable directories, and
+  // it also requires the directory to be owned by us: a directory owned by
+  // someone else can have its contents replaced no matter how it is chmod'ed.
+  const dirPath = path.dirname(path.resolve(file));
+  const dirStat = fs.statSync(dirPath);
+  const dirMode = dirStat.mode & 0o7777;
+  if ((dirMode & 0o022) !== 0 && (dirMode & 0o1000) === 0) {
+    throw fail('keystore_dir_mode', dirMode.toString(8));
+  }
+  if (typeof process.getuid === 'function' &&
+      dirStat.uid !== process.getuid() && dirStat.uid !== 0) {
+    throw fail('keystore_dir_owner', String(dirStat.uid));
+  }
   const key = deriveKey(passphrase, salt);
   let secret = null;
   try {

@@ -25,10 +25,18 @@ function parseU64(value) {
     : null;
 }
 
+function failWrite(code) {
+  const err = new Error(code);
+  err.code = code;
+  return err;
+}
+
 // Strict grant-window parsing: fail closed on anything that is not a plain
-// non-negative decimal string / safe integer. Never coerce. Fields are read
+// positive decimal string / safe integer. Never coerce. Fields are read
 // from the grant's OWN properties only, so a polluted Object.prototype cannot
-// supply a window cap.
+// supply a window cap. A zero-width window is refused rather than honored:
+// cutoff = now would exclude every record at or before now, so a cap of 0
+// seconds would silently never engage (fail open).
 function parseWindow(grant) {
   const maxField = ownField(grant, 'windowMaxLamports');
   const secondsField = ownField(grant, 'windowSeconds');
@@ -37,7 +45,7 @@ function parseWindow(grant) {
   const seconds = typeof secondsField.value === 'string' &&
     /^(0|[1-9][0-9]*)$/.test(secondsField.value)
     ? Number(secondsField.value) : null;
-  if (max === null || seconds === null || !Number.isSafeInteger(seconds)) return null;
+  if (max === null || seconds === null || !Number.isSafeInteger(seconds) || seconds <= 0) return null;
   return { max, seconds };
 }
 
@@ -71,12 +79,29 @@ function scopeKey(grant) {
   return `${signer}\u0000${destination}`;
 }
 
+// Each record carries the sha256 of its own fields plus the previous
+// record's chain hash, so the journal is self-verifying: an in-place edit
+// (even a same-size one, e.g. "a":"42" -> "a":"12") breaks the chain at load
+// and the constructor fails closed. The body is a fixed field order joined by
+// NUL, which is safe because every field is a number or a decimal/hex string.
+const GENESIS_HASH = '0'.repeat(64);
+
+function recordBody(record) {
+  return [record.s, record.t, record.w, record.a, record.f, record.k].join('\u0000');
+}
+
+function chainHash(prevHash, record) {
+  return crypto.createHash('sha256')
+    .update(prevHash + '\u0000' + recordBody(record)).digest('hex');
+}
+
 function validRecord(record, previousSeq, seenFingerprints) {
   if (typeof record !== 'object' || record === null) return false;
-  const { s, t, w, a, f, k } = record;
+  const { s, t, w, a, f, k, h } = record;
   if (!Number.isSafeInteger(s) || s !== previousSeq + 1) return false;
   if (!Number.isSafeInteger(t) || t < 0) return false;
   if (typeof w !== 'string' || !/^[0-9a-f]{64}$/.test(w)) return false;
+  if (typeof h !== 'string' || !/^[0-9a-f]{64}$/.test(h)) return false;
   if (seenFingerprints.has(w)) return false;
   if (typeof k !== 'string' || k.length === 0) return false;
   return parseU64(a) !== null && parseU64(f) !== null;
@@ -95,10 +120,15 @@ function validRecord(record, previousSeq, seenFingerprints) {
  *   before approval returns, so a torn record was never approved;
  * - an append/fsync failure during approve -> {allowed:false, refused:
  *   'ledger_write_failed'} and nothing enters the in-memory state;
+ * - a FAILED append never leaves bytes behind: the journal is rolled back to
+ *   the last durable length before the refusal is returned, so the next
+ *   approval cannot append after a half-written line (which would make the
+ *   journal permanently unloadable). If that rollback itself fails the ledger
+ *   poisons itself and refuses every further approval ('ledger_inconsistent').
  * - identical wire bytes are approved at most once, ever (sha256 replay set).
  *
- * Concurrency: single writer. One daemon process owns the file; there is no
- * cross-process lock. Journal grows without bound (compaction is future work).
+ * Concurrency: single writer, enforced by the owning daemon's pid lock file
+ * (`<journal>.lock`). Journal grows without bound (compaction is future work).
  */
 class Ledger {
   constructor({ file }) {
@@ -107,7 +137,20 @@ class Ledger {
     this.records = [];
     this.fingerprints = new Set();
     this.seq = 0;
+    this.lastHash = GENESIS_HASH; // chain head: verification of the next record
+    this.fileBytes = 0; // last durable length; append failures roll back to it
+    this.poisoned = false;
+    // A digest of the durable bytes, not just their length. A size-only check
+    // accepted a SAME-SIZE in-place tamper (e.g. "a":"42" -> "a":"12"), which
+    // silently changed what the journal says was spent.
+    this.digest = crypto.createHash('sha256').update(Buffer.alloc(0)).digest('hex');
     this.#load();
+  }
+
+  /** Remember the length AND the content of the durable journal bytes. */
+  #setDurable(bytes, content) {
+    this.fileBytes = bytes;
+    this.digest = crypto.createHash('sha256').update(content).digest('hex');
   }
 
   #load() {
@@ -118,24 +161,33 @@ class Ledger {
       if (err.code === 'ENOENT') return;
       throw new Error('ledger_unreadable');
     }
-    const segments = raw.toString('utf8').split('\n');
-    const tail = segments.pop(); // '' when the file ends with a newline
-    let validBytes = raw.length;
-    let tailTorn = false;
-    if (tail !== '') {
-      // The final append never completed. fsync precedes approval, so this
-      // record was never returned as approved: dropping it is fail-closed.
-      validBytes -= Buffer.byteLength(tail, 'utf8');
-      tailTorn = true;
-    }
+    // Locate the torn tail in BYTES, never through a decoded string. Decoding
+    // first would turn an invalid byte into U+FFFD (3 bytes) while the raw tail
+    // was 1 byte, so the computed offset would be short and the repair would
+    // truncate INTO the last durable record and silently drop an approval.
+    const lastNewline = raw.lastIndexOf(0x0a);
+    const validBytes = lastNewline === -1 ? 0 : lastNewline + 1;
+    const tailTorn = validBytes !== raw.length;
+    const text = raw.subarray(0, validBytes).toString('utf8');
+    // validBytes always ends at a newline (or is 0), so the split's final
+    // empty element is padding and never a record.
+    const segments = text.split('\n');
+    segments.pop();
     for (const line of segments) {
       let record;
       try { record = JSON.parse(line); } catch { throw new Error('ledger_corrupt'); }
       if (!validRecord(record, this.seq, this.fingerprints)) throw new Error('ledger_corrupt');
+      // Chain check: a record whose fields were edited in place (same size,
+      // same length) no longer hashes to its stored h -> the file was altered
+      // after it was written. Distinct from structural corruption so the
+      // operator can tell tampering from a bad disk.
+      if (chainHash(this.lastHash, record) !== record.h) throw new Error('ledger_tampered');
       this.records.push(record);
       this.fingerprints.add(record.w);
       this.seq = record.s;
+      this.lastHash = record.h;
     }
+    this.#setDurable(validBytes, raw.subarray(0, validBytes));
     if (tailTorn) this.#repair(validBytes);
   }
 
@@ -152,17 +204,73 @@ class Ledger {
     }
   }
 
+  /** Roll the file back to the last durable length. Failure poisons the ledger. */
+  #rollback(targetBytes) {
+    let fd;
+    try {
+      fd = fs.openSync(this.file, 'r+');
+      fs.ftruncateSync(fd, targetBytes);
+      fs.fsyncSync(fd);
+      return true;
+    } catch {
+      this.poisoned = true;
+      return false;
+    } finally {
+      if (fd !== undefined) fs.closeSync(fd);
+    }
+  }
+
   #appendLine(record) {
     const line = JSON.stringify(record) + '\n';
-    const existed = fs.existsSync(this.file);
-    const fd = fs.openSync(this.file, 'a');
+    const buffer = Buffer.from(line, 'utf8');
+    const startBytes = this.fileBytes;
+    // The journal must still be exactly the state this ledger believes in.
+    // If another process (or an operator) changed the file since the last
+    // append, appending after it would merge into foreign bytes and could
+    // make the journal permanently unloadable. Refuse instead.
+    //
+    // The check compares the CONTENT (length and sha256), not just the
+    // length: a same-size in-place edit must not pass as "unchanged".
+    let current = null;
     try {
-      fs.writeSync(fd, line);
-      fs.fsyncSync(fd);
-    } finally {
-      fs.closeSync(fd);
+      current = fs.readFileSync(this.file);
+    } catch (err) {
+      if (err.code !== 'ENOENT') throw failWrite('ledger_write_failed');
+      current = Buffer.alloc(0);
     }
+    if (current.length !== startBytes) throw failWrite('ledger_changed');
+    if (crypto.createHash('sha256').update(current).digest('hex') !== this.digest) {
+      throw failWrite('ledger_changed');
+    }
+    const existed = fs.existsSync(this.file);
+    let fd;
+    let opened = false;
+    try {
+      fd = fs.openSync(this.file, 'a', 0o600);
+      opened = true;
+      // writeSync may write fewer bytes than requested (and can fail after a
+      // partial write). Loop until the whole line is in, then fsync.
+      let written = 0;
+      while (written < buffer.length) {
+        written += fs.writeSync(fd, buffer, written, buffer.length - written);
+      }
+      fs.fsyncSync(fd);
+    } catch (err) {
+      // A partial line in the MIDDLE of the journal would make every future
+      // load fail ('ledger_corrupt'), i.e. the daemon could never start again.
+      // Undo whatever reached the file before the failure.
+      if (opened && !this.#rollback(startBytes)) {
+        throw failWrite('ledger_inconsistent');
+      }
+      throw failWrite('ledger_write_failed');
+    } finally {
+      if (fd !== undefined) fs.closeSync(fd);
+    }
+    this.#setDurable(startBytes + buffer.length, Buffer.concat([current, buffer]));
     if (!existed) {
+      // openSync's mode is masked by the process umask, so set it explicitly:
+      // a library must not depend on (or mutate) a host process's umask.
+      try { fs.chmodSync(this.file, 0o600); } catch { /* best effort */ }
       // Best effort: make the directory entry durable too.
       try {
         const dfd = fs.openSync(path.dirname(path.resolve(this.file)), 'r');
@@ -177,6 +285,9 @@ class Ledger {
    * does not inspect the wire and trusts only the amount string it is given.
    */
   approve({ wire, amountLamports, grant, now = new Date() }) {
+    // A rollback failure means the file may hold bytes we cannot account for:
+    // no further approval can be made durable, so every request refuses.
+    if (this.poisoned) return refused('ledger_inconsistent');
     if ((!Buffer.isBuffer(wire) && !(wire instanceof Uint8Array)) || wire.length === 0) {
       return refused('invalid_wire');
     }
@@ -222,17 +333,25 @@ class Ledger {
       a: amount.toString(),
       f: BASE_FEE_LAMPORTS.toString(),
       k: scope,
+      h: chainHash(this.lastHash, { s: this.seq + 1, t: nowMs, w: fingerprint, a: amount.toString(), f: BASE_FEE_LAMPORTS.toString(), k: scope }),
     };
     try {
       this.#appendLine(record);
-    } catch {
+    } catch (err) {
       // Nothing entered in-memory state: the caller saw a refusal, so no
-      // signature may be produced for this wire under this ledger.
-      return refused('ledger_write_failed');
+      // signature may be produced for this wire under this ledger. The file
+      // was rolled back to its last durable length, so the journal stays
+      // loadable; if even the rollback failed, the poisoned flag keeps every
+      // later approval refused until an operator intervenes.
+      const code = err && err.code === 'ledger_inconsistent'
+        ? 'ledger_inconsistent'
+        : (err && err.code === 'ledger_changed' ? 'ledger_changed' : 'ledger_write_failed');
+      return refused(code);
     }
     this.records.push(record);
     this.fingerprints.add(record.w);
     this.seq = record.s;
+    this.lastHash = record.h;
     const totalSpent = spent + cost;
     return {
       allowed: true,

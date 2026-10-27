@@ -2,7 +2,7 @@
 
 Scoped signing daemon for Solana: the ssh-agent pattern, applied to Solana keys. signerd signs only the subset of transactions it can fully verify offline; everything else gets a structured refusal — and that refusal is the feature.
 
-**Status: v0 prototype (October 2026), NOT a signing service or security-reviewed wallet.** The scope was narrowed on 2026-10-26 after an adversarial review (see Safety boundary). On 2026-10-27 the first tested *legacy System-transfer-only* refusal checker and its atomic expenditure/replay ledger were added; on 2026-10-27/28 the local daemon (Unix socket, encrypted keystore, grant file) was added. **The daemon holds a real key and produces real signatures — it has not passed an independent adversarial review, and no real funds should use it yet.** The rest of the v1 envelope below remains a plan.
+**Status: v0 prototype (October 2026), NOT a signing service or security-reviewed wallet.** The scope was narrowed on 2026-10-26 after an adversarial review (see Safety boundary). On 2026-10-27 the first tested *legacy System-transfer-only* refusal checker and its atomic expenditure/replay ledger were added; on 2026-10-27/28 the local daemon (Unix socket, encrypted keystore, grant file) was added. **The daemon holds a real key and produces real signatures — it has passed one independent adversarial review of the hardening diff (2026-10-27, findings fixed and regression-tested), but the signing path as a whole is not security-reviewed, and no real funds should use it yet.** The rest of the v1 envelope below remains a plan.
 
 ## The idea
 
@@ -61,9 +61,9 @@ The planned core is a Rust daemon, a TypeScript SDK, and a built-in MCP server. 
 
 ### What the v0 daemon does today
 
-- **`src/keystore.js`** — encrypted keystore: scrypt (N=16384) + AES-256-GCM, file mode 0600. A keystore with any group/other permission bit is refused even though decryption would succeed; a wrong passphrase and a tampered ciphertext are indistinguishable (`keystore_auth_failed`).
+- **`src/keystore.js`** — encrypted keystore: scrypt (N=16384) + AES-256-GCM, file mode 0600. A keystore file with any group/other permission bit is refused even though decryption would succeed, as is a keystore **directory** that is group- or world-writable or not owned by the current user; a wrong passphrase and a tampered ciphertext are indistinguishable (`keystore_auth_failed`).
 - **`src/grantfile.js`** — one strict grant file. Unknown fields are refused (a typo in a security file is a mistake, not an extra rule), grant names may not reach `Object.prototype`, and the loaded grants live on a null prototype.
-- **`src/daemon.js`** — a Unix socket (mode 0600) speaking newline-framed JSON. A request carries a grant **name** and base64 wire bytes; the response carries a signature or a machine-readable refusal. The socket is a capability: only the owner can talk to it.
+- **`src/daemon.js`** — a Unix socket (mode 0600) speaking newline-framed JSON. A request carries a grant **name** and base64 wire bytes; the response carries a signature or a machine-readable refusal. The socket is a capability: only the owner can talk to it. The daemon holds an atomic single-writer lock on the journal for as long as it serves, and releases it only after the server is closed and its connections are drained.
 - **`src/signer.js`** — the signing path. Order is deliberate: grant/key mismatch is refused *before* any ledger write, the ledger fsyncs *before* signing, and the returned bytes are checked to differ from the approved wire only inside the 64-byte signature slot and to verify under Node's OpenSSL ed25519 implementation. If signing or verification fails after approval, the budget is burned and **nothing** is signed — the conservative direction.
 
 The v0 daemon still only speaks the narrow legacy System-transfer envelope of `src/policy.js`: one instruction, three accounts, one signer, no ALT, no CPI, no Token-2022, no authority change.
@@ -90,8 +90,11 @@ Checked on 2026-10-24/26: 21 files across six of my own repositories load key ma
 
 - **Scope-keyed budget**: spend is counted per signer+destination pair, so two grants aimed at the same destination share one window cap instead of each getting a fresh one.
 - **Replay**: identical wire bytes are approved at most once, ever, across restarts (SHA-256 set persisted in the journal).
-- **Fail closed**: an unreadable or corrupt journal makes the constructor throw; a torn final line (crash mid-append) is dropped and repaired, never parsed; an fsync failure during approval returns `ledger_write_failed` with nothing entering in-memory state; window refusals occur before any write.
+- **Self-verifying**: every record carries a hash of its own fields chained to the previous record's hash, so the journal is a hash chain. An in-place edit — even a same-size one, e.g. `"a":"42"` → `"a":"12"` — breaks the chain and makes the load fail closed (`ledger_tampered`) instead of being silently trusted.
+- **Fail closed**: an unreadable or corrupt journal makes the constructor throw; a torn final line (crash mid-append) is dropped and repaired, never parsed; an fsync failure during approval returns `ledger_write_failed` with nothing entering in-memory state; if the rollback of a failed append also fails, the ledger poisons itself and refuses every later approval (`ledger_inconsistent`); window refusals occur before any write.
+- **Foreign-write detection**: before every append the ledger re-reads the file and compares both its length and its SHA-256 with the state it last wrote, so an outside writer is refused (`ledger_changed`) rather than merged into.
 - **Clock safety**: a backwards clock cannot shrink recorded window spend.
+- **No global side effects**: the library never mutates `process.umask`; the journal is created 0600 explicitly.
 
 The atomicity claim is falsified, not asserted: `npm run test:crash` spawns a child that approves transfers in a loop, SIGKILLs it at pseudo-random points (25 rounds), and asserts that every approval the child *reported* is durable in the journal afterward — i.e. the journal is a superset of what any caller was told, and it still loads after a torn append.
 
@@ -104,17 +107,33 @@ An independent worker ran 132 adversarial cases (raw message construction, data-
 - **By design, not a defect**: amount `0` is allowed (it moves nothing, and the ledger still charges its 5000-lamport fee); operator-chosen grant values (`maxLamports = u64max`, far-future `expiresAt`) are honored as written; signature bytes are deliberately not verified — the policy attests to the *message*, and the future signing path decides what to sign; a flipped blockhash byte passes because the blockhash is not (and cannot be) validated offline — it merely fails on-chain.
 - The probe worker timed out before writing its own report; the raw case log survived (`allowed`/`refusedCounts`/`errors` + per-case detail), and both defects above were independently reproduced and then regression-tested before being called fixed.
 
-It does **not** parse transactions, hold keys, or sign. Single writer per journal file; no cross-process lock; journal grows without bound.
+It does **not** parse transactions, hold keys, or sign. **One writer per journal file, enforced by an atomic lock**: the daemon claims `<journal>.lock` with a unique per-instance token via `open(O_EXCL)` + `link()`, so two daemons can never hold the same lock. A stale lock whose owner is provably dead is taken over by renaming it aside and proving the moved bytes are the ones that were judged dead; if they differ, the takeover backs off instead of stealing. The journal grows without bound (compaction is future work).
 
 ```bash
 npm ci
 npm test
 ```
 
-**Not safe for real keys yet.** The policy prototype is unit-tested and the daemon is tested end-to-end over a real socket (52 tests: 23 policy/ledger, 9 daemon, 8 signer, 7 grant file, 5 keystore), but the daemon's signing path has **not** yet passed an independent adversarial review. Do not point it at a key with funds. It has no authentication beyond the socket's file mode, no key rotation, no cross-process lock on the journal, and the ledger does not bind transaction lifetime (blockhash freshness) — a stale blockhash simply fails on-chain.
+**Not safe for real keys yet.** The policy prototype is unit-tested and the daemon is tested end-to-end over a real socket (67 tests: 29 policy/ledger, 18 daemon, 8 signer, 7 grant file, 5 keystore). The daemon's signing path passed an **independent adversarial review on 2026-10-27** whose findings were all fixed and regression-tested — but that review was of one diff, not of the signing path as a whole, so do not point it at a key with funds yet. It has no authentication beyond the socket's file mode, no key rotation, and the ledger does not bind transaction lifetime (blockhash freshness) — a stale blockhash simply fails on-chain.
+
+### Adversarial review of the daemon (2026-10-27) — findings and fixes
+
+An independent reviewer ran the suite (green) **plus 8 isolated probe scripts** in `/tmp` that the repo's own tests did not cover. The suite was green while five real defects existed, so each finding below now has a regression test that **fails against the reviewed code and passes against the fix** (verified by running the new tests against a copy of the pre-fix tree: 7 failures, all fixed afterwards).
+
+- **Fixed — stale-lock takeover race (HIGH)**: the takeover was a classic TOCTOU (read lock → check pid → unlink → retry). Two daemons could both judge the dead owner and both acquire; the reviewer reproduced both daemons starting on one journal in 2/3 runs, signing **the same wire twice** (both reporting `seq 2`) and leaving a journal that could never load again (`ledger_corrupt`). The lock is now claimed atomically with a unique per-instance token (`open(O_EXCL)` + `link()`), and a stale lock is taken over by renaming it aside and byte-comparing the moved content with the content that was judged — if they differ, the takeover backs off. Verified: 5/5 race runs now yield exactly one winner (was: two).
+- **Fixed — `stop()` released the lock before draining (HIGH)**: the lock was freed while the daemon was still serving in-flight requests, so a second daemon could start and the first could still sign. `stop()` now closes the server, drains open connections, unlinks the socket, and releases the journal lock **last**.
+- **Fixed — orphan server after a post-`listen()` failure (HIGH)**: a `chmod` failure after `listen()` released the lock but left the server listening; `stop()` could not reach it. Startup now fails closed and closes the server.
+- **Fixed — post-start server `error` (MEDIUM)**: the `error` handler was removed with the wrong function reference, so it stayed attached for the server's lifetime and released the lock while the daemon kept serving. It now triggers an orderly stop: stop serving first, release the lock last.
+- **Fixed — invalid-UTF-8 tail destroyed a durable record (MEDIUM)**: the torn tail was measured *after* UTF-8 decoding, so one invalid byte became a 3-byte U+FFFD and the repair truncated **2 bytes into the last fsynced record**, silently dropping an approval. The tail is now located in raw bytes.
+- **Fixed — same-size journal tamper accepted (LOW/MEDIUM)**: the foreign-write check compared only `statSync().size`, so an in-place same-length edit was accepted and then trusted on reload. The check now compares SHA-256, and the journal carries a per-record hash chain so a tampered file fails to load at all.
+- **Fixed — keystore directory checks too weak (LOW/MEDIUM)**: only world-writable (`0o002`) directories were refused, so a group-writable (`0o770`) directory passed, and directory **ownership** was not checked at all. Both are now refused (`keystore_dir_mode`, `keystore_dir_owner`).
+- **Fixed — library mutated global `process.umask` (LOW)**: the daemon constructor set `process.umask(0o077)` for the whole host process. The library no longer touches it; modes are set explicitly.
+- **Coverage added**: stale-lock takeover, `stop()` ordering with a held connection, post-`listen()` failure, post-start `error`, UTF-8 tail, same-size tamper, group-writable/foreign-owned keystore directories, umask neutrality, and the poisoned-ledger rollback-failure path — all previously untested.
+
+A caveat on the green suite: it was green *while* these defects existed, so "tests pass" was never the evidence that the guarantees held. The evidence is the probe scripts and the falsifying tests above.
 
 ## Next qualification
 
-1. Independent adversarial review of the daemon's signing path (`src/signer.js`, `src/daemon.js`, `src/keystore.js`, `src/grantfile.js`) before pointing it at a key with funds. The policy/ledger path already had one; the new code does not yet.
+1. A second independent adversarial review of the daemon's signing path (`src/signer.js`, `src/daemon.js`, `src/keystore.js`, `src/grantfile.js`) before pointing it at a key with funds. The policy/ledger path had one, and the daemon hardening diff had one on 2026-10-27 whose findings are now fixed — but the signing path as a whole has not been reviewed end to end.
 2. Expand supported instructions only when the fee and authority effects can be bounded; refuse anything undecidable, rather than widening policy to pass tests.
 3. Migrate own key-loading sites that fit the reviewed envelope as user zero; then run the 30-day restart/over-limit/refusal test. No outside users yet.

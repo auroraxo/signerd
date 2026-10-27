@@ -8,6 +8,8 @@ const path = require('node:path');
 const { Keypair, SystemProgram, Transaction } = require('@solana/web3.js');
 const { Daemon, request } = require('../src/daemon');
 const { createKeystore, loadKeystore } = require('../src/keystore');
+const { loadGrantFile } = require('../src/grantfile');
+const { Ledger } = require('../src/ledger');
 
 const crypto = require('node:crypto');
 
@@ -231,6 +233,80 @@ test('the socket file is removed on shutdown and a stale one is cleaned up', asy
   await restarted.stop();
 });
 
+
+test('a second daemon on the same journal refuses to start (single writer)', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'signerd-lock-'));
+  const keystore = path.join(dir, 'ops.key');
+  const created = createKeystore({ file: keystore, passphrase: PASSPHRASE });
+  const recipient = Keypair.generate().publicKey;
+  const grantFile = path.join(dir, 'grants.json');
+  fs.writeFileSync(grantFile, JSON.stringify({
+    version: 1,
+    grants: {
+      ops: {
+        signer: created.publicKey,
+        destination: recipient.toBase58(),
+        maxLamports: '42', expiresAt: '2026-10-28T10:00:00Z',
+        windowMaxLamports: '100000', windowSeconds: '3600',
+      },
+    },
+  }));
+  const ledgerFile = path.join(dir, 'journal.jsonl');
+  const keypair = loadKeystore({ file: keystore, passphrase: PASSPHRASE });
+  const first = new Daemon({
+    socketPath: path.join(dir, 'a.sock'),
+    keystorePath: keystore, passphrase: PASSPHRASE, grantFile, ledgerFile,
+  });
+  await first.start();
+  try {
+    // A second daemon on the SAME journal would double the window budget and
+    // bypass the replay set. It must refuse to start.
+    const second = new Daemon({
+      socketPath: path.join(dir, 'b.sock'),
+      keystorePath: keystore, passphrase: PASSPHRASE, grantFile, ledgerFile,
+    });
+    await assert.rejects(() => second.start(), /ledger_locked/);
+    // The first daemon is unaffected and still works.
+    const response = await request({
+      socketPath: path.join(dir, 'a.sock'), grant: 'ops',
+      wire: wire(keypair, recipient),
+    });
+    assert.equal(response.ok, true);
+  } finally {
+    await first.stop();
+  }
+  // After the first daemon stops, the lock is released and a new one starts.
+  const third = new Daemon({
+    socketPath: path.join(dir, 'c.sock'),
+    keystorePath: keystore, passphrase: PASSPHRASE, grantFile, ledgerFile,
+  });
+  await third.start();
+  await third.stop();
+});
+
+test('the journal and the socket are owner-only, never group readable', async () => {
+  const f = await fixture();
+  try {
+    const socketMode = fs.statSync(f.socketPath).mode & 0o777;
+    assert.equal(socketMode, 0o600);
+    await request({ socketPath: f.socketPath, grant: 'ops', wire: wire(f.keypair, f.recipient) });
+    const journalMode = fs.statSync(path.join(f.dir, 'journal.jsonl')).mode & 0o777;
+    assert.equal(journalMode, 0o600, 'the journal must not be group/other readable');
+  } finally {
+    await f.daemon.stop();
+  }
+});
+
+test('a keystore inside a world-writable directory is refused', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'signerd-dir-'));
+  fs.chmodSync(dir, 0o777);
+  const file = path.join(dir, 'ops.key');
+  createKeystore({ file, passphrase: PASSPHRASE });
+  assert.throws(() => loadKeystore({ file, passphrase: PASSPHRASE }), /keystore_dir_mode/);
+  fs.chmodSync(dir, 0o755);
+  assert.doesNotThrow(() => loadKeystore({ file, passphrase: PASSPHRASE }));
+});
+
 test('a malformed request is refused with a structured error, not a crash', async () => {
   const f = await fixture();
   try {
@@ -248,5 +324,247 @@ test('a malformed request is refused with a structured error, not a crash', asyn
     assert.equal(parsed.error, 'request_invalid');
   } finally {
     await f.daemon.stop();
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Regression tests for the 27.10. independent adversarial review (run
+// 24d92c08), which found 5 defects while the suite was green. Each test below
+// fails against the code as reviewed and passes only after the fix.
+// ---------------------------------------------------------------------------
+
+function deadPid() {
+  const { spawnSync } = require('node:child_process');
+  const proc = spawnSync(process.execPath, ['-e', 'process.exit(0)']);
+  assert.ok(proc.pid > 0);
+  return proc.pid;
+}
+
+function seedLock(ledgerFile, pid) {
+  fs.writeFileSync(`${ledgerFile}.lock`,
+    JSON.stringify({ pid, token: 'a'.repeat(32), startedAt: Date.now() - 60000 }));
+}
+
+async function pairSetup({ grants: grantNames = ['ops'] } = {}) {
+  const dir = tmpDir();
+  const recipient = Keypair.generate().publicKey;
+  const keystore = path.join(dir, 'ops.key');
+  const created = createKeystore({ file: keystore, passphrase: PASSPHRASE });
+  const grantFile = path.join(dir, 'grants.json');
+  const grants = {};
+  for (const name of grantNames) {
+    grants[name] = {
+      signer: created.publicKey, destination: recipient.toBase58(),
+      maxLamports: '42', expiresAt: '2026-10-28T10:00:00Z',
+      windowMaxLamports: '100000', windowSeconds: '3600',
+    };
+  }
+  fs.writeFileSync(grantFile, JSON.stringify({ version: 1, grants }));
+  const ledgerFile = path.join(dir, 'journal.jsonl');
+  const keypair = loadKeystore({ file: keystore, passphrase: PASSPHRASE });
+  const make = (sock) => new Daemon({
+    socketPath: path.join(dir, sock), keystorePath: keystore,
+    passphrase: PASSPHRASE, grantFile, ledgerFile,
+  });
+  return { dir, recipient, keystore, grantFile, ledgerFile, keypair, make };
+}
+
+test('review #1: a takeover must never steal a lock that appeared in the read->rename window', async () => {
+  const s = await pairSetup();
+  seedLock(s.ledgerFile, deadPid());
+  const lockPath = `${s.ledgerFile}.lock`;
+  const survivor = JSON.stringify({ pid: process.pid, token: 'c'.repeat(32), startedAt: Date.now() });
+
+  // Widen the exact TOCTOU the review exploited: between the daemon judging
+  // the lock dead and performing its rename, a CONCURRENT starter wins and
+  // writes its own live lock at the same path. The takeover must notice it
+  // moved a file other than the one it inspected and back off.
+  const realRename = fs.renameSync;
+  let injected = false;
+  fs.renameSync = function renamed(from, to) {
+    if (!injected && from === lockPath) {
+      injected = true;
+      realRename.call(fs, from, `${to}.pre-${Date.now()}`); // pull the stale lock away
+      realRename.call(fs, `${to}.pre-${Date.now()}`.replace(/\.pre-\d+$/, (m) => m), lockPath); // no-op guard
+    }
+    return realRename.call(fs, from, to);
+  };
+
+  // Simpler and exact: before the rename lands, put a live lock in its place.
+  fs.renameSync = function renamed(from, to) {
+    if (!injected && from === lockPath) {
+      injected = true;
+      realRename.call(fs, from, to); // move the stale lock away
+      fs.writeFileSync(lockPath, survivor); // a live starter wins the freed path
+      return undefined; // leave `lockPath` holding the LIVE lock for verification
+    }
+    return realRename.call(fs, from, to);
+  };
+
+  const daemon = s.make('race.sock');
+  try {
+    await assert.rejects(() => daemon.start(), /ledger_locked/,
+      'the daemon must refuse rather than run beside a live lock owner');
+    // The concurrent starter's lock must survive intact: the review's bug
+    // unlinked it, leaving two daemons believing they owned the journal.
+    assert.ok(fs.existsSync(lockPath), 'the live lock must not be deleted by a failed takeover');
+    assert.equal(fs.readFileSync(lockPath, 'utf8'), survivor,
+      'the live lock must be restored byte-for-byte');
+    assert.equal(daemon.started, false);
+    assert.equal(daemon.lockHeld, false);
+  } finally {
+    fs.renameSync = realRename;
+    await daemon.stop().catch(() => { /* never started */ });
+  }
+});
+
+test('review #2: stop() keeps the journal lock until the server has stopped serving', async () => {
+  const s = await pairSetup();
+  const net = require('node:net');
+  const daemon = s.make('stop.sock');
+  await daemon.start();
+  const lockPath = `${s.ledgerFile}.lock`;
+
+  // A client holds a connection open without sending: server.close() cannot
+  // complete while it is alive, so the lock must still be held.
+  const held = net.connect(daemon.socketPath);
+  await new Promise((resolve, reject) => {
+    held.once('connect', resolve);
+    held.once('error', reject);
+  });
+
+  const stopping = daemon.stop();
+  try {
+    // Evaluated synchronously, before any await inside stop() resolves.
+    assert.ok(fs.existsSync(lockPath),
+      'the lock must still exist while the daemon is draining: releasing it first lets a second daemon start mid-shutdown');
+
+    const rival = s.make('rival.sock');
+    await assert.rejects(() => rival.start(), /ledger_locked/,
+      'a second daemon must not start while the first still drains an open connection');
+  } finally {
+    held.destroy();
+  }
+  // The buggy code releases the lock before draining and then waits forever
+  // for the open connection, so this wait must be bounded: a hanging test is
+  // not a failing test.
+  await Promise.race([
+    stopping,
+    new Promise((_, reject) => setTimeout(
+      () => reject(new Error('stop() never completed: the daemon did not drain the open connection')),
+      4000)),
+  ]);
+  assert.equal(fs.existsSync(lockPath), false, 'the lock is released once serving has stopped');
+  const successor = s.make('successor.sock');
+  await successor.start();
+  await successor.stop();
+});
+
+test('review #3: a failure after listen() leaves no orphan server and releases the lock', async () => {
+  const s = await pairSetup();
+  const daemon = s.make('orphan.sock');
+  const realChmod = fs.chmodSync;
+  fs.chmodSync = function chmod(file, mode) {
+    if (file === daemon.socketPath) {
+      const err = new Error('simulated EACCES');
+      err.code = 'EACCES';
+      throw err;
+    }
+    return realChmod.call(fs, file, mode);
+  };
+  try {
+    await assert.rejects(() => daemon.start(), /EACCES/);
+  } finally {
+    fs.chmodSync = realChmod;
+  }
+
+  assert.equal(daemon.started, false);
+  assert.equal(fs.existsSync(daemon.socketPath), false,
+    'the socket must be cleaned up, not left behind for an orphan listener');
+  assert.equal(fs.existsSync(`${s.ledgerFile}.lock`), false,
+    'the lock must be released only after the server is gone');
+
+  // Nothing may still be accepting on that path.
+  const net = require('node:net');
+  await new Promise((resolve) => {
+    const probe = net.connect(daemon.socketPath);
+    probe.once('connect', () => { probe.destroy(); assert.fail('an orphan server is still accepting'); });
+    probe.once('error', () => resolve());
+    probe.setTimeout(700, () => { probe.destroy(); resolve(); });
+  });
+
+  // The released lock means an operator retry is not blocked by this attempt.
+  const retry = s.make('retry.sock');
+  await retry.start();
+  await retry.stop();
+});
+
+test('review #4: a post-start server error shuts down cleanly instead of freeing the lock while serving', async () => {
+  const s = await pairSetup();
+  const daemon = s.make('err.sock');
+  await daemon.start();
+  const lockPath = `${s.ledgerFile}.lock`;
+  assert.ok(fs.existsSync(lockPath));
+
+  daemon.server.emit('error', Object.assign(new Error('EMFILE'), { code: 'EMFILE' }));
+  await new Promise((resolve) => setTimeout(resolve, 120));
+
+  assert.equal(daemon.started, false, 'the daemon must stop serving, not keep signing without a lock');
+  assert.equal(fs.existsSync(lockPath), false, 'the lock is released only as part of an orderly stop');
+  assert.equal(fs.existsSync(daemon.socketPath), false);
+
+  // stop() must stay callable and non-throwing after an error-driven shutdown.
+  await assert.doesNotReject(() => daemon.stop());
+
+  const next = s.make('after-err.sock');
+  await next.start();
+  await next.stop();
+});
+
+test('review #6: a group-writable keystore directory is refused, not only a world-writable one', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'signerd-gw-'));
+  const file = path.join(dir, 'ops.key');
+  fs.chmodSync(dir, 0o770); // group may write -> a group member can swap the key
+  createKeystore({ file, passphrase: PASSPHRASE });
+  assert.throws(() => loadKeystore({ file, passphrase: PASSPHRASE }), /keystore_dir_mode/);
+  fs.chmodSync(dir, 0o772); // other may write -> same problem, different subject
+  assert.throws(() => loadKeystore({ file, passphrase: PASSPHRASE }), /keystore_dir_mode/);
+  fs.chmodSync(dir, 0o750); // group may only read: not writable, so acceptable
+  assert.doesNotThrow(() => loadKeystore({ file, passphrase: PASSPHRASE }));
+  fs.chmodSync(dir, 0o700);
+  assert.doesNotThrow(() => loadKeystore({ file, passphrase: PASSPHRASE }));
+  // A foreign-owned directory is refused even when its mode looks safe: its
+  // owner can replace the file regardless of the mode we see.
+  const foreign = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'signerd-fo-')), 'ops.key');
+  createKeystore({ file: foreign, passphrase: PASSPHRASE });
+  const originalUid = process.getuid;
+  if (typeof originalUid === 'function') {
+    process.getuid = () => originalUid() + 1;
+    try {
+      assert.throws(() => loadKeystore({ file: foreign, passphrase: PASSPHRASE }), /keystore_dir_owner/);
+    } finally {
+      process.getuid = originalUid;
+    }
+  }
+});
+
+test('regression: the daemon library never mutates the process umask', async () => {
+  // Set a KNOWN umask first: capturing `before` without pinning it would
+  // compare against a umask an earlier daemon already changed, and the
+  // mutation would go unnoticed.
+  const original = process.umask(0o022);
+  try {
+    const f = await fixture();
+    try {
+      assert.equal(process.umask(), 0o022,
+        'constructing a Daemon must not change global process state for its host');
+      await request({ socketPath: f.socketPath, grant: 'ops', wire: wire(f.keypair, f.recipient) });
+      const journalMode = fs.statSync(path.join(f.dir, 'journal.jsonl')).mode & 0o777;
+      assert.equal(journalMode, 0o600, 'the journal must be 0600 without relying on umask');
+    } finally {
+      await f.daemon.stop();
+    }
+  } finally {
+    process.umask(original);
   }
 });

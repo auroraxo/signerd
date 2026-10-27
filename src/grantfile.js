@@ -52,6 +52,10 @@ function validateGrant(name, grant) {
       !U64.test(grant.windowSeconds) || !EXPIRES.test(grant.expiresAt)) {
     throw fail('grant_field_invalid', `${name}.format`);
   }
+  // A zero-width window would set cutoff = now and exclude every record at or
+  // before now: the cap would silently never engage. Refuse it at load time
+  // (the ledger refuses it again per request).
+  if (grant.windowSeconds === '0') throw fail('grant_field_invalid', `${name}.windowSeconds`);
 }
 
 /**
