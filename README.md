@@ -2,7 +2,7 @@
 
 Scoped signing daemon for Solana: the ssh-agent pattern, applied to Solana keys. signerd signs only the subset of transactions it can fully verify offline; everything else gets a structured refusal — and that refusal is the feature.
 
-**Status: RFC stage (October 2026). No implementation yet. The scope below was narrowed on 2026-10-26 after an adversarial review (see Safety boundary).**
+**Status: early policy-only prototype (October 2026), NOT a signing service or security-reviewed wallet.** The scope was narrowed on 2026-10-26 after an adversarial review (see Safety boundary). On 2026-10-27 the first tested *legacy System-transfer-only* refusal checker was added; the rest of the v1 envelope below remains a plan.
 
 ## The idea
 
@@ -68,8 +68,19 @@ The planned core is a Rust daemon, a TypeScript SDK, and a built-in MCP server. 
 
 Checked on 2026-10-24/26: 21 files across six of my own repositories load key material into process memory; `sendaifun/solana-agent-kit` documents a raw private key as its setup path. A keyword scan of 1,123 live Solana-ecosystem repositories found no local scoped-signing daemon (a scan, not a semantic census). This remains a hypothesis with zero outside users.
 
+## First executable increment (policy only, not a signer)
+
+`src/policy.js` evaluates serialized transactions with `evaluate(wire, grant, now)` and returns `{ allowed: true, amountLamports: "…" }` or `{ allowed: false, refused: "…" }`. It deliberately permits **only one** legacy System Program transfer from the grant signer/fee payer to one fixed destination under a string-encoded lamport cap. The sole signer must be the source and fee payer; the only keys must be source, destination, and System Program. V0 is refused even without ALTs. Any extra instruction (including ComputeBudget/priority-price drain), SPL Token/Token-2022 instruction, authority change, CPI-capable program, invalid grant, expired grant, or noncanonical wire is refused. The tests generate disposable keys locally and cover both the one allowed case and the known attack classes.
+
+```bash
+npm ci
+npm test
+```
+
+**Not safe for real keys yet.** There is no daemon, keystore, socket authentication, grant isolation, stateful spend/window accounting, replay protection, transaction lifetime check, independent parser/audit, or user-zero migration. The prototype does **not** sign or submit transactions. Its per-transaction cap does not bound repeat spending, and it does not bound base transaction fees. Do not compose its `allowed` boolean with a real signer until these boundaries have been implemented and reviewed.
+
 ## Next qualification
 
-1. Prove the boundary in code: the four refusal classes are refused structurally, and the offline check holds on the no-ALT subset (negative controls first).
-2. Migrate my own key-loading sites that fit the envelope to grants as user zero.
-3. Run the 30-day refutation: zero remaining key loads in scope, forced daemon restarts, every over-limit or undecidable grant structurally refused.
+1. Independent wire-format/adversarial review and daemon-owned atomic replay/window accounting before attaching a key or exposing a socket.
+2. Expand supported instructions only when the fee and authority effects can be bounded; refuse anything undecidable, rather than widening policy to pass tests.
+3. Migrate own key-loading sites that fit the reviewed envelope as user zero; then run the 30-day restart/over-limit/refusal test. No outside users yet.
