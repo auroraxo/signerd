@@ -112,7 +112,7 @@ The v0 daemon still only speaks the narrow legacy System-transfer envelope of `s
 - **Turnkey** (closed) — policy engine that documents the same ALT undecidability and ships a deny-ALT policy.
 - **Steward** (EVM-focused, MIT, 98★) — states in its own README that local envelope modes expose plaintext key material at sign time.
 
-Checked on 2026-10-24/26: 21 files across six of my own repositories load key material into process memory; `sendaifun/solana-agent-kit` documents a raw private key as its setup path. A keyword scan of 1,123 live Solana-ecosystem repositories found no local scoped-signing daemon (a scan, not a semantic census). This remains a hypothesis with zero outside users.
+Checked on 2026-10-24/26, re-measured on 2026-10-28 with `tools/key-load-sites.mjs` (output in `research/key-load-sites-2026-10-28.json`): the earlier "21 files across six of my own repositories" was wrong — it counted checkouts sitting in my working directory as if they were repositories I control. Of 85 key-load files across 51 local checkouts, 72 are in third-party clones with no write access, 4 in my fork of `orca-so/whirlpools`, and 9 in the two repos I author: 8 in signerd itself (keystore, signer, tests — this is where the key is supposed to be) and 1 in `openreceipts` (Ed25519 receipt signing, not a Solana transaction path). "Migrate my 21 key-load sites" was therefore never a real backlog. Unchanged: `sendaifun/solana-agent-kit` documents a raw private key as its setup path; a keyword scan of 1,123 live Solana-ecosystem repositories found no local scoped-signing daemon (a scan, not a semantic census); this remains a hypothesis with zero outside users.
 
 ## First executable increment (policy only, not a signer)
 

@@ -1,0 +1,961 @@
+{
+  "summary": {
+    "generatedAt": "2026-10-28T20:10:53.819Z",
+    "reposDir": "/home/aurora/github_repos",
+    "reposScanned": 51,
+    "filesScanned": 16919,
+    "keyLoadFiles": 85,
+    "keyLoadFilesByRepoClass": {
+      "third-party": 72,
+      "own": 9,
+      "own-fork": 4
+    },
+    "reposWithSitesByRepoClass": {
+      "third-party": [
+        "airflow-pr",
+        "anchor",
+        "marinade-ts-sdk",
+        "minio-go",
+        "onre-sol",
+        "openbook-v2",
+        "raydium-clmm",
+        "raydium-cp-swap",
+        "rfq-webhook-toolkit",
+        "wormhole-sdk-ts-verify",
+        "xorca"
+      ],
+      "own": [
+        "openreceipts",
+        "signerd"
+      ],
+      "own-fork": [
+        "orca-whirlpools-recon"
+      ]
+    },
+    "ownAuthoredReposWithSites": [
+      {
+        "repo": "openreceipts",
+        "keyLoadFiles": 1
+      },
+      {
+        "repo": "signerd",
+        "keyLoadFiles": 8
+      }
+    ],
+    "thirdPartyReposWithSites": [
+      {
+        "repo": "airflow-pr",
+        "keyLoadFiles": 23
+      },
+      {
+        "repo": "anchor",
+        "keyLoadFiles": 20
+      },
+      {
+        "repo": "xorca",
+        "keyLoadFiles": 9
+      },
+      {
+        "repo": "onre-sol",
+        "keyLoadFiles": 5
+      },
+      {
+        "repo": "minio-go",
+        "keyLoadFiles": 3
+      },
+      {
+        "repo": "rfq-webhook-toolkit",
+        "keyLoadFiles": 3
+      },
+      {
+        "repo": "wormhole-sdk-ts-verify",
+        "keyLoadFiles": 3
+      },
+      {
+        "repo": "openbook-v2",
+        "keyLoadFiles": 2
+      },
+      {
+        "repo": "raydium-cp-swap",
+        "keyLoadFiles": 2
+      },
+      {
+        "repo": "marinade-ts-sdk",
+        "keyLoadFiles": 1
+      },
+      {
+        "repo": "raydium-clmm",
+        "keyLoadFiles": 1
+      }
+    ],
+    "ownForkReposWithSites": [
+      {
+        "repo": "orca-whirlpools-recon",
+        "upstream": "https://github.com/orca-so/whirlpools.git",
+        "keyLoadFiles": 4
+      }
+    ]
+  },
+  "sites": [
+    {
+      "repo": "airflow-pr",
+      "repoClass": "third-party",
+      "origin": "https://github.com/apache/airflow.git",
+      "upstream": null,
+      "file": "airflow-core/src/airflow/api_fastapi/auth/tokens.py",
+      "patterns": [
+        "load_pem_private_key\\s*\\("
+      ]
+    },
+    {
+      "repo": "airflow-pr",
+      "repoClass": "third-party",
+      "origin": "https://github.com/apache/airflow.git",
+      "upstream": null,
+      "file": "airflow-core/src/airflow/ui/src/components/FlexibleForm/FieldPassword.test.tsx",
+      "patterns": [
+        "private[_]?key\\s*="
+      ]
+    },
+    {
+      "repo": "airflow-pr",
+      "repoClass": "third-party",
+      "origin": "https://github.com/apache/airflow.git",
+      "upstream": null,
+      "file": "airflow-core/src/airflow/utils/log/file_task_handler.py",
+      "patterns": [
+        "private[_]?key\\s*="
+      ]
+    },
+    {
+      "repo": "airflow-pr",
+      "repoClass": "third-party",
+      "origin": "https://github.com/apache/airflow.git",
+      "upstream": null,
+      "file": "airflow-core/tests/unit/api_fastapi/auth/test_tokens.py",
+      "patterns": [
+        "private[_]?key\\s*="
+      ]
+    },
+    {
+      "repo": "airflow-pr",
+      "repoClass": "third-party",
+      "origin": "https://github.com/apache/airflow.git",
+      "upstream": null,
+      "file": "providers/edge3/tests/unit/edge3/worker_api/test_auth.py",
+      "patterns": [
+        "private[_]?key\\s*="
+      ]
+    },
+    {
+      "repo": "airflow-pr",
+      "repoClass": "third-party",
+      "origin": "https://github.com/apache/airflow.git",
+      "upstream": null,
+      "file": "providers/git/src/airflow/providers/git/hooks/git.py",
+      "patterns": [
+        "private[_]?key\\s*="
+      ]
+    },
+    {
+      "repo": "airflow-pr",
+      "repoClass": "third-party",
+      "origin": "https://github.com/apache/airflow.git",
+      "upstream": null,
+      "file": "providers/git/tests/unit/git/hooks/test_git.py",
+      "patterns": [
+        "private[_]?key\\s*="
+      ]
+    },
+    {
+      "repo": "airflow-pr",
+      "repoClass": "third-party",
+      "origin": "https://github.com/apache/airflow.git",
+      "upstream": null,
+      "file": "providers/github/src/airflow/providers/github/hooks/github.py",
+      "patterns": [
+        "private[_]?key\\s*="
+      ]
+    },
+    {
+      "repo": "airflow-pr",
+      "repoClass": "third-party",
+      "origin": "https://github.com/apache/airflow.git",
+      "upstream": null,
+      "file": "providers/microsoft/azure/tests/unit/microsoft/azure/hooks/test_msgraph.py",
+      "patterns": [
+        "private[_]?key\\s*="
+      ]
+    },
+    {
+      "repo": "airflow-pr",
+      "repoClass": "third-party",
+      "origin": "https://github.com/apache/airflow.git",
+      "upstream": null,
+      "file": "providers/salesforce/src/airflow/providers/salesforce/hooks/salesforce.py",
+      "patterns": [
+        "private[_]?key\\s*="
+      ]
+    },
+    {
+      "repo": "airflow-pr",
+      "repoClass": "third-party",
+      "origin": "https://github.com/apache/airflow.git",
+      "upstream": null,
+      "file": "providers/salesforce/tests/unit/salesforce/hooks/test_salesforce.py",
+      "patterns": [
+        "private[_]?key\\s*="
+      ]
+    },
+    {
+      "repo": "airflow-pr",
+      "repoClass": "third-party",
+      "origin": "https://github.com/apache/airflow.git",
+      "upstream": null,
+      "file": "providers/sftp/src/airflow/providers/sftp/hooks/sftp.py",
+      "patterns": [
+        "private[_]?key\\s*="
+      ]
+    },
+    {
+      "repo": "airflow-pr",
+      "repoClass": "third-party",
+      "origin": "https://github.com/apache/airflow.git",
+      "upstream": null,
+      "file": "providers/sftp/tests/unit/sftp/fs/test_sftp.py",
+      "patterns": [
+        "private[_]?key\\s*="
+      ]
+    },
+    {
+      "repo": "airflow-pr",
+      "repoClass": "third-party",
+      "origin": "https://github.com/apache/airflow.git",
+      "upstream": null,
+      "file": "providers/snowflake/src/airflow/providers/snowflake/hooks/snowflake.py",
+      "patterns": [
+        "load_pem_private_key\\s*\\("
+      ]
+    },
+    {
+      "repo": "airflow-pr",
+      "repoClass": "third-party",
+      "origin": "https://github.com/apache/airflow.git",
+      "upstream": null,
+      "file": "providers/snowflake/src/airflow/providers/snowflake/hooks/snowflake_sql_api.py",
+      "patterns": [
+        "private[_]?key\\s*="
+      ]
+    },
+    {
+      "repo": "airflow-pr",
+      "repoClass": "third-party",
+      "origin": "https://github.com/apache/airflow.git",
+      "upstream": null,
+      "file": "providers/snowflake/src/airflow/providers/snowflake/utils/_rest_auth.py",
+      "patterns": [
+        "private[_]?key\\s*="
+      ]
+    },
+    {
+      "repo": "airflow-pr",
+      "repoClass": "third-party",
+      "origin": "https://github.com/apache/airflow.git",
+      "upstream": null,
+      "file": "providers/snowflake/src/airflow/providers/snowflake/utils/sql_api_generate_jwt.py",
+      "patterns": [
+        "private[_]?key\\s*="
+      ]
+    },
+    {
+      "repo": "airflow-pr",
+      "repoClass": "third-party",
+      "origin": "https://github.com/apache/airflow.git",
+      "upstream": null,
+      "file": "providers/snowflake/tests/unit/snowflake/hooks/test_snowflake.py",
+      "patterns": [
+        "load_pem_private_key\\s*\\(",
+        "private[_]?key\\s*="
+      ]
+    },
+    {
+      "repo": "airflow-pr",
+      "repoClass": "third-party",
+      "origin": "https://github.com/apache/airflow.git",
+      "upstream": null,
+      "file": "providers/snowflake/tests/unit/snowflake/hooks/test_snowflake_sql_api.py",
+      "patterns": [
+        "private[_]?key\\s*="
+      ]
+    },
+    {
+      "repo": "airflow-pr",
+      "repoClass": "third-party",
+      "origin": "https://github.com/apache/airflow.git",
+      "upstream": null,
+      "file": "providers/snowflake/tests/unit/snowflake/utils/test_sql_api_generate_jwt.py",
+      "patterns": [
+        "private[_]?key\\s*="
+      ]
+    },
+    {
+      "repo": "airflow-pr",
+      "repoClass": "third-party",
+      "origin": "https://github.com/apache/airflow.git",
+      "upstream": null,
+      "file": "providers/ssh/src/airflow/providers/ssh/hooks/ssh.py",
+      "patterns": [
+        "private[_]?key\\s*="
+      ]
+    },
+    {
+      "repo": "airflow-pr",
+      "repoClass": "third-party",
+      "origin": "https://github.com/apache/airflow.git",
+      "upstream": null,
+      "file": "providers/ssh/tests/unit/ssh/hooks/test_ssh.py",
+      "patterns": [
+        "private[_]?key\\s*="
+      ]
+    },
+    {
+      "repo": "airflow-pr",
+      "repoClass": "third-party",
+      "origin": "https://github.com/apache/airflow.git",
+      "upstream": null,
+      "file": "providers/ssh/tests/unit/ssh/hooks/test_ssh_async.py",
+      "patterns": [
+        "private[_]?key\\s*="
+      ]
+    },
+    {
+      "repo": "anchor",
+      "repoClass": "third-party",
+      "origin": "https://github.com/otter-sec/anchor.git",
+      "upstream": null,
+      "file": "cli/src/template.rs",
+      "patterns": [
+        "Keypair\\.fromSecretKey\\s*\\("
+      ]
+    },
+    {
+      "repo": "anchor",
+      "repoClass": "third-party",
+      "origin": "https://github.com/otter-sec/anchor.git",
+      "upstream": null,
+      "file": "docs-v2/src/content/docs/v1/fundamentals/_idl/test.ts",
+      "patterns": [
+        "new\\s+Keypair\\s*\\("
+      ]
+    },
+    {
+      "repo": "anchor",
+      "repoClass": "third-party",
+      "origin": "https://github.com/otter-sec/anchor.git",
+      "upstream": null,
+      "file": "tests/anchor-cli-idl/tests/idl.ts",
+      "patterns": [
+        "\\.secretKey\\b"
+      ]
+    },
+    {
+      "repo": "anchor",
+      "repoClass": "third-party",
+      "origin": "https://github.com/otter-sec/anchor.git",
+      "upstream": null,
+      "file": "tests/errors/tests/errors.ts",
+      "patterns": [
+        "new\\s+Keypair\\s*\\("
+      ]
+    },
+    {
+      "repo": "anchor",
+      "repoClass": "third-party",
+      "origin": "https://github.com/otter-sec/anchor.git",
+      "upstream": null,
+      "file": "tests/spl/token-extensions/tests/token-extensions.ts",
+      "patterns": [
+        "new\\s+Keypair\\s*\\("
+      ]
+    },
+    {
+      "repo": "anchor",
+      "repoClass": "third-party",
+      "origin": "https://github.com/otter-sec/anchor.git",
+      "upstream": null,
+      "file": "tests/spl/token-wrapper/tests/wrapper.ts",
+      "patterns": [
+        "new\\s+Keypair\\s*\\("
+      ]
+    },
+    {
+      "repo": "anchor",
+      "repoClass": "third-party",
+      "origin": "https://github.com/otter-sec/anchor.git",
+      "upstream": null,
+      "file": "ts/packages/anchor/src/nodewallet.ts",
+      "patterns": [
+        "Keypair\\.fromSecretKey\\s*\\("
+      ]
+    },
+    {
+      "repo": "anchor",
+      "repoClass": "third-party",
+      "origin": "https://github.com/otter-sec/anchor.git",
+      "upstream": null,
+      "file": "ts/tests/src/spl/associated-token-account.ts",
+      "patterns": [
+        "new\\s+Keypair\\s*\\("
+      ]
+    },
+    {
+      "repo": "anchor",
+      "repoClass": "third-party",
+      "origin": "https://github.com/otter-sec/anchor.git",
+      "upstream": null,
+      "file": "ts/tests/src/spl/binary-option.ts",
+      "patterns": [
+        "new\\s+Keypair\\s*\\("
+      ]
+    },
+    {
+      "repo": "anchor",
+      "repoClass": "third-party",
+      "origin": "https://github.com/otter-sec/anchor.git",
+      "upstream": null,
+      "file": "ts/tests/src/spl/binary-oracle-pair.ts",
+      "patterns": [
+        "new\\s+Keypair\\s*\\("
+      ]
+    },
+    {
+      "repo": "anchor",
+      "repoClass": "third-party",
+      "origin": "https://github.com/otter-sec/anchor.git",
+      "upstream": null,
+      "file": "ts/tests/src/spl/feature-proposal.ts",
+      "patterns": [
+        "new\\s+Keypair\\s*\\("
+      ]
+    },
+    {
+      "repo": "anchor",
+      "repoClass": "third-party",
+      "origin": "https://github.com/otter-sec/anchor.git",
+      "upstream": null,
+      "file": "ts/tests/src/spl/memo.ts",
+      "patterns": [
+        "new\\s+Keypair\\s*\\("
+      ]
+    },
+    {
+      "repo": "anchor",
+      "repoClass": "third-party",
+      "origin": "https://github.com/otter-sec/anchor.git",
+      "upstream": null,
+      "file": "ts/tests/src/spl/name-service.ts",
+      "patterns": [
+        "new\\s+Keypair\\s*\\("
+      ]
+    },
+    {
+      "repo": "anchor",
+      "repoClass": "third-party",
+      "origin": "https://github.com/otter-sec/anchor.git",
+      "upstream": null,
+      "file": "ts/tests/src/spl/record.ts",
+      "patterns": [
+        "new\\s+Keypair\\s*\\("
+      ]
+    },
+    {
+      "repo": "anchor",
+      "repoClass": "third-party",
+      "origin": "https://github.com/otter-sec/anchor.git",
+      "upstream": null,
+      "file": "ts/tests/src/spl/stake-pool.ts",
+      "patterns": [
+        "new\\s+Keypair\\s*\\("
+      ]
+    },
+    {
+      "repo": "anchor",
+      "repoClass": "third-party",
+      "origin": "https://github.com/otter-sec/anchor.git",
+      "upstream": null,
+      "file": "ts/tests/src/spl/stateless-asks.ts",
+      "patterns": [
+        "new\\s+Keypair\\s*\\("
+      ]
+    },
+    {
+      "repo": "anchor",
+      "repoClass": "third-party",
+      "origin": "https://github.com/otter-sec/anchor.git",
+      "upstream": null,
+      "file": "ts/tests/src/spl/token-lending.ts",
+      "patterns": [
+        "new\\s+Keypair\\s*\\("
+      ]
+    },
+    {
+      "repo": "anchor",
+      "repoClass": "third-party",
+      "origin": "https://github.com/otter-sec/anchor.git",
+      "upstream": null,
+      "file": "ts/tests/src/spl/token-swap.ts",
+      "patterns": [
+        "new\\s+Keypair\\s*\\("
+      ]
+    },
+    {
+      "repo": "anchor",
+      "repoClass": "third-party",
+      "origin": "https://github.com/otter-sec/anchor.git",
+      "upstream": null,
+      "file": "ts/tests/src/spl/token.ts",
+      "patterns": [
+        "new\\s+Keypair\\s*\\("
+      ]
+    },
+    {
+      "repo": "anchor",
+      "repoClass": "third-party",
+      "origin": "https://github.com/otter-sec/anchor.git",
+      "upstream": null,
+      "file": "ts/tests/src/utils.ts",
+      "patterns": [
+        "Keypair\\.fromSecretKey\\s*\\(",
+        "new\\s+Keypair\\s*\\(",
+        "\\.secretKey\\b"
+      ]
+    },
+    {
+      "repo": "marinade-ts-sdk",
+      "repoClass": "third-party",
+      "origin": "https://github.com/marinade-finance/marinade-ts-sdk.git",
+      "upstream": null,
+      "file": "test/test-world.ts",
+      "patterns": [
+        "Keypair\\.fromSecretKey\\s*\\("
+      ]
+    },
+    {
+      "repo": "minio-go",
+      "repoClass": "third-party",
+      "origin": "https://github.com/minio/minio-go.git",
+      "upstream": null,
+      "file": "bucket-cache_test.go",
+      "patterns": [
+        "\\.secretKey\\b"
+      ]
+    },
+    {
+      "repo": "minio-go",
+      "repoClass": "third-party",
+      "origin": "https://github.com/minio/minio-go.git",
+      "upstream": null,
+      "file": "pkg/signer/request-signature-streaming.go",
+      "patterns": [
+        "SigningKey\\s*\\("
+      ]
+    },
+    {
+      "repo": "minio-go",
+      "repoClass": "third-party",
+      "origin": "https://github.com/minio/minio-go.git",
+      "upstream": null,
+      "file": "pkg/signer/request-signature-v4.go",
+      "patterns": [
+        "SigningKey\\s*\\("
+      ]
+    },
+    {
+      "repo": "onre-sol",
+      "repoClass": "third-party",
+      "origin": "https://github.com/onre-finance/onre-sol.git",
+      "upstream": null,
+      "file": "scripts/cli/transaction/handler.ts",
+      "patterns": [
+        "Keypair\\.fromSecretKey\\s*\\("
+      ]
+    },
+    {
+      "repo": "onre-sol",
+      "repoClass": "third-party",
+      "origin": "https://github.com/onre-finance/onre-sol.git",
+      "upstream": null,
+      "file": "scripts/cross_chain_transfer/cctp_v1/utils.ts",
+      "patterns": [
+        "Keypair\\.fromSecretKey\\s*\\("
+      ]
+    },
+    {
+      "repo": "onre-sol",
+      "repoClass": "third-party",
+      "origin": "https://github.com/onre-finance/onre-sol.git",
+      "upstream": null,
+      "file": "scripts/surfpool-regression/runtime.ts",
+      "patterns": [
+        "Keypair\\.fromSecretKey\\s*\\("
+      ]
+    },
+    {
+      "repo": "onre-sol",
+      "repoClass": "third-party",
+      "origin": "https://github.com/onre-finance/onre-sol.git",
+      "upstream": null,
+      "file": "scripts/surfpool-regression/surfpool.ts",
+      "patterns": [
+        "Keypair\\.fromSecretKey\\s*\\("
+      ]
+    },
+    {
+      "repo": "onre-sol",
+      "repoClass": "third-party",
+      "origin": "https://github.com/onre-finance/onre-sol.git",
+      "upstream": null,
+      "file": "scripts/utils/script-helper.ts",
+      "patterns": [
+        "Keypair\\.fromSecretKey\\s*\\("
+      ]
+    },
+    {
+      "repo": "openbook-v2",
+      "repoClass": "third-party",
+      "origin": "https://github.com/openbook-dex/openbook-v2",
+      "upstream": null,
+      "file": "ts/client/src/client.ts",
+      "patterns": [
+        "new\\s+Keypair\\s*\\("
+      ]
+    },
+    {
+      "repo": "openbook-v2",
+      "repoClass": "third-party",
+      "origin": "https://github.com/openbook-dex/openbook-v2",
+      "upstream": null,
+      "file": "ts/client/src/test/util.ts",
+      "patterns": [
+        "Keypair\\.fromSecretKey\\s*\\("
+      ]
+    },
+    {
+      "repo": "openreceipts",
+      "repoClass": "own",
+      "origin": "https://github.com/auroraxo/openreceipts.git",
+      "upstream": null,
+      "file": "receipt.py",
+      "patterns": [
+        "load_pem_private_key\\s*\\(",
+        "SigningKey\\s*\\("
+      ]
+    },
+    {
+      "repo": "orca-whirlpools-recon",
+      "repoClass": "own-fork",
+      "origin": "https://github.com/auroraxo/whirlpools.git",
+      "upstream": "https://github.com/orca-so/whirlpools.git",
+      "file": "legacy-sdk/cli/src/utils/provider.ts",
+      "patterns": [
+        "Keypair\\.fromSecretKey\\s*\\("
+      ]
+    },
+    {
+      "repo": "orca-whirlpools-recon",
+      "repoClass": "own-fork",
+      "origin": "https://github.com/auroraxo/whirlpools.git",
+      "upstream": "https://github.com/orca-so/whirlpools.git",
+      "file": "legacy-sdk/common/src/web3/token-util.ts",
+      "patterns": [
+        "new\\s+Keypair\\s*\\("
+      ]
+    },
+    {
+      "repo": "orca-whirlpools-recon",
+      "repoClass": "own-fork",
+      "origin": "https://github.com/auroraxo/whirlpools.git",
+      "upstream": "https://github.com/orca-so/whirlpools.git",
+      "file": "legacy-sdk/whirlpool/tests/integration/v1-ix/reset_position_range.test.ts",
+      "patterns": [
+        "Keypair\\.fromSecretKey\\s*\\("
+      ]
+    },
+    {
+      "repo": "orca-whirlpools-recon",
+      "repoClass": "own-fork",
+      "origin": "https://github.com/auroraxo/whirlpools.git",
+      "upstream": "https://github.com/orca-so/whirlpools.git",
+      "file": "legacy-sdk/whirlpool/tests/utils/admin.ts",
+      "patterns": [
+        "Keypair\\.fromSecretKey\\s*\\("
+      ]
+    },
+    {
+      "repo": "raydium-clmm",
+      "repoClass": "third-party",
+      "origin": "https://github.com/raydium-io/raydium-clmm",
+      "upstream": null,
+      "file": "tests/swap-live-pool.ts",
+      "patterns": [
+        "Keypair\\.fromSecretKey\\s*\\("
+      ]
+    },
+    {
+      "repo": "raydium-cp-swap",
+      "repoClass": "third-party",
+      "origin": "https://github.com/raydium-io/raydium-cp-swap",
+      "upstream": null,
+      "file": "tests/creator_fee_share.test.ts",
+      "patterns": [
+        "new\\s+Keypair\\s*\\("
+      ]
+    },
+    {
+      "repo": "raydium-cp-swap",
+      "repoClass": "third-party",
+      "origin": "https://github.com/raydium-io/raydium-cp-swap",
+      "upstream": null,
+      "file": "tests/utils/instruction.ts",
+      "patterns": [
+        "new\\s+Keypair\\s*\\("
+      ]
+    },
+    {
+      "repo": "rfq-webhook-toolkit",
+      "repoClass": "third-party",
+      "origin": "https://github.com/jup-ag/rfq-webhook-toolkit.git",
+      "upstream": null,
+      "file": "tests/helpers.ts",
+      "patterns": [
+        "loadKeypairFromFile\\s*\\("
+      ]
+    },
+    {
+      "repo": "rfq-webhook-toolkit",
+      "repoClass": "third-party",
+      "origin": "https://github.com/jup-ag/rfq-webhook-toolkit.git",
+      "upstream": null,
+      "file": "tests/suites/integration/quote.ts",
+      "patterns": [
+        "loadKeypairFromFile\\s*\\("
+      ]
+    },
+    {
+      "repo": "rfq-webhook-toolkit",
+      "repoClass": "third-party",
+      "origin": "https://github.com/jup-ag/rfq-webhook-toolkit.git",
+      "upstream": null,
+      "file": "tests/suites/integration/swap.ts",
+      "patterns": [
+        "loadKeypairFromFile\\s*\\("
+      ]
+    },
+    {
+      "repo": "signerd",
+      "repoClass": "own",
+      "origin": "https://github.com/auroraxo/signerd.git",
+      "upstream": null,
+      "file": "examples/user-zero-client.js",
+      "patterns": [
+        "Keypair\\.fromSecretKey\\s*\\("
+      ]
+    },
+    {
+      "repo": "signerd",
+      "repoClass": "own",
+      "origin": "https://github.com/auroraxo/signerd.git",
+      "upstream": null,
+      "file": "src/keystore.js",
+      "patterns": [
+        "Keypair\\.fromSecretKey\\s*\\(",
+        "SOLANA_PRIVATE_KEY",
+        "\\.secretKey\\b"
+      ]
+    },
+    {
+      "repo": "signerd",
+      "repoClass": "own",
+      "origin": "https://github.com/auroraxo/signerd.git",
+      "upstream": null,
+      "file": "src/signer.js",
+      "patterns": [
+        "\\.secretKey\\b"
+      ]
+    },
+    {
+      "repo": "signerd",
+      "repoClass": "own",
+      "origin": "https://github.com/auroraxo/signerd.git",
+      "upstream": null,
+      "file": "test/daemon.test.js",
+      "patterns": [
+        "\\.secretKey\\b"
+      ]
+    },
+    {
+      "repo": "signerd",
+      "repoClass": "own",
+      "origin": "https://github.com/auroraxo/signerd.git",
+      "upstream": null,
+      "file": "test/keystore.test.js",
+      "patterns": [
+        "\\.secretKey\\b"
+      ]
+    },
+    {
+      "repo": "signerd",
+      "repoClass": "own",
+      "origin": "https://github.com/auroraxo/signerd.git",
+      "upstream": null,
+      "file": "test/signer.test.js",
+      "patterns": [
+        "\\.secretKey\\b"
+      ]
+    },
+    {
+      "repo": "signerd",
+      "repoClass": "own",
+      "origin": "https://github.com/auroraxo/signerd.git",
+      "upstream": null,
+      "file": "test/user-zero.test.js",
+      "patterns": [
+        "Keypair\\.fromSecretKey\\s*\\(",
+        "\\.secretKey\\b"
+      ]
+    },
+    {
+      "repo": "signerd",
+      "repoClass": "own",
+      "origin": "https://github.com/auroraxo/signerd.git",
+      "upstream": null,
+      "file": "tools/key-load-sites.mjs",
+      "patterns": [
+        "SOLANA_PRIVATE_KEY",
+        "\\.secretKey\\b"
+      ]
+    },
+    {
+      "repo": "wormhole-sdk-ts-verify",
+      "repoClass": "third-party",
+      "origin": "https://github.com/wormhole-foundation/wormhole-sdk-ts.git",
+      "upstream": null,
+      "file": "__tests__/tilt/helpers/consts.ts",
+      "patterns": [
+        "SOLANA_PRIVATE_KEY"
+      ]
+    },
+    {
+      "repo": "wormhole-sdk-ts-verify",
+      "repoClass": "third-party",
+      "origin": "https://github.com/wormhole-foundation/wormhole-sdk-ts.git",
+      "upstream": null,
+      "file": "__tests__/tilt/helpers/helpers.ts",
+      "patterns": [
+        "SOLANA_PRIVATE_KEY"
+      ]
+    },
+    {
+      "repo": "wormhole-sdk-ts-verify",
+      "repoClass": "third-party",
+      "origin": "https://github.com/wormhole-foundation/wormhole-sdk-ts.git",
+      "upstream": null,
+      "file": "platforms/solana/src/signer.ts",
+      "patterns": [
+        "Keypair\\.fromSecretKey\\s*\\("
+      ]
+    },
+    {
+      "repo": "xorca",
+      "repoClass": "third-party",
+      "origin": "https://github.com/orca-so/xorca.git",
+      "upstream": null,
+      "file": "ts-scripts/generate-keypair.ts",
+      "patterns": [
+        "Keypair\\.fromSecretKey\\s*\\(",
+        "Keypair\\.fromSeed\\s*\\(",
+        "\\.secretKey\\b"
+      ]
+    },
+    {
+      "repo": "xorca",
+      "repoClass": "third-party",
+      "origin": "https://github.com/orca-so/xorca.git",
+      "upstream": null,
+      "file": "ts-scripts/initialize.ts",
+      "patterns": [
+        "Keypair\\.fromSecretKey\\s*\\("
+      ]
+    },
+    {
+      "repo": "xorca",
+      "repoClass": "third-party",
+      "origin": "https://github.com/orca-so/xorca.git",
+      "upstream": null,
+      "file": "ts-scripts/set.ts",
+      "patterns": [
+        "Keypair\\.fromSecretKey\\s*\\("
+      ]
+    },
+    {
+      "repo": "xorca",
+      "repoClass": "third-party",
+      "origin": "https://github.com/orca-so/xorca.git",
+      "upstream": null,
+      "file": "ts-scripts/stake.ts",
+      "patterns": [
+        "Keypair\\.fromSecretKey\\s*\\("
+      ]
+    },
+    {
+      "repo": "xorca",
+      "repoClass": "third-party",
+      "origin": "https://github.com/orca-so/xorca.git",
+      "upstream": null,
+      "file": "ts-scripts/transfer-orca-to-vault.ts",
+      "patterns": [
+        "Keypair\\.fromSecretKey\\s*\\("
+      ]
+    },
+    {
+      "repo": "xorca",
+      "repoClass": "third-party",
+      "origin": "https://github.com/orca-so/xorca.git",
+      "upstream": null,
+      "file": "ts-scripts/transfer-orca.ts",
+      "patterns": [
+        "Keypair\\.fromSecretKey\\s*\\("
+      ]
+    },
+    {
+      "repo": "xorca",
+      "repoClass": "third-party",
+      "origin": "https://github.com/orca-so/xorca.git",
+      "upstream": null,
+      "file": "ts-scripts/unstake.ts",
+      "patterns": [
+        "Keypair\\.fromSecretKey\\s*\\("
+      ]
+    },
+    {
+      "repo": "xorca",
+      "repoClass": "third-party",
+      "origin": "https://github.com/orca-so/xorca.git",
+      "upstream": null,
+      "file": "ts-scripts/update-xorca-mint-authority.ts",
+      "patterns": [
+        "Keypair\\.fromSecretKey\\s*\\("
+      ]
+    },
+    {
+      "repo": "xorca",
+      "repoClass": "third-party",
+      "origin": "https://github.com/orca-so/xorca.git",
+      "upstream": null,
+      "file": "ts-scripts/withdraw.ts",
+      "patterns": [
+        "Keypair\\.fromSecretKey\\s*\\("
+      ]
+    }
+  ]
+}
