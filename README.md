@@ -43,6 +43,12 @@ A later, explicitly labeled `--simulate` mode may add RPC-backed checking for th
 ```bash
 # one-time setup: an encrypted keystore and a grant file
 signerd keygen --keystore ~/.config/signerd/ops.key --passphrase-file ~/.config/signerd/pass
+
+# OR adopt a key you already hold — the migration path. Reads a solana-keygen
+# id.json, a base58 secret, or 64 raw bytes; encrypts it; leaves the source alone.
+signerd import --keystore ~/.config/signerd/ops.key --from ~/.config/solana/id.json \
+             --passphrase-file ~/.config/signerd/pass
+
 signerd run --keystore ~/.config/signerd/ops.key --passphrase-file ~/.config/signerd/pass \
             --grants ~/.config/signerd/grants.json \
             --ledger ~/.local/share/signerd/journal.jsonl \
@@ -57,11 +63,37 @@ const signer = await Signerd.connect({ grant: "ops-24h" });
 const signature = await signer.sign(transaction);  // or: { refused: "alt" }
 ```
 
+`examples/user-zero-client.js` is the same thing in executable form: it builds an unsigned
+legacy transfer from a fee payer's **public** key, sends it, and writes back the signed wire.
+It never opens a key file — see "User zero, measured" below.
+
 The planned core is a Rust daemon, a TypeScript SDK, and a built-in MCP server. `--dry` runs the same scope path without producing a real signature.
+
+### User zero, measured
+
+The claim "the client holds no key" is an empirical statement about a running process, not
+about source code, so `test/user-zero.test.js` measures it. The test migrates a plaintext
+key file into a keystore, starts a daemon, runs the example client as a **separate process**
+that then stays alive, and scans that process's whole address space (`/proc/<pid>/mem`) for
+the 64-byte secret:
+
+| process | copies of the secret key found |
+|---|---|
+| control: a client that does `Keypair.fromSecretKey` the old way | **1+** (positive control) |
+| the daemon | **3** — this is where the key is supposed to be |
+| `examples/user-zero-client.js`, which just got a signature | **0** |
+
+The control is what makes the zero mean something: if the scanner could not find a key that
+is demonstrably present, the subject's zero would be an artifact of the instrument. The test
+also refuses to report absence unless every writable mapping was actually read — an unread
+heap cannot be searched, and silence there is not evidence. The signature the client received
+is verified independently under Node's OpenSSL ed25519 against the public key.
+
 
 ### What the v0 daemon does today
 
-- **`src/keystore.js`** — encrypted keystore: scrypt (N=16384) + AES-256-GCM, file mode 0600. A keystore file with any group/other permission bit is refused even though decryption would succeed, as is a keystore **directory** that is group- or world-writable or not owned by the current user; a wrong passphrase and a tampered ciphertext are indistinguishable (`keystore_auth_failed`).
+- **`src/keystore.js`** — encrypted keystore: scrypt (N=16384) + AES-256-GCM, file mode 0600. A keystore file with any group/other permission bit is refused even though decryption would succeed, as is a keystore **directory** that is group- or world-writable or not owned by the current user; a wrong passphrase and a tampered ciphertext are indistinguishable (`keystore_auth_failed`). `importKeystore` adopts an **existing** plaintext secret (the migration path): it accepts a solana-keygen JSON byte array, a base58 secret, or 64 raw bytes, refuses anything it cannot decode unambiguously, validates the key before writing anything, and never deletes or rewrites the source file.
+- **`src/client.js`** — the client half: builds an unsigned legacy transfer from public values only and asks the daemon to sign. A refusal is returned as data, not thrown, so a caller learns *why* rather than working around it.
 - **`src/grantfile.js`** — one strict grant file. Unknown fields are refused (a typo in a security file is a mistake, not an extra rule), grant names may not reach `Object.prototype`, and the loaded grants live on a null prototype.
 - **`src/daemon.js`** — a Unix socket (mode 0600) speaking newline-framed JSON. A request carries a grant **name** and base64 wire bytes; the response carries a signature or a machine-readable refusal. The socket is a capability: only the owner can talk to it. The daemon holds an atomic single-writer lock on the journal for as long as it serves, and releases it only after the server is closed and its connections are drained.
 - **`src/signer.js`** — the signing path. Order is deliberate: grant/key mismatch is refused *before* any ledger write, the ledger fsyncs *before* signing, and the returned bytes are checked to differ from the approved wire only inside the 64-byte signature slot and to verify under Node's OpenSSL ed25519 implementation. If signing or verification fails after approval, the budget is burned and **nothing** is signed — the conservative direction.
@@ -136,4 +168,4 @@ A caveat on the green suite: it was green *while* these defects existed, so "tes
 
 1. A second independent adversarial review of the daemon's signing path (`src/signer.js`, `src/daemon.js`, `src/keystore.js`, `src/grantfile.js`) before pointing it at a key with funds. The policy/ledger path had one, and the daemon hardening diff had one on 2026-10-27 whose findings are now fixed — but the signing path as a whole has not been reviewed end to end.
 2. Expand supported instructions only when the fee and authority effects can be bounded; refuse anything undecidable, rather than widening policy to pass tests.
-3. Migrate own key-loading sites that fit the reviewed envelope as user zero; then run the 30-day restart/over-limit/refusal test. No outside users yet.
+3. Migrate own key-loading sites that fit the reviewed envelope as user zero; then run the 30-day restart/over-limit/refusal test. **Step one is unblocked** — `signerd import` now adopts an existing key, and the client-side half (no key in the client process) is built and measured above. What is still open is real migration: none of the measured key-load sites currently runs a plain legacy System transfer, so each one is either an envelope question or an adoption decision, not a tooling gap. No outside users yet.

@@ -19,6 +19,18 @@ function tmpDir() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'signerd-daemon-'));
 }
 
+/**
+ * An ISO timestamp safely in the future relative to when the test runs.
+ *
+ * A grant expiry pinned to a literal date turns every test that depends on
+ * the grant being valid into a time bomb: the suite passes on the day it was
+ * written and then fails, one expiry later, for reasons that have nothing to
+ * do with the code under test. The expiry has to move with the clock.
+ */
+function futureIso(hours = 24) {
+  return new Date(Math.floor(Date.now() / 1000 + hours * 3600) * 1000).toISOString();
+}
+
 async function fixture({ grants: grantNames = ['ops'] } = {}) {
   const dir = tmpDir();
   const recipient = Keypair.generate().publicKey;
@@ -35,7 +47,7 @@ async function fixture({ grants: grantNames = ['ops'] } = {}) {
       signer: keypair.publicKey.toBase58(),
       destination: recipient.toBase58(),
       maxLamports: '42',
-      expiresAt: '2026-10-28T10:00:00Z',
+      expiresAt: futureIso(),
       windowMaxLamports: '100000',
       windowSeconds: '3600',
     };
@@ -174,7 +186,7 @@ test('the daemon refuses to start when a grant does not match its key', async ()
       ops: {
         signer: Keypair.generate().publicKey.toBase58(),
         destination: Keypair.generate().publicKey.toBase58(),
-        maxLamports: '42', expiresAt: '2026-10-28T10:00:00Z',
+        maxLamports: '42', expiresAt: futureIso(),
         windowMaxLamports: '100000', windowSeconds: '3600',
       },
     },
@@ -199,7 +211,7 @@ test('a wrong passphrase stops the daemon from starting', async () => {
       ops: {
         signer: created.publicKey,
         destination: Keypair.generate().publicKey.toBase58(),
-        maxLamports: '42', expiresAt: '2026-10-28T10:00:00Z',
+        maxLamports: '42', expiresAt: futureIso(),
         windowMaxLamports: '100000', windowSeconds: '3600',
       },
     },
@@ -246,7 +258,7 @@ test('a second daemon on the same journal refuses to start (single writer)', asy
       ops: {
         signer: created.publicKey,
         destination: recipient.toBase58(),
-        maxLamports: '42', expiresAt: '2026-10-28T10:00:00Z',
+        maxLamports: '42', expiresAt: futureIso(),
         windowMaxLamports: '100000', windowSeconds: '3600',
       },
     },
@@ -355,7 +367,7 @@ async function pairSetup({ grants: grantNames = ['ops'] } = {}) {
   for (const name of grantNames) {
     grants[name] = {
       signer: created.publicKey, destination: recipient.toBase58(),
-      maxLamports: '42', expiresAt: '2026-10-28T10:00:00Z',
+      maxLamports: '42', expiresAt: futureIso(),
       windowMaxLamports: '100000', windowSeconds: '3600',
     };
   }

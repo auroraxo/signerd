@@ -8,6 +8,8 @@ const USAGE = `signerd — scoped signing daemon for Solana (early prototype)
 
 Usage:
   signerd keygen --keystore <file>            create an encrypted keystore
+  signerd import --keystore <file> --from <secret-file>
+            encrypt an EXISTING plaintext key (id.json / base58 / raw 64 bytes)
   signerd run --keystore <file> --passphrase-file <file>
             --grants <file> --ledger <file> --socket <file>
   signerd sign --socket <file> --grant <name> --tx <wire-file> [--out <file>]
@@ -65,6 +67,16 @@ async function main() {
     const file = requireArg(args, 'keystore');
     const passphrase = readPassphrase(args);
     const out = createKeystore({ file, passphrase, overwrite: args.overwrite === true });
+    process.stdout.write(JSON.stringify(out) + '\n');
+    return;
+  }
+
+  if (command === 'import') {
+    const { importKeystore } = require('../src/keystore');
+    const file = requireArg(args, 'keystore');
+    const from = requireArg(args, 'from');
+    const passphrase = readPassphrase(args);
+    const out = importKeystore({ file, passphrase, from, overwrite: args.overwrite === true });
     process.stdout.write(JSON.stringify(out) + '\n');
     return;
   }
