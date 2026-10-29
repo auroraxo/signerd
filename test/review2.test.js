@@ -1,5 +1,9 @@
 'use strict';
 
+// Grant files and journals must not be group/other writable (R3-1); make the
+// test writers owner-only instead of relying on the host umask.
+process.umask(0o077);
+
 // Regression tests for the 29.10.2026 second adversarial review of the
 // signing path (review #2, findings R2-1 .. R2-6). The suite was green before
 // those findings existed: every test below fails against the code as reviewed
@@ -275,7 +279,7 @@ test('R2-2: the same transaction message is approved once, whatever the signatur
 
     // The journal must carry the message identity, not only the wire bytes.
     const line = JSON.parse(fs.readFileSync(f.ledgerFile, 'utf8').trim().split('\n')[0]);
-    assert.equal(line.v, 2, 'the journal must be written in format 2');
+    assert.equal(line.v, 3, 'the journal must be written in the current format (3)');
     assert.match(line.m, /^[0-9a-f]{64}$/);
     assert.equal(line.w, require('node:crypto').createHash('sha256').update(a).digest('hex'));
     assert.equal(line.m, require('node:crypto').createHash('sha256').update(a.subarray(65)).digest('hex'));
@@ -395,11 +399,14 @@ test('R2-3b: the grant file is refused when its path can be rewritten by a stran
     'a grant file in a world-writable directory must be refused');
   fs.chmodSync(dir, 0o700);
 
-  // A writable grant file is repaired (we own it) instead of adopted:
-  // if the repair cannot happen it must fail closed.
+  // R3-1: a writable grant file is REFUSED, never tightened - chmod cannot
+  // revoke a descriptor a stranger already holds, nor undo a forged edit.
   fs.chmodSync(file, 0o666);
+  assert.throws(() => loadGrantFile(file), /grant_file_mode/,
+    'a group/other-writable grant file must be refused, not adopted');
+  assert.equal(fs.statSync(file).mode & 0o777, 0o666, 'the refusal must not silently chmod it');
+  fs.chmodSync(file, 0o640);
   assert.doesNotThrow(() => loadGrantFile(file));
-  assert.equal(fs.statSync(file).mode & 0o022, 0, 'a writable grant file must be tightened');
 
   // A symlink at that path can be redirected between two requests.
   const link = path.join(dir, 'grants-link.json');

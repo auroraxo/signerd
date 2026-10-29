@@ -14,6 +14,9 @@ Usage:
             --grants <file> --ledger <file> --socket <file>
   signerd sign --socket <file> --grant <name> --tx <wire-file> [--out <file>]
   signerd status --grants <file> --ledger <file>
+  signerd migrate --ledger <file> (--wires <dir> | --discard-legacy)
+            upgrade a format-1 journal; --wires restores message-level replay
+            protection, --discard-legacy explicitly accepts losing it
 
 Notes:
   --passphrase-file must be mode 0600 and is read once at startup.
@@ -118,8 +121,19 @@ async function main() {
     const loaded = loadGrantFile(requireArg(args, 'grants'));
     const ledger = new Ledger({ file: requireArg(args, 'ledger') });
     process.stdout.write(JSON.stringify({
-      ok: true, grants: loaded.names, ledger: ledger.snapshot(),
+      ok: true, grants: loaded.names, ledger: ledger.snapshot(), legacyState: ledger.legacyState(),
     }) + '\n');
+    return;
+  }
+
+  if (command === 'migrate') {
+    const { migrateJournal } = require('../src/migrate');
+    const result = migrateJournal({
+      file: requireArg(args, 'ledger'),
+      wiresDir: typeof args.wires === 'string' ? args.wires : null,
+      discardLegacy: args['discard-legacy'] === true,
+    });
+    process.stdout.write(JSON.stringify({ ok: true, ...result }) + '\n');
     return;
   }
 

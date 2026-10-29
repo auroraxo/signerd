@@ -102,16 +102,14 @@ function loadGrantFile(file) {
         fileStat.uid !== process.getuid() && fileStat.uid !== 0) {
       throw fail('grant_file_owner', String(fileStat.uid));
     }
-    // Writable by anybody else means the grants - and with them the set of
-    // transactions the daemon will sign - can be edited between two requests.
-    // Being readable is harmless (the file holds no secret), so a file we own
-    // is TIGHTENED rather than refused; if it cannot be tightened, refuse.
+    // R3-1: writable by anybody else means the grants - and with them the set
+    // of transactions the daemon will sign - may already have been forged, or
+    // a stranger may still hold an open write descriptor (chmod does not
+    // revoke those). Tightening the mode cannot restore content provenance, so
+    // the file is REFUSED outright, exactly like the journal. Readable is
+    // harmless (no secret in this file).
     const mode = fileStat.mode & 0o777;
-    if ((mode & 0o022) !== 0) {
-      try { fs.chmodSync(resolved, mode & ~0o022); } catch { /* verified below */ }
-      const after = fs.lstatSync(resolved).mode & 0o777;
-      if ((after & 0o022) !== 0) throw fail('grant_file_mode', after.toString(8));
-    }
+    if ((mode & 0o022) !== 0) throw fail('grant_file_mode', mode.toString(8));
   }
   let raw;
   try {

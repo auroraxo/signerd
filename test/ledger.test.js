@@ -1,5 +1,9 @@
 'use strict';
 
+// Grant files and journals must not be group/other writable (R3-1); make the
+// test writers owner-only instead of relying on the host umask.
+process.umask(0o077);
+
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -382,20 +386,20 @@ test('clock regressions cannot shrink the window spend', () => {
 // Fixture builder: the ledger stores a per-record hash chain, so handcrafted
 // journal records must carry a valid `h` or the load fails closed.
 function chained(record, prevHash) {
-  const body = [record.s, record.t, record.w, record.a, record.f, record.k].join('\u0000');
+  const full = { v: 3, ...record, m: record.w.replace(/./g, 'c').slice(0, 63) + record.s };
+  const body = [full.v, full.s, full.t, full.w, full.m, full.a, full.f, full.k].join('\u0000');
   const h = require('node:crypto').createHash('sha256')
     .update(prevHash + '\u0000' + body).digest('hex');
-  return { ...record, h };
+  return { ...full, h };
 }
 const GENESIS = '0'.repeat(64);
 
 test('review #5: an invalid-UTF-8 journal tail never destroys a durable record', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'signerd-u8-'));
   const file = path.join(dir, 'journal.jsonl');
-  const r1 = JSON.stringify(chained({ s: 1, t: 1000, w: 'a'.repeat(64), a: '42', f: '5000', k: 'k1' }, GENESIS)) + '\n';
-  const r2 = JSON.stringify(chained({ s: 2, t: 2000, w: 'b'.repeat(64), a: '43', f: '5000', k: 'k1' },
-    require('node:crypto').createHash('sha256').update(GENESIS + '\u0000' +
-      [1, 1000, 'a'.repeat(64), '42', '5000', 'k1'].join('\u0000')).digest('hex'))) + '\n';
+  const rec1 = chained({ s: 1, t: 1000, w: 'a'.repeat(64), a: '42', f: '5000', k: 'k1' }, GENESIS);
+  const r1 = JSON.stringify(rec1) + '\n';
+  const r2 = JSON.stringify(chained({ s: 2, t: 2000, w: 'b'.repeat(64), a: '43', f: '5000', k: 'k1' }, rec1.h)) + '\n';
   const valid = Buffer.from(r1 + r2, 'utf8');
   // 1 invalid byte appended (a torn tail from binary garbage): decoding turns
   // it into a 3-byte U+FFFD, so measuring the tail AFTER decoding truncates

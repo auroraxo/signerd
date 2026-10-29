@@ -121,13 +121,34 @@ const GENESIS_HASH = '0'.repeat(64);
 // The chain body depends on the format, so a record cannot be silently
 // upgraded or downgraded: dropping or adding `v` changes the body and breaks
 // the chain hash, which the loader reports as ledger_tampered.
-const JOURNAL_FORMAT = 2;
+// Journal format 3 (2026-10-29, the migration release) = format 2 + an
+// explicit "message identity unknown" marker:
+//   v = 3
+//   m = sha256 of the MESSAGE, or null when the record's message identity is
+//       UNKNOWN. null is only possible for a migrated format-1 row whose
+//       original wire the operator explicitly discarded. A null `m` is never
+//       added to the message replay set, so it can never collide with a real
+//       message hash.
+// Journal format 2 (2026-10-29) is still accepted: `v` = 2 and `m` is always a
+// real message hash.
+//
+// The chain body depends on the format, so a record cannot be silently
+// upgraded or downgraded: dropping or adding `v` changes the body and breaks
+// the chain hash, which the loader reports as ledger_tampered.
+const JOURNAL_FORMAT = 3;
+const FORMAT_V2_FIELDS = ['v', 's', 't', 'w', 'm', 'a', 'f', 'k', 'h'].sort();
+const FORMAT_1_FIELDS = ['s', 't', 'w', 'a', 'f', 'k', 'h'].sort();
 
 function recordBody(record) {
-  if (record.v === JOURNAL_FORMAT) {
-    return [record.v, record.s, record.t, record.w, record.m, record.a, record.f, record.k].join('\u0000');
+  // Format 1 (pre-2026-10-29): no `v`, no `m`.
+  if (record.v === undefined) {
+    return [record.s, record.t, record.w, record.a, record.f, record.k].join('\u0000');
   }
-  return [record.s, record.t, record.w, record.a, record.f, record.k].join('\u0000');
+  // Formats 2 and 3: `m` is a hex hash, or null in format 3 ("unknown").
+  // A hex string can never be the literal "null", so the body stays
+  // unambiguous in both cases.
+  const m = record.m === null ? 'null' : record.m;
+  return [record.v, record.s, record.t, record.w, m, record.a, record.f, record.k].join('\u0000');
 }
 
 function chainHash(prevHash, record) {
@@ -135,8 +156,7 @@ function chainHash(prevHash, record) {
     .update(prevHash + '\u0000' + recordBody(record)).digest('hex');
 }
 
-const FORMAT_2_FIELDS = ['v', 's', 't', 'w', 'm', 'a', 'f', 'k', 'h'].sort();
-const FORMAT_1_FIELDS = ['s', 't', 'w', 'a', 'f', 'k', 'h'].sort();
+const FORMAT_2_FIELDS = FORMAT_V2_FIELDS;
 
 function ownFields(record) {
   return Object.getOwnPropertyNames(record).sort();
@@ -156,17 +176,55 @@ function validRecord(record, previousSeq, seenWires, seenMessages) {
   if (typeof k !== 'string' || k.length === 0) return false;
   if (parseU64(a) === null || parseU64(f) === null) return false;
   const fields = ownFields(record);
-  if (record.v === JOURNAL_FORMAT) {
+  if (record.v === 2 || record.v === 3) {
     if (!sameFields(fields, FORMAT_2_FIELDS)) return false;
-    if (typeof record.m !== 'string' || !/^[0-9a-f]{64}$/.test(record.m)) return false;
+    const hexM = typeof record.m === 'string' && /^[0-9a-f]{64}$/.test(record.m);
+    // null ("identity unknown") exists only in format 3.
+    if (!hexM && !(record.v === 3 && record.m === null)) return false;
     if (seenWires.has(w)) return false;
-    if (seenMessages.has(record.m)) return false;
+    if (hexM && seenMessages.has(record.m)) return false;
     return true;
   }
   // A format-1 record: the wire hash is the only identity it carries.
   if (!sameFields(fields, FORMAT_1_FIELDS)) return false;
   if (seenWires.has(w)) return false;
   return true;
+}
+
+/**
+ * Parse and verify journal bytes (structure + hash chain). Pure: no repair, no
+ * policy about formats. Shared by the loader and the migration tool so both
+ * apply identical rules. Throws ledger_corrupt / ledger_tampered.
+ */
+function parseJournal(raw) {
+  // Locate the torn tail in BYTES, never through a decoded string (a decoded
+  // invalid byte becomes 3 bytes of U+FFFD and the repair would cut into the
+  // last durable record).
+  const lastNewline = raw.lastIndexOf(0x0a);
+  const validBytes = lastNewline === -1 ? 0 : lastNewline + 1;
+  const tailTorn = validBytes !== raw.length;
+  const segments = raw.subarray(0, validBytes).toString('utf8').split('\n');
+  segments.pop(); // padding after the final newline, never a record
+  const records = [];
+  const fingerprints = new Set();
+  const messageHashes = new Set();
+  let seq = 0;
+  let lastHash = GENESIS_HASH;
+  let legacyRecords = 0;
+  for (const line of segments) {
+    let record;
+    try { record = JSON.parse(line); } catch { throw new Error('ledger_corrupt'); }
+    if (!validRecord(record, seq, fingerprints, messageHashes)) throw new Error('ledger_corrupt');
+    if (chainHash(lastHash, record) !== record.h) throw new Error('ledger_tampered');
+    records.push(record);
+    fingerprints.add(record.w);
+    // A null `m` (format 3, identity unknown) never enters the replay set.
+    if (typeof record.m === 'string') messageHashes.add(record.m);
+    if (record.v === undefined) legacyRecords += 1;
+    seq = record.s;
+    lastHash = record.h;
+  }
+  return { records, validBytes, tailTorn, legacyRecords, fingerprints, messageHashes, seq, lastHash };
 }
 
 /**
@@ -297,39 +355,24 @@ class Ledger {
       if (err.code === 'ENOENT') return;
       throw new Error('ledger_unreadable');
     }
-    // Locate the torn tail in BYTES, never through a decoded string. Decoding
-    // first would turn an invalid byte into U+FFFD (3 bytes) while the raw tail
-    // was 1 byte, so the computed offset would be short and the repair would
-    // truncate INTO the last durable record and silently drop an approval.
-    const lastNewline = raw.lastIndexOf(0x0a);
-    const validBytes = lastNewline === -1 ? 0 : lastNewline + 1;
-    const tailTorn = validBytes !== raw.length;
-    const text = raw.subarray(0, validBytes).toString('utf8');
-    // validBytes always ends at a newline (or is 0), so the split's final
-    // empty element is padding and never a record.
-    const segments = text.split('\n');
-    segments.pop();
-    for (const line of segments) {
-      let record;
-      try { record = JSON.parse(line); } catch { throw new Error('ledger_corrupt'); }
-      if (!validRecord(record, this.seq, this.fingerprints, this.messageHashes)) throw new Error('ledger_corrupt');
-      // Chain check: a record whose fields were edited in place (same size,
-      // same length) no longer hashes to its stored h -> the file was altered
-      // after it was written. Distinct from structural corruption so the
-      // operator can tell tampering from a bad disk.
-      if (chainHash(this.lastHash, record) !== record.h) throw new Error('ledger_tampered');
-      this.records.push(record);
-      // `w` is the WIRE hash in both formats; `m` is the message hash in
-      // format 2. A format-1 record (written before 2026-10-29) carries only
-      // the wire hash, so its message identity is simply unknown - it keeps
-      // wire-level replay protection and can add no message-level one.
-      this.fingerprints.add(record.w);
-      if (record.v === JOURNAL_FORMAT) this.messageHashes.add(record.m);
-      this.seq = record.s;
-      this.lastHash = record.h;
+    const parsed = parseJournal(raw);
+    // FAIL CLOSED on format 1 (R3-2): those records carry no message identity,
+    // so loading them would silently break "one message approved at most once,
+    // ever" across the upgrade (same message + different signature slot was
+    // re-approved). The operator must migrate explicitly.
+    if (parsed.legacyRecords > 0) {
+      const err = new Error(`ledger_legacy_format: ${parsed.legacyRecords} record(s) carry no message identity; ` +
+        `run "signerd migrate --ledger ${this.file} --wires <dir>" (or --discard-legacy to accept the loss explicitly)`);
+      err.code = 'ledger_legacy_format';
+      throw err;
     }
-    this.#setDurable(validBytes, raw.subarray(0, validBytes));
-    if (tailTorn) this.#repair(validBytes);
+    this.records = parsed.records;
+    this.fingerprints = parsed.fingerprints;
+    this.messageHashes = parsed.messageHashes;
+    this.seq = parsed.seq;
+    this.lastHash = parsed.lastHash;
+    this.#setDurable(parsed.validBytes, raw.subarray(0, parsed.validBytes));
+    if (parsed.tailTorn) this.#repair(parsed.validBytes);
   }
 
   #repair(validBytes) {
@@ -533,6 +576,13 @@ class Ledger {
   snapshot() {
     return { records: this.records.length, seq: this.seq, fingerprints: this.fingerprints.size };
   }
+
+  /** Records whose message identity is unknown (operator-accepted migration gap). */
+  legacyState() {
+    let unknown = 0;
+    for (const r of this.records) if (r.m === null) unknown += 1;
+    return { unknownMessageRecords: unknown };
+  }
 }
 
 /**
@@ -547,4 +597,7 @@ function gate(wire, grant, now = new Date(), ledger) {
   return ledger.approve({ wire, amountLamports: verdict.amountLamports, grant, now });
 }
 
-module.exports = { Ledger, gate, BASE_FEE_LAMPORTS };
+module.exports = {
+  Ledger, gate, BASE_FEE_LAMPORTS,
+  parseJournal, messageImage, assertJournalPath, chainHash, JOURNAL_FORMAT, GENESIS_HASH,
+};
