@@ -38,12 +38,51 @@ function indexWires(dir) {
   return byHash;
 }
 
+// Claim the daemon's own journal lock (atomic link, never overwrites) for the
+// whole migration, so a daemon starting mid-rewrite is refused instead of
+// racing the rename.
+function lockJournal(file) {
+  const lockFile = `${file}.lock`;
+  const token = crypto.randomBytes(16).toString('hex');
+  const claim = `${lockFile}.${token}`;
+  const fd = fs.openSync(claim, 'wx', 0o600);
+  try {
+    fs.writeSync(fd, JSON.stringify({ pid: process.pid, token, startedAt: Date.now() }));
+    fs.fsyncSync(fd);
+  } finally { fs.closeSync(fd); }
+  try {
+    fs.linkSync(claim, lockFile);
+  } catch (err) {
+    throw fail('ledger_locked', err.code === 'EEXIST' ? 'stop the daemon first' : err.code);
+  } finally {
+    fs.unlinkSync(claim);
+  }
+  return () => {
+    try {
+      const owner = JSON.parse(fs.readFileSync(lockFile, 'utf8'));
+      if (owner && owner.token === token) fs.unlinkSync(lockFile);
+    } catch { /* gone */ }
+  };
+}
+
+function writeExclusive(file, bytes) {
+  const fd = fs.openSync(file, 'wx', 0o600); // never overwrites, never follows a symlink
+  try { fs.writeSync(fd, bytes); fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
+}
+
 function migrateJournal({ file, wiresDir = null, discardLegacy = false }) {
   if (typeof file !== 'string' || file.length === 0) throw fail('ledger_file_required');
   const resolved = path.resolve(file);
-  // Never rewrite a journal under a live daemon (even a stale lock blocks).
-  if (fs.existsSync(`${resolved}.lock`)) throw fail('ledger_locked', 'remove or stop the daemon first');
   assertJournalPath(resolved);
+  const release = lockJournal(resolved);
+  try {
+    return migrateLocked(resolved, wiresDir, discardLegacy);
+  } finally {
+    release();
+  }
+}
+
+function migrateLocked(resolved, wiresDir, discardLegacy) {
   let raw;
   try { raw = fs.readFileSync(resolved); } catch (err) {
     throw fail(err.code === 'ENOENT' ? 'ledger_missing' : 'ledger_unreadable');
@@ -85,13 +124,20 @@ function migrateJournal({ file, wiresDir = null, discardLegacy = false }) {
     throw fail('migration_self_check_failed');
   }
 
-  const backup = `${resolved}.pre-migrate.bak`;
-  const tmp = `${resolved}.migrate.tmp`;
-  fs.writeFileSync(backup, raw, { mode: 0o600 });
-  fs.chmodSync(backup, 0o600);
-  const fd = fs.openSync(tmp, 'w', 0o600);
-  try { fs.writeSync(fd, out); fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
-  fs.renameSync(tmp, resolved);
+  const suffix = crypto.randomBytes(8).toString('hex');
+  const backup = `${resolved}.pre-migrate.${suffix}.bak`;
+  const tmp = `${resolved}.migrate.${suffix}.tmp`;
+  // Original is made durable BEFORE it is replaced; exclusive creates mean an
+  // earlier backup is never clobbered. The rename is the commit point.
+  writeExclusive(backup, raw);
+  writeExclusive(tmp, out);
+  try {
+    if (!fs.readFileSync(resolved).equals(raw)) throw fail('ledger_changed');
+    fs.renameSync(tmp, resolved);
+  } catch (err) {
+    try { fs.unlinkSync(tmp); } catch { /* already moved */ }
+    throw err;
+  }
   const dfd = fs.openSync(path.dirname(resolved), 'r');
   try { fs.fsyncSync(dfd); } finally { fs.closeSync(dfd); }
 

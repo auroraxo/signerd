@@ -57,7 +57,7 @@ test('R3-2: migration with the original wires restores message-level replay acro
   const result = migrateJournal({ file, wiresDir: wires });
   assert.equal(result.migrated, true);
   assert.equal(result.legacyRecords, 2);
-  assert.ok(fs.existsSync(`${file}.pre-migrate.bak`));
+  assert.equal(fs.readdirSync(path.dirname(file)).filter((n) => n.includes('.pre-migrate.')).length, 1);
 
   const ledger = new Ledger({ file });
   assert.equal(ledger.snapshot().records, 2);
@@ -77,7 +77,7 @@ test('R3-2: the migration refuses and writes nothing when a legacy wire is missi
   assert.throws(() => migrateJournal({ file, wiresDir: wires }), /legacy_wire_missing/);
   assert.throws(() => migrateJournal({ file }), /legacy_wire_required/);
   assert.ok(fs.readFileSync(file).equals(before), 'journal must be untouched');
-  assert.equal(fs.existsSync(`${file}.pre-migrate.bak`), false);
+  assert.equal(fs.readdirSync(path.dirname(file)).filter((n) => n.includes('.pre-migrate.')).length, 0);
 });
 
 test('R3-2: --discard-legacy keeps window spend but reports the accepted message-identity gap', () => {
@@ -101,8 +101,17 @@ test('R3-2: migration is idempotent and a daemon lock blocks it', () => {
   fs.writeFileSync(path.join(wires, 'b.bin'), wire2);
   fs.writeFileSync(`${file}.lock`, '{}');
   assert.throws(() => migrateJournal({ file, wiresDir: wires }), /ledger_locked/);
+  assert.equal(fs.readFileSync(`${file}.lock`, 'utf8'), '{}', 'a foreign lock must survive');
   fs.unlinkSync(`${file}.lock`);
   assert.equal(migrateJournal({ file, wiresDir: wires }).migrated, true);
   assert.equal(migrateJournal({ file, wiresDir: wires }).migrated, false);
   assert.equal(sha(fs.readFileSync(path.join(FIX, 'format1-wire1.bin'))), sha(wire1));
+});
+
+test('R3-2: the migration releases its lock and a second migration never clobbers the first backup', () => {
+  const { file, wires } = setup();
+  fs.writeFileSync(path.join(wires, 'a.bin'), wire1);
+  fs.writeFileSync(path.join(wires, 'b.bin'), wire2);
+  migrateJournal({ file, wiresDir: wires });
+  assert.equal(fs.existsSync(`${file}.lock`), false);
 });
