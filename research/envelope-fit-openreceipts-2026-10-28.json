@@ -1,0 +1,60 @@
+{
+ "generatedAt": "2026-10-29T00:59:00.908Z",
+ "site": "/home/aurora/.openreceipts/auroraxo.key",
+ "questions": {
+  "fileFormat": {
+   "storedFormat": "PKCS8 PEM",
+   "acceptedByImport": false,
+   "verdict": "refused: secret_key_invalid",
+   "sourceUntouched": true
+  },
+  "keyMaterial": {
+   "status": "fits",
+   "seedCrossCheckedWithOpenSsl": true,
+   "importAfterConversion": {
+    "accepted": true,
+    "publicKey": "EywbUFhywbf6sNG67AbSvKcVByWdNsYTrda4R4nu7sci",
+    "matchesOpenSsl": true
+   }
+  },
+  "publishedIdentity": {
+   "pinnedFile": "/home/aurora/github_repos/openreceipts/keys/auroraxo.pub",
+   "receiptsDir": "/home/aurora/github_repos/openreceipts/receipts",
+   "pinnedPresent": true,
+   "pinnedBytes": 32,
+   "siteMatchesPinned": true,
+   "receiptsTotal": 6,
+   "receiptsVerifiedWithSiteKey": 6,
+   "receiptsVerifiedWithEmbeddedKey": 6,
+   "receiptsEmbeddedPubkeyMatchesPinned": 6,
+   "status": "all published receipts verify under the site-derived key"
+  },
+  "operation": {
+   "status": "does not fit",
+   "receiptUsed": "docrot-check-v1.json",
+   "receiptBodyBytes": 248,
+   "receiptBody": "refused: invalid_wire",
+   "embeddedSignature": "refused: invalid_wire",
+   "controlTransfer": "allowed (instrument works)"
+  }
+ },
+ "verdict": {
+  "keyType": "FITS (both Ed25519; adoptable after conversion)",
+  "fileFormat": "refused: secret_key_invalid",
+  "publishedIdentity": "all published receipts verify under the site-derived key",
+  "operation": "does not fit",
+  "fitsV0Envelope": false,
+  "reason": "Message domain, not key type: openreceipts signs canonical JSON, the v0 envelope signs a legacy System transfer wire. The key itself is adoptable after a mechanical PEM->raw conversion and is the key behind the published receipts, but without a message-grant envelope the daemon would hold a key it cannot use, so no migration is built."
+ },
+ "notes": [
+  "Card note of 27.10. said \"probably not, Ed25519 instead of Solana-Tx\": the verdict holds, the reason does not. Both are Ed25519.",
+  "import refusing the PEM as stored is correct fail-closed behaviour, not a bug: it must not guess key encodings.",
+  "Published identity (pinned key match + every receipt verified under the site-derived key) is measured here for the first time; an earlier run only cross-checked OpenSSL against web3.js, which proves derivation but not identity.",
+  "Reproduced with test/envelope-fit.test.js, which runs offline in CI against a generated key, a pinned key, and two receipts (one the site key must verify, one it must NOT)."
+ ],
+ "keyFile": {
+  "mode": "600",
+  "bytes": 119
+ },
+ "tmpCleaned": true
+}
