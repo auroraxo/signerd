@@ -117,6 +117,7 @@ function signApproved({ wire, grant, ledger, keypair, now = new Date() }) {
     feeLamports: verdict.feeLamports,
     totalLamports: verdict.totalLamports,
     wireSha256: verdict.wireSha256,
+    messageSha256: verdict.messageSha256,
     seq: verdict.seq,
     windowSpentLamports: verdict.windowSpentLamports,
     windowRemainingLamports: verdict.windowRemainingLamports,

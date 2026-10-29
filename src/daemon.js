@@ -36,8 +36,16 @@ function decodeRequest(raw) {
     throw fail('request_invalid');
   }
   if (!wireField || !('value' in wireField)) throw fail('request_invalid');
+  // The wire is a BASE64 STRING. Buffer.from(array, 'base64') silently
+  // ignores the encoding argument and converts the array, so a JSON byte
+  // array used to be accepted as if it were the documented wire format.
+  if (typeof wireField.value !== 'string' || wireField.value.length === 0) {
+    throw fail('request_invalid');
+  }
   const wire = Buffer.from(wireField.value, 'base64');
-  if (!wire.length) throw fail('request_invalid');
+  // Canonical base64 only: Node's decoder also skips characters that are not
+  // in the alphabet and accepts base64url, so the round trip is the check.
+  if (!wire.length || wire.toString('base64') !== wireField.value) throw fail('request_invalid');
   return { grantName: grantName.value, wire };
 }
 
@@ -77,25 +85,20 @@ class Daemon {
     this.keypair = keypair || null;
     this.grants = Object.create(null);
     this.grantNames = [];
+    this.grantFile = grantFile;
     this.ledger = null;
     this.server = null;
     this.started = false;
     this.stopPromise = null;
+    // True only while THIS instance created the socket file. A failed start()
+    // or a never-started stop() must never unlink a LIVE daemon's socket: the
+    // path is how clients find the real daemon, and deleting it lets any local
+    // process bind the path and impersonate it.
+    this.socketOwned = false;
     // Every accepted connection is tracked so stop() can drain them: a held
     // open connection must never outlive the journal lock.
     this.connections = new Set();
 
-    if (ledgerFile) {
-      // A journal written before this hardening may still be group readable.
-      // Creating it is done with an explicit 0600 mode, never by a process
-      // umask: a library must not mutate global state for its host process.
-      try { fs.chmodSync(ledgerFile, 0o600); } catch { /* created on first approval */ }
-    }
-
-    const loaded = loadGrantFile(grantFile);
-    this.grants = loaded.grants;
-    this.grantNames = loaded.names;
-    this.ledger = new Ledger({ file: ledgerFile });
     if (this.keypair === null) {
       if (!keystorePath) throw fail('keystore_required');
       if (!passphrase) throw fail('passphrase_required');
@@ -103,14 +106,35 @@ class Daemon {
       const { loadKeystore } = require('./keystore');
       this.keypair = loadKeystore({ file: keystorePath, passphrase });
     }
-    // A grant that this daemon's key cannot satisfy would be refused on every
-    // request; fail at startup instead.
-    for (const name of this.grantNames) {
-      const grant = this.grants[name];
-      if (grant.signer !== this.keypair.publicKey.toBase58()) {
+    this.#reloadGrants();
+    // The journal's owner/mode/directory policy is Ledger's alone: it refuses
+    // a journal another user could write and repairs one that is merely
+    // readable. A blanket chmod before this check would silently adopt a
+    // world-writable journal. Creation with an explicit 0600 - never by
+    // process umask - happens on the first append.
+    this.ledger = new Ledger({ file: ledgerFile });
+  }
+
+  /**
+   * Load (or RELOAD) the grant file and enforce that every grant speaks for
+   * this daemon's key.
+   *
+   * Reload happens on every request, not once at startup: revocation is the
+   * operator's main control and an edit that only takes effect after a restart
+   * is fail-open. If the file is unreadable or invalid at request time the
+   * daemon refuses every request until it is valid again - never the reverse.
+   */
+  #reloadGrants() {
+    const loaded = loadGrantFile(this.grantFile);
+    for (const name of loaded.names) {
+      // A grant that this daemon's key cannot satisfy would be refused on every
+      // request anyway; make it an explicit refusal at load/reload time too.
+      if (loaded.grants[name].signer !== this.keypair.publicKey.toBase58()) {
         throw fail('grant_signer_mismatch', name);
       }
     }
+    this.grants = loaded.grants;
+    this.grantNames = loaded.names;
   }
 
   /** Handle one request. Returns a plain object; never throws to the socket. */
@@ -120,6 +144,13 @@ class Daemon {
     // another daemon has since taken the lock over, this process must stop
     // answering rather than append to a journal it no longer owns.
     if (!this.#ownsJournalLock()) return { ok: false, error: 'ledger_lock_lost' };
+    // Revocation takes effect immediately: the grant file is re-read before
+    // every request instead of once at startup.
+    try {
+      this.#reloadGrants();
+    } catch (err) {
+      return { ok: false, error: err.code || 'grant_file_invalid' };
+    }
     let parsed;
     try {
       parsed = decodeRequest(request);
@@ -144,6 +175,7 @@ class Daemon {
       feeLamports: verdict.feeLamports,
       totalLamports: verdict.totalLamports,
       wireSha256: verdict.wireSha256,
+      messageSha256: verdict.messageSha256,
       seq: verdict.seq,
       windowSpentLamports: verdict.windowSpentLamports,
       windowRemainingLamports: verdict.windowRemainingLamports,
@@ -277,6 +309,34 @@ class Daemon {
     // one journal would bypass the replay set and double the window budget.
     this.#acquireJournalLock();
     try {
+      // The socket path is a CAPABILITY: whoever can bind it can impersonate
+      // the signing daemon. Its directory must therefore not be writable by
+      // anybody else - otherwise a stranger can unlink the socket file and
+      // bind their own server at the documented path, and every client that
+      // trusts the path will believe a forged approval. A sticky directory is
+      // safe (only the file's own owner may remove it).
+      const socketDir = path.dirname(path.resolve(this.socketPath));
+      let dirStat;
+      try {
+        dirStat = fs.statSync(socketDir);
+      } catch (err) {
+        if (err.code !== 'ENOENT') throw fail('socket_dir_unreadable', err.code);
+        // Create it ourselves with an owner-only mode; never inherit the
+        // process umask here, because this directory is what protects the
+        // capability the socket represents.
+        fs.mkdirSync(socketDir, { recursive: true, mode: 0o700 });
+        try { fs.chmodSync(socketDir, 0o700); } catch { /* verified below */ }
+        dirStat = fs.statSync(socketDir);
+      }
+      if (!dirStat.isDirectory()) throw fail('socket_dir_invalid');
+      const dirMode = dirStat.mode & 0o7777;
+      if ((dirMode & 0o022) !== 0 && (dirMode & 0o1000) === 0) {
+        throw fail('socket_dir_mode', dirMode.toString(8));
+      }
+      if (typeof process.getuid === 'function' &&
+          dirStat.uid !== process.getuid() && dirStat.uid !== 0) {
+        throw fail('socket_dir_owner', String(dirStat.uid));
+      }
       // A stale socket file from a crashed run must not block startup, but it
       // must also not be a live daemon's socket.
       if (fs.existsSync(this.socketPath)) {
@@ -289,7 +349,6 @@ class Daemon {
         if (alive) throw fail('socket_in_use');
         fs.unlinkSync(this.socketPath);
       }
-      fs.mkdirSync(path.dirname(path.resolve(this.socketPath)), { recursive: true });
       this.server = net.createServer((socket) => this.#onConnection(socket));
       await new Promise((resolve, reject) => {
         const onListenError = (err) => reject(err);
@@ -300,6 +359,11 @@ class Daemon {
           // lifetime, where a later server error released the journal lock
           // while this daemon kept serving.
           this.server.removeListener('error', onListenError);
+          // The socket file exists BECAUSE we bound it, so from this point on
+          // only this instance may remove it. Ownership is claimed BEFORE the
+          // chmod below: a chmod failure is a failure after listen(), and the
+          // catch block must still clean up the socket we just created.
+          this.socketOwned = true;
           // Belt and braces: the journal/socket modes are set explicitly, never
           // left to a default umask, because the socket is a capability.
           try {
@@ -330,7 +394,14 @@ class Daemon {
         for (const socket of this.connections) { try { socket.destroy(); } catch { /* closed */ } }
       }
       this.connections.clear();
-      try { fs.unlinkSync(this.socketPath); } catch { /* not created */ }
+      // Only a socket THIS instance created may be removed. A failed start
+      // must never delete a live daemon's socket path: that path is how
+      // clients find the real daemon, and deleting it lets any local process
+      // bind it and impersonate the daemon.
+      if (this.socketOwned) {
+        try { fs.unlinkSync(this.socketPath); } catch { /* not created */ }
+        this.socketOwned = false;
+      }
       this.#releaseJournalLock();
       throw err;
     }
@@ -340,7 +411,14 @@ class Daemon {
     this.connections.add(socket);
     socket.on('close', () => { this.connections.delete(socket); });
     let buffer = Buffer.alloc(0);
+    // Exactly ONE request is served per connection. `handled` is checked
+    // BEFORE handle() is called, never after: an extra frame must be refused
+    // before it can be parsed, charged against the window budget, journaled or
+    // signed. The timer both bounds a silent client and reaps the half-open
+    // connection that remains after we have answered.
+    let handled = false;
     const timer = setTimeout(() => socket.destroy(), REQUEST_TIMEOUT_MS);
+    const reapAfter = (ms) => setTimeout(() => socket.destroy(), ms).unref();
     socket.on('data', (chunk) => {
       buffer = Buffer.concat([buffer, chunk]);
       if (buffer.length > MAX_REQUEST_BYTES) {
@@ -348,18 +426,38 @@ class Daemon {
         socket.destroy();
         return;
       }
-      // One JSON document per connection, newline framed.
       const newline = buffer.indexOf(0x0a);
       if (newline === -1) return;
       const raw = buffer.subarray(0, newline);
-      clearTimeout(timer);
+      const rest = buffer.subarray(newline + 1);
+      if (handled) {
+        // A second frame on this connection is dropped without ever reaching
+        // handle(): it must not consume budget or produce a signature. The
+        // response side is already ended, so writing is no longer safe - the
+        // client is told by the connection closing (and by never receiving a
+        // second response). The reap timer reaps this socket.
+        return;
+      }
+      handled = true;
+      buffer = rest;
       let response;
       try {
         response = this.handle(raw);
       } catch {
         response = { ok: false, error: 'internal_error' };
       }
-      socket.end(JSON.stringify(response) + '\n');
+      clearTimeout(timer);
+      const extra = rest.length > 0
+        // A pipelined second request arrived behind the first line. It is
+        // refused IN THE SAME WRITE, so the client is told and the first
+        // request is answered exactly once (it used to be re-handled, running
+        // the whole policy -> ledger -> sign chain again, on every later data
+        // event, because the buffer was never consumed).
+        ? JSON.stringify(response) + '\n' +
+          JSON.stringify({ ok: false, error: 'one_request_per_connection' }) + '\n'
+        : JSON.stringify(response) + '\n';
+      socket.end(extra);
+      reapAfter(1000);
     });
     socket.on('error', () => { clearTimeout(timer); socket.destroy(); });
   }
@@ -385,7 +483,12 @@ class Daemon {
       });
     }
     this.connections.clear();
-    try { fs.unlinkSync(this.socketPath); } catch { /* already gone */ }
+    // Only a socket THIS instance created may be removed. stop() on a daemon
+    // that never started must not delete a live daemon's socket path.
+    if (this.socketOwned) {
+      try { fs.unlinkSync(this.socketPath); } catch { /* already gone */ }
+      this.socketOwned = false;
+    }
     this.started = false;
     // LAST: the journal lock is released only once no request can be served,
     // so a second daemon can never start while this one could still answer.

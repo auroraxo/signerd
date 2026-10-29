@@ -7,6 +7,33 @@ const { evaluate, ownField, readClock } = require('./policy');
 
 const MAX_U64 = (1n << 64n) - 1n;
 
+// A legacy wire starts with a compact-u16 signature count (one byte when the
+// count is 1), then the 64 signature bytes, then the message.
+const SIGNATURE_COUNT_BYTE = 1;
+const SIGNATURE_BYTES = 64;
+const MESSAGE_OFFSET = SIGNATURE_COUNT_BYTE + SIGNATURE_BYTES;
+
+// The replay identity of a transaction is its MESSAGE, not the bytes the
+// client sent.
+//
+// The 64-byte signature slot is client-controlled and carries no meaning: the
+// daemon replaces it. Two wires that differ ONLY in that slot are the same
+// transaction message and produce the same signature. Keying the replay set
+// on the whole wire therefore let the same message be approved - and signed -
+// twice, and the signed artifact was not in the replay set either (a client
+// could hand the signed wire back and be approved again).
+//
+// The message is what the signature commits to, so the message is what must
+// be signed at most once. The message image is the wire without its
+// signature slot; for any other wire shape the whole wire is used, so an
+// unrecognized layout can never collide with a message.
+function messageImage(wire) {
+  if (wire.length > MESSAGE_OFFSET && wire[0] === SIGNATURE_COUNT_BYTE) {
+    return wire.subarray(MESSAGE_OFFSET);
+  }
+  return wire;
+}
+
 // The policy envelope admits exactly one signature and no ComputeBudget
 // instruction, so the chain's base fee is fixed at 5000 lamports and no
 // prioritization fee can be attached. Every approval is therefore charged
@@ -86,7 +113,20 @@ function scopeKey(grant) {
 // NUL, which is safe because every field is a number or a decimal/hex string.
 const GENESIS_HASH = '0'.repeat(64);
 
+// Journal format 2 records BOTH identities:
+//   w = sha256 of the raw WIRE - unchanged from format 1, so `w` keeps its
+//       meaning across the migration and existing records stay comparable;
+//   m = sha256 of the MESSAGE  - the replay identity (one signature per
+//       message), which a format-1 record simply does not carry.
+// The chain body depends on the format, so a record cannot be silently
+// upgraded or downgraded: dropping or adding `v` changes the body and breaks
+// the chain hash, which the loader reports as ledger_tampered.
+const JOURNAL_FORMAT = 2;
+
 function recordBody(record) {
+  if (record.v === JOURNAL_FORMAT) {
+    return [record.v, record.s, record.t, record.w, record.m, record.a, record.f, record.k].join('\u0000');
+  }
   return [record.s, record.t, record.w, record.a, record.f, record.k].join('\u0000');
 }
 
@@ -95,16 +135,99 @@ function chainHash(prevHash, record) {
     .update(prevHash + '\u0000' + recordBody(record)).digest('hex');
 }
 
-function validRecord(record, previousSeq, seenFingerprints) {
+const FORMAT_2_FIELDS = ['v', 's', 't', 'w', 'm', 'a', 'f', 'k', 'h'].sort();
+const FORMAT_1_FIELDS = ['s', 't', 'w', 'a', 'f', 'k', 'h'].sort();
+
+function ownFields(record) {
+  return Object.getOwnPropertyNames(record).sort();
+}
+
+function sameFields(actual, expected) {
+  return actual.length === expected.length && actual.every((f, i) => f === expected[i]);
+}
+
+function validRecord(record, previousSeq, seenWires, seenMessages) {
   if (typeof record !== 'object' || record === null) return false;
   const { s, t, w, a, f, k, h } = record;
   if (!Number.isSafeInteger(s) || s !== previousSeq + 1) return false;
   if (!Number.isSafeInteger(t) || t < 0) return false;
   if (typeof w !== 'string' || !/^[0-9a-f]{64}$/.test(w)) return false;
   if (typeof h !== 'string' || !/^[0-9a-f]{64}$/.test(h)) return false;
-  if (seenFingerprints.has(w)) return false;
   if (typeof k !== 'string' || k.length === 0) return false;
-  return parseU64(a) !== null && parseU64(f) !== null;
+  if (parseU64(a) === null || parseU64(f) === null) return false;
+  const fields = ownFields(record);
+  if (record.v === JOURNAL_FORMAT) {
+    if (!sameFields(fields, FORMAT_2_FIELDS)) return false;
+    if (typeof record.m !== 'string' || !/^[0-9a-f]{64}$/.test(record.m)) return false;
+    if (seenWires.has(w)) return false;
+    if (seenMessages.has(record.m)) return false;
+    return true;
+  }
+  // A format-1 record: the wire hash is the only identity it carries.
+  if (!sameFields(fields, FORMAT_1_FIELDS)) return false;
+  if (seenWires.has(w)) return false;
+  return true;
+}
+
+/**
+ * Journal hygiene, checked BEFORE the journal is trusted.
+ *
+ * The journal IS the replay set and the window budget. If another user can
+ * write it, they can truncate it: after the next daemon start the replay set
+ * and the window are empty, and an already-signed message is signed again.
+ * The keystore already refuses a foreign-owned or world-writable file; the
+ * journal must refuse the same things, or it is the weaker half of the pair.
+ */
+function assertJournalPath(file) {
+  const resolved = path.resolve(file);
+  const dirPath = path.dirname(resolved);
+  let dirStat;
+  try {
+    dirStat = fs.statSync(dirPath);
+  } catch {
+    // A missing directory is the daemon's job to create; the file cannot
+    // exist in it either, so there is nothing foreign to trust yet.
+    return;
+  }
+  if (!dirStat.isDirectory()) throw new Error('ledger_dir_invalid');
+  const dirMode = dirStat.mode & 0o7777;
+  // A group/world-writable directory lets a stranger replace the journal.
+  // A STICKY directory is safe: only the file's own owner may remove it.
+  if ((dirMode & 0o022) !== 0 && (dirMode & 0o1000) === 0) {
+    throw new Error('ledger_dir_mode');
+  }
+  if (typeof process.getuid === 'function' &&
+      dirStat.uid !== process.getuid() && dirStat.uid !== 0) {
+    throw new Error('ledger_dir_owner');
+  }
+  let stat;
+  try {
+    // lstat, NOT stat: a symlink at this path can be re-pointed by whoever
+    // controls it, so the replay set would live somewhere we do not own.
+    stat = fs.lstatSync(resolved);
+  } catch (err) {
+    if (err.code === 'ENOENT') return;
+    throw new Error('ledger_unreadable');
+  }
+  if (!stat.isFile()) throw new Error('ledger_not_a_file');
+  if (typeof process.getuid === 'function' &&
+      stat.uid !== process.getuid() && stat.uid !== 0) {
+    throw new Error('ledger_owner');
+  }
+  const mode = stat.mode & 0o777;
+  // Group/other WRITABLE is refused outright even though we own the file:
+  // somebody else could already have written to it, and the chain hash is
+  // unkeyed sha256, so a forged journal validates. Content provenance is
+  // broken once a stranger can write - do not read it at all.
+  if ((mode & 0o022) !== 0) throw new Error('ledger_mode');
+  // Group/other READABLE only leaks what was signed; readers cannot alter the
+  // replay set, so we repair it to 0600 instead of bricking an existing
+  // journal (the keystore, which is a secret, refuses outright).
+  if ((mode & 0o055) !== 0) {
+    try { fs.chmodSync(resolved, 0o600); } catch { /* falls through to check */ }
+    const repaired = fs.lstatSync(resolved).mode & 0o777;
+    if ((repaired & 0o077) !== 0) throw new Error('ledger_mode');
+  }
 }
 
 /**
@@ -129,6 +252,15 @@ function validRecord(record, previousSeq, seenFingerprints) {
  *
  * Concurrency: single writer, enforced by the owning daemon's pid lock file
  * (`<journal>.lock`). Journal grows without bound (compaction is future work).
+ *
+ * Since journal format 2 (2026-10-29) there are TWO identities per approval:
+ * `w` = sha256 of the raw wire (unchanged from format 1) and `m` = sha256 of
+ * the MESSAGE, which is what the signature actually commits to. The message
+ * identity is what makes "one signature per transaction message" true: the
+ * 64-byte signature slot is client-controlled, so two wires differing only in
+ * that slot are one message, and the signed artifact we return has the same
+ * message as the input. Format-1 journals carry only `w` and therefore keep
+ * only the old wire-level guarantee.
  */
 class Ledger {
   constructor({ file }) {
@@ -136,6 +268,7 @@ class Ledger {
     this.file = file;
     this.records = [];
     this.fingerprints = new Set();
+    this.messageHashes = new Set();
     this.seq = 0;
     this.lastHash = GENESIS_HASH; // chain head: verification of the next record
     this.fileBytes = 0; // last durable length; append failures roll back to it
@@ -144,6 +277,9 @@ class Ledger {
     // accepted a SAME-SIZE in-place tamper (e.g. "a":"42" -> "a":"12"), which
     // silently changed what the journal says was spent.
     this.digest = crypto.createHash('sha256').update(Buffer.alloc(0)).digest('hex');
+    // The journal is the replay set and the window budget: refuse to trust a
+    // file somebody else could write, BEFORE reading a single record out of it.
+    assertJournalPath(file);
     this.#load();
   }
 
@@ -176,14 +312,19 @@ class Ledger {
     for (const line of segments) {
       let record;
       try { record = JSON.parse(line); } catch { throw new Error('ledger_corrupt'); }
-      if (!validRecord(record, this.seq, this.fingerprints)) throw new Error('ledger_corrupt');
+      if (!validRecord(record, this.seq, this.fingerprints, this.messageHashes)) throw new Error('ledger_corrupt');
       // Chain check: a record whose fields were edited in place (same size,
       // same length) no longer hashes to its stored h -> the file was altered
       // after it was written. Distinct from structural corruption so the
       // operator can tell tampering from a bad disk.
       if (chainHash(this.lastHash, record) !== record.h) throw new Error('ledger_tampered');
       this.records.push(record);
+      // `w` is the WIRE hash in both formats; `m` is the message hash in
+      // format 2. A format-1 record (written before 2026-10-29) carries only
+      // the wire hash, so its message identity is simply unknown - it keeps
+      // wire-level replay protection and can add no message-level one.
       this.fingerprints.add(record.w);
+      if (record.v === JOURNAL_FORMAT) this.messageHashes.add(record.m);
       this.seq = record.s;
       this.lastHash = record.h;
     }
@@ -248,6 +389,18 @@ class Ledger {
     try {
       fd = fs.openSync(this.file, 'a', 0o600);
       opened = true;
+      // openSync's mode is masked by the process umask, so set it explicitly:
+      // a library must not depend on (or mutate) a host process's umask.
+      try { fs.fchmodSync(fd, 0o600); } catch { /* checked below via fstat */ }
+      // The path may have been replaced between construction and this append
+      // (we only stat'ed the path back then). The bytes we are about to append
+      // must go to a file WE own with no group/other access - otherwise the
+      // spend record is heading into somebody else's file.
+      if (typeof process.getuid === 'function') {
+        const stat = fs.fstatSync(fd);
+        if (stat.uid !== process.getuid() && stat.uid !== 0) throw failWrite('ledger_insecure');
+        if ((stat.mode & 0o077) !== 0) throw failWrite('ledger_insecure');
+      }
       // writeSync may write fewer bytes than requested (and can fail after a
       // partial write). Loop until the whole line is in, then fsync.
       let written = 0;
@@ -262,7 +415,7 @@ class Ledger {
       if (opened && !this.#rollback(startBytes)) {
         throw failWrite('ledger_inconsistent');
       }
-      throw failWrite('ledger_write_failed');
+      throw err.code === 'ledger_insecure' ? err : failWrite('ledger_write_failed');
     } finally {
       if (fd !== undefined) fs.closeSync(fd);
     }
@@ -278,7 +431,6 @@ class Ledger {
       } catch { /* platform-dependent; data durability already ensured */ }
     }
   }
-
   /**
    * Decide whether an already policy-verified amount may consume budget.
    * Callers must have a positive verdict from evaluate() first; this function
@@ -305,8 +457,13 @@ class Ledger {
     if (!Number.isFinite(nowMs)) return refused('invalid_clock');
     if (nowMs >= expiry) return refused('expired');
 
-    const fingerprint = crypto.createHash('sha256').update(wire).digest('hex');
-    if (this.fingerprints.has(fingerprint)) return refused('replay');
+    const fingerprint = messageImage(wire);
+    const messageSha256 = crypto.createHash('sha256').update(fingerprint).digest('hex');
+    const wireSha256 = crypto.createHash('sha256').update(wire).digest('hex');
+    // Replay check on BOTH: message identity (one signature per transaction
+    // message) AND wire identity (the raw wire bytes).
+    if (this.messageHashes.has(messageSha256)) return refused('replay');
+    if (this.fingerprints.has(wireSha256)) return refused('replay');
 
     // Rolling window over (now - windowSeconds, now], deliberately including
     // any record timestamped in the future: a backwards clock must not shrink
@@ -327,13 +484,18 @@ class Ledger {
     }
 
     const record = {
+      v: JOURNAL_FORMAT,
       s: this.seq + 1,
       t: nowMs,
-      w: fingerprint,
+      w: wireSha256,
+      m: messageSha256,
       a: amount.toString(),
       f: BASE_FEE_LAMPORTS.toString(),
       k: scope,
-      h: chainHash(this.lastHash, { s: this.seq + 1, t: nowMs, w: fingerprint, a: amount.toString(), f: BASE_FEE_LAMPORTS.toString(), k: scope }),
+      h: chainHash(this.lastHash, {
+        v: JOURNAL_FORMAT, s: this.seq + 1, t: nowMs, w: wireSha256, m: messageSha256,
+        a: amount.toString(), f: BASE_FEE_LAMPORTS.toString(), k: scope,
+      }),
     };
     try {
       this.#appendLine(record);
@@ -345,11 +507,13 @@ class Ledger {
       // later approval refused until an operator intervenes.
       const code = err && err.code === 'ledger_inconsistent'
         ? 'ledger_inconsistent'
-        : (err && err.code === 'ledger_changed' ? 'ledger_changed' : 'ledger_write_failed');
+        : (err && err.code === 'ledger_changed' ? 'ledger_changed'
+          : (err && err.code === 'ledger_insecure' ? 'ledger_insecure' : 'ledger_write_failed'));
       return refused(code);
     }
     this.records.push(record);
-    this.fingerprints.add(record.w);
+    this.fingerprints.add(wireSha256);
+    this.messageHashes.add(messageSha256);
     this.seq = record.s;
     this.lastHash = record.h;
     const totalSpent = spent + cost;
@@ -358,7 +522,8 @@ class Ledger {
       amountLamports: record.a,
       feeLamports: record.f,
       totalLamports: cost.toString(),
-      wireSha256: fingerprint,
+      wireSha256,
+      messageSha256,
       seq: record.s,
       windowSpentLamports: totalSpent.toString(),
       windowRemainingLamports: (window.max - totalSpent).toString(),

@@ -1,6 +1,7 @@
 'use strict';
 
 const fs = require('node:fs');
+const path = require('node:path');
 
 const REQUIRED_FIELDS = [
   'signer', 'destination', 'maxLamports', 'expiresAt',
@@ -64,9 +65,57 @@ function validateGrant(name, grant) {
  * data can never resolve through Object.prototype, plus the sorted names.
  */
 function loadGrantFile(file) {
+  const resolved = path.resolve(file);
+  // The grant file is re-read on EVERY request (revocation must take effect
+  // immediately), so its path has to stay trustworthy for the whole process
+  // lifetime, not just at startup. A directory another user can write lets
+  // them swap the file between two requests; a directory owned by someone
+  // else can be rearranged regardless of its mode.
+  let dirStat;
+  try {
+    dirStat = fs.statSync(path.dirname(resolved));
+  } catch (err) {
+    // A missing directory means the file cannot exist either; report it the
+    // same way as a missing file.
+    throw fail('grant_file_unreadable', err.code);
+  }
+  const dirMode = dirStat.mode & 0o7777;
+  if ((dirMode & 0o022) !== 0 && (dirMode & 0o1000) === 0) {
+    throw fail('grant_file_dir_mode', dirMode.toString(8));
+  }
+  if (typeof process.getuid === 'function' &&
+      dirStat.uid !== process.getuid() && dirStat.uid !== 0) {
+    throw fail('grant_file_dir_owner', String(dirStat.uid));
+  }
+  let fileStat;
+  try {
+    fileStat = fs.lstatSync(resolved);
+  } catch (err) {
+    if (err.code === 'ENOENT') fileStat = null;
+    else throw fail('grant_file_unreadable', err.code);
+  }
+  if (fileStat !== null) {
+    // A symlink (or any non-regular file) at this path can be redirected at
+    // will by whoever controls it; the grants decide what may be signed.
+    if (!fileStat.isFile()) throw fail('grant_file_invalid', 'not a regular file');
+    if (typeof process.getuid === 'function' &&
+        fileStat.uid !== process.getuid() && fileStat.uid !== 0) {
+      throw fail('grant_file_owner', String(fileStat.uid));
+    }
+    // Writable by anybody else means the grants - and with them the set of
+    // transactions the daemon will sign - can be edited between two requests.
+    // Being readable is harmless (the file holds no secret), so a file we own
+    // is TIGHTENED rather than refused; if it cannot be tightened, refuse.
+    const mode = fileStat.mode & 0o777;
+    if ((mode & 0o022) !== 0) {
+      try { fs.chmodSync(resolved, mode & ~0o022); } catch { /* verified below */ }
+      const after = fs.lstatSync(resolved).mode & 0o777;
+      if ((after & 0o022) !== 0) throw fail('grant_file_mode', after.toString(8));
+    }
+  }
   let raw;
   try {
-    raw = fs.readFileSync(file, 'utf8');
+    raw = fs.readFileSync(resolved, 'utf8');
   } catch (err) {
     throw fail('grant_file_unreadable', err.code);
   }
@@ -95,3 +144,4 @@ function loadGrantFile(file) {
 }
 
 module.exports = { loadGrantFile, validateGrant };
+;

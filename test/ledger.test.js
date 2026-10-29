@@ -55,6 +55,8 @@ test('approve charges amount plus fixed base fee against the window', () => {
     feeLamports: BASE_FEE_LAMPORTS.toString(),
     totalLamports: (42n + BASE_FEE_LAMPORTS).toString(),
     wireSha256: require('node:crypto').createHash('sha256').update(wire).digest('hex'),
+    messageSha256: require('node:crypto').createHash('sha256')
+      .update(wire.subarray(1 + 64)).digest('hex'),
     seq: 1,
     windowSpentLamports: (42n + BASE_FEE_LAMPORTS).toString(),
     windowRemainingLamports: (100000n - 42n - BASE_FEE_LAMPORTS).toString(),
@@ -213,6 +215,11 @@ test('a corrupt complete line makes the ledger refuse to load', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'signerd-ledger-'));
   const file = path.join(dir, 'journal.jsonl');
   fs.writeFileSync(file, JSON.stringify({ s: 5, t: 1, w: 'a'.repeat(64), a: '1', f: '5000' }) + '\n');
+  // The journal is the replay set: it is only trusted when it is owner-only.
+  // A handcrafted file is written with the default umask (0644), which the
+  // loader refuses BEFORE it reads a single record - so the mode is fixed
+  // here to get past the hygiene check and reach the corruption check.
+  fs.chmodSync(file, 0o600);
   assert.throws(() => new Ledger({ file }), /ledger_corrupt/);
 });
 
@@ -394,6 +401,9 @@ test('review #5: an invalid-UTF-8 journal tail never destroys a durable record',
   // it into a 3-byte U+FFFD, so measuring the tail AFTER decoding truncates
   // 2 bytes INTO record 2 and silently drops an fsynced approval.
   fs.writeFileSync(file, Buffer.concat([valid, Buffer.from([0xff])]));
+  // The journal is only trusted when it is owner-only; the handcrafted file
+  // above was written with the default umask (0644).
+  fs.chmodSync(file, 0o600);
 
   const reopened = new Ledger({ file });
   assert.deepEqual(reopened.snapshot(), { records: 2, seq: 2, fingerprints: 2 },
