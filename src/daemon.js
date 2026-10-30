@@ -7,6 +7,7 @@ const path = require('node:path');
 const { Ledger } = require('./ledger');
 const { loadGrantFile } = require('./grantfile');
 const { signApproved } = require('./signer');
+const { classifySocketPath } = require('./socketprobe');
 
 const MAX_REQUEST_BYTES = 4096;
 const REQUEST_TIMEOUT_MS = 10_000;
@@ -338,17 +339,19 @@ class Daemon {
         throw fail('socket_dir_owner', String(dirStat.uid));
       }
       // A stale socket file from a crashed run must not block startup, but it
-      // must also not be a live daemon's socket.
-      if (fs.existsSync(this.socketPath)) {
-        const probe = net.connect(this.socketPath);
-        const alive = await new Promise((resolve) => {
-          probe.once('connect', () => resolve(true));
-          probe.once('error', () => resolve(false));
-          probe.setTimeout(500, () => { probe.destroy(); resolve(false); });
-        });
-        if (alive) throw fail('socket_in_use');
-        fs.unlinkSync(this.socketPath);
+      // must also not be a live daemon's socket. The probe has THREE verdicts
+      // on purpose: 'live' -> refuse, 'stale' (only ECONNREFUSED proves nobody
+      // listens) -> replace, 'unknown' (EAGAIN on a saturated accept queue,
+      // timeout, ...) -> refuse. Collapsing 'unknown' into 'stale' let a
+      // second start unlink a LIVE daemon's socket and bind the documented
+      // client path instead (research/review5 p4).
+      const socketState = await classifySocketPath(this.socketPath);
+      if (socketState === 'live' || socketState === 'unknown') {
+        throw fail('socket_in_use', socketState === 'unknown'
+          ? 'the existing socket could not be proven dead - refusing to replace it'
+          : undefined);
       }
+      if (socketState === 'stale') fs.unlinkSync(this.socketPath);
       this.server = net.createServer((socket) => this.#onConnection(socket));
       await new Promise((resolve, reject) => {
         const onListenError = (err) => reject(err);
