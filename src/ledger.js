@@ -4,6 +4,17 @@ const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
 const { evaluate, ownField, readClock } = require('./policy');
+const { readUnderLease } = require('./lease');
+
+// The journal is loaded and re-read through the same kernel-enforced read
+// lease that guards the grant file (R4-2): a write handle that predates a
+// chmod can mutate the replay set and the spend budget at any moment, and
+// neither the mode bits nor the chain hash say so at the instant we trust the
+// bytes. The cap is far above what the append path can sustain (it re-reads
+// the whole journal on every approval), so it is a hostile-helper guardrail,
+// not the binding size limit; a journal beyond it fails to load rather than
+// being truncated.
+const JOURNAL_LEASE_MAX_BYTES = 512 * 1024 * 1024;
 
 const MAX_U64 = (1n << 64n) - 1n;
 
@@ -311,6 +322,10 @@ function assertJournalPath(file) {
  * Concurrency: single writer, enforced by the owning daemon's pid lock file
  * (`<journal>.lock`). Journal grows without bound (compaction is future work).
  *
+ * Trust: the bytes are read through a read lease, so a process that holds the
+ * journal open for writing (e.g. a descriptor that survived a chmod) is
+ * refused at load and at every append instead of being believed.
+ *
  * Since journal format 2 (2026-10-29) there are TWO identities per approval:
  * `w` = sha256 of the raw wire (unchanged from format 1) and `m` = sha256 of
  * the MESSAGE, which is what the signature actually commits to. The message
@@ -350,9 +365,19 @@ class Ledger {
   #load() {
     let raw;
     try {
-      raw = fs.readFileSync(this.file);
+      raw = readUnderLease(this.file, {
+        prefix: 'ledger', maxBytes: JOURNAL_LEASE_MAX_BYTES,
+      }).bytes;
     } catch (err) {
-      if (err.code === 'ENOENT') return;
+      // A missing journal is the normal first start, not an error.
+      if (err && err.detail === 'ENOENT') return;
+      // Fail closed, with the reason intact, for everything the lease probe
+      // can name: a held write handle, leases unsupported on this kernel, a
+      // file the lease was denied on. The pre-lease code path reported all of
+      // these as ledger_unreadable, which hid the refusal an operator needs.
+      if (err && typeof err.code === 'string' && err.code.startsWith('ledger_')) {
+        throw err;
+      }
       throw new Error('ledger_unreadable');
     }
     const parsed = parseJournal(raw);
@@ -413,14 +438,25 @@ class Ledger {
     // append, appending after it would merge into foreign bytes and could
     // make the journal permanently unloadable. Refuse instead.
     //
+    // The read goes through the lease as well: a writer that already holds a
+    // descriptor on this file could rewrite it after a plain read and before
+    // our append, so "unchanged so far" is not a verdict we can vouch for.
+    //
     // The check compares the CONTENT (length and sha256), not just the
     // length: a same-size in-place edit must not pass as "unchanged".
     let current = null;
     try {
-      current = fs.readFileSync(this.file);
+      current = readUnderLease(this.file, {
+        prefix: 'ledger', maxBytes: JOURNAL_LEASE_MAX_BYTES,
+      }).bytes;
     } catch (err) {
-      if (err.code !== 'ENOENT') throw failWrite('ledger_write_failed');
-      current = Buffer.alloc(0);
+      if (err && err.detail === 'ENOENT') {
+        current = Buffer.alloc(0);
+      } else if (err && typeof err.code === 'string' && err.code.startsWith('ledger_')) {
+        throw failWrite(err.code);
+      } else {
+        throw failWrite('ledger_write_failed');
+      }
     }
     if (current.length !== startBytes) throw failWrite('ledger_changed');
     if (crypto.createHash('sha256').update(current).digest('hex') !== this.digest) {
@@ -548,10 +584,13 @@ class Ledger {
       // was rolled back to its last durable length, so the journal stays
       // loadable; if even the rollback failed, the poisoned flag keeps every
       // later approval refused until an operator intervenes.
-      const code = err && err.code === 'ledger_inconsistent'
-        ? 'ledger_inconsistent'
-        : (err && err.code === 'ledger_changed' ? 'ledger_changed'
-          : (err && err.code === 'ledger_insecure' ? 'ledger_insecure' : 'ledger_write_failed'));
+      //
+      // Every refusal this ledger can raise is named ledger_*; passing it
+      // through keeps the reason visible (ledger_held_writer must not be
+      // reported as a generic ledger_write_failed).
+      const code = err && typeof err.code === 'string' && err.code.startsWith('ledger_')
+        ? err.code
+        : 'ledger_write_failed';
       return refused(code);
     }
     this.records.push(record);
@@ -600,4 +639,5 @@ function gate(wire, grant, now = new Date(), ledger) {
 module.exports = {
   Ledger, gate, BASE_FEE_LAMPORTS,
   parseJournal, messageImage, assertJournalPath, chainHash, JOURNAL_FORMAT, GENESIS_HASH,
+  JOURNAL_LEASE_MAX_BYTES,
 };

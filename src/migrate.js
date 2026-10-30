@@ -14,7 +14,9 @@ const fs = require('node:fs');
 const path = require('node:path');
 const {
   parseJournal, messageImage, assertJournalPath, chainHash, JOURNAL_FORMAT, GENESIS_HASH,
+  JOURNAL_LEASE_MAX_BYTES,
 } = require('./ledger');
+const { readUnderLease } = require('./lease');
 
 function fail(code, detail) {
   const err = new Error(detail === undefined ? code : `${code}: ${detail}`);
@@ -84,8 +86,24 @@ function migrateJournal({ file, wiresDir = null, discardLegacy = false }) {
 
 function migrateLocked(resolved, wiresDir, discardLegacy) {
   let raw;
-  try { raw = fs.readFileSync(resolved); } catch (err) {
-    throw fail(err.code === 'ENOENT' ? 'ledger_missing' : 'ledger_unreadable');
+  // The journal is read through a read lease, exactly like the daemon reads
+  // it: a process that holds the journal open for writing could rewrite it
+  // between our read and the rename below, and the migration would then
+  // replace the file with a stale version - losing spend records.
+  try {
+    raw = readUnderLease(resolved, {
+      prefix: 'ledger', maxBytes: JOURNAL_LEASE_MAX_BYTES,
+    }).bytes;
+  } catch (err) {
+    if (err && err.detail === 'ENOENT') throw fail('ledger_missing');
+    // A held write handle, an unsupported lease or a denied lease are
+    // refusals with their own names; everything else stays unreadable.
+    if (err && (err.code === 'ledger_held_writer' ||
+                err.code === 'ledger_lease_unsupported' ||
+                err.code === 'ledger_lease_denied')) {
+      throw fail(err.code, err.detail);
+    }
+    throw fail('ledger_unreadable');
   }
   const parsed = parseJournal(raw);
   if (parsed.tailTorn) throw fail('ledger_torn_tail', 'start the daemon once to repair it, then migrate');
@@ -132,7 +150,12 @@ function migrateLocked(resolved, wiresDir, discardLegacy) {
   writeExclusive(backup, raw);
   writeExclusive(tmp, out);
   try {
-    if (!fs.readFileSync(resolved).equals(raw)) throw fail('ledger_changed');
+    // Re-read under the lease: the file must still be the bytes we read and
+    // parsed, and nobody may hold it open for writing while we replace it.
+    const now = readUnderLease(resolved, {
+      prefix: 'ledger', maxBytes: JOURNAL_LEASE_MAX_BYTES,
+    }).bytes;
+    if (!now.equals(raw)) throw fail('ledger_changed');
     fs.renameSync(tmp, resolved);
   } catch (err) {
     try { fs.unlinkSync(tmp); } catch { /* already moved */ }

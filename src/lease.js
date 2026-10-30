@@ -51,6 +51,7 @@ const HELPER_TIMEOUT_MS = 10000;
 function fail(code, detail) {
   const err = new Error(detail === undefined ? code : `${code}: ${detail}`);
   err.code = code;
+  err.detail = detail;
   return err;
 }
 
@@ -65,50 +66,58 @@ function buildHelper() {
   });
   if (res.error || res.status !== 0) {
     const detail = res.error ? res.error.message : (res.stderr || `exit ${res.status}`).trim();
-    throw fail('grant_file_lease_unavailable', detail);
+    throw fail('lease_unavailable', detail);
   }
 }
 
-function helper() {
+function helper(prefix = 'grant_file') {
   if (fs.existsSync(HELPER)) return HELPER;
   if (!fs.existsSync(SOURCE)) {
-    throw fail('grant_file_lease_unavailable', `missing ${path.basename(HELPER)}`);
+    throw fail(`${prefix}_lease_unavailable`, `missing ${path.basename(HELPER)}`);
   }
   if (!built) {
-    buildHelper();
-    built = true;
+    try {
+      buildHelper();
+      built = true;
+    } catch (err) {
+      throw fail(`${prefix}_lease_unavailable`, err.detail || err.message);
+    }
   }
   if (!fs.existsSync(HELPER)) {
-    throw fail('grant_file_lease_unavailable', 'helper did not build');
+    throw fail(`${prefix}_lease_unavailable`, 'helper did not build');
   }
   return HELPER;
 }
 
-const LEASE_ERROR = {
-  3: 'grant_file_held_writer',
-  4: 'grant_file_lease_unsupported',
-  5: 'grant_file_unreadable',
-  6: 'grant_file_invalid',
-  7: 'grant_file_lease_denied',
+const LEASE_ERROR_SUFFIX = {
+  3: '_held_writer',
+  4: '_lease_unsupported',
+  5: '_unreadable',
+  6: '_invalid',
+  7: '_lease_denied',
 };
+
+// The helper reports a situation, not a file: which file it is decides the
+// error code the caller must surface. The grant file says grant_file_*, the
+// journal (src/ledger.js) says ledger_*. Nothing about the mechanism changes.
 
 // Exit 5 means the open failed; the helper prints the errno name. Two of them
 // are not "unreadable" in the sense the caller means, and existing callers key
 // on these codes.
 const OPEN_ERROR = {
-  ELOOP: 'grant_file_invalid',
-  ENOENT: 'grant_file_unreadable',
-  ENOTDIR: 'grant_file_unreadable',
-  EACCES: 'grant_file_unreadable',
+  ELOOP: '_invalid',
+  ENOENT: '_unreadable',
+  ENOTDIR: '_unreadable',
+  EACCES: '_unreadable',
 };
 
-function parseMeta(line) {
+function parseMeta(line, prefix = 'grant_file') {
   // LC1 dev=... ino=... uid=... mode=... size=... lease=held|broken
   // mode is printed in OCTAL (that is how modes are written everywhere else
   // in this codebase); parsing it as decimal silently turned 0600 into 600 and
   // the subsequent mask produced 0130 - a mode that never existed.
   const m = /^LC1 dev=(\d+) ino=(\d+) uid=(\d+) mode=(\d+) size=(\d+) lease=(held|broken)$/.exec(line);
-  if (!m) throw fail('grant_file_lease_unavailable', `bad helper output: ${line.slice(0, 80)}`);
+  if (!m) throw fail(`${prefix}_lease_unavailable`, `bad helper output: ${line.slice(0, 80)}`);
   return {
     dev: Number(m[1]),
     ino: Number(m[2]),
@@ -129,46 +138,60 @@ function parseMeta(line) {
  * Throws a fail-coded error when a writer holds the file, when the lease broke
  * during the read, or when leases are unavailable on this platform.
  */
-function readUnderLease(file) {
-  const bin = helper();
+function readUnderLease(file, options = {}) {
+  // `prefix` names the file family in the error code. Defaults to the grant
+  // file so every existing caller keeps byte-identical error codes.
+  const prefix = typeof options.prefix === 'string' && options.prefix.length > 0
+    ? options.prefix
+    : 'grant_file';
+  // The journal grows without bound, so it needs a larger cap than the grant
+  // file. Both caps are guardrails against a hostile or broken helper, not
+  // the binding size limit of the file.
+  const maxBytes = Number.isSafeInteger(options.maxBytes) && options.maxBytes > 0
+    ? options.maxBytes
+    : MAX_BYTES;
+  const bin = helper(prefix);
   const res = spawnSync(bin, [file], {
     encoding: 'buffer',
-    maxBuffer: MAX_BYTES,
+    maxBuffer: maxBytes,
     timeout: HELPER_TIMEOUT_MS,
   });
 
   if (res.error) {
-    if (res.error.code === 'ENOENT') throw fail('grant_file_lease_unavailable', 'helper not found');
-    if (res.error.code === 'ETIMEDOUT') throw fail('grant_file_lease_unavailable', 'helper timed out');
-    throw fail('grant_file_lease_unavailable', res.error.message);
+    if (res.error.code === 'ENOENT') throw fail(`${prefix}_lease_unavailable`, 'helper not found');
+    if (res.error.code === 'ETIMEDOUT') throw fail(`${prefix}_lease_unavailable`, 'helper timed out');
+    // The helper produced more output than the caller is willing to hold.
+    if (res.error.code === 'ENOBUFS') throw fail(`${prefix}_too_large`, `more than ${maxBytes} bytes`);
+    throw fail(`${prefix}_lease_unavailable`, res.error.message);
   }
 
   const status = res.status;
   if (status !== 0) {
-    const code = LEASE_ERROR[status];
+    const suffix = LEASE_ERROR_SUFFIX[status];
+    const code = suffix === undefined ? undefined : `${prefix}${suffix}`;
     if (code) {
       // Prefer the helper's errno name when it gives one, so a symlink keeps
       // reporting grant_file_invalid rather than a generic unreadable.
       const errName = (res.stderr || '').toString().trim().split('\n')[0];
-      if (status === 5 && OPEN_ERROR[errName]) throw fail(OPEN_ERROR[errName], errName);
-      if (status === 5 && errName) throw fail('grant_file_unreadable', errName);
+      if (status === 5 && OPEN_ERROR[errName]) throw fail(`${prefix}${OPEN_ERROR[errName]}`, errName);
+      if (status === 5 && errName) throw fail(`${prefix}_unreadable`, errName);
       if (status === 4) throw fail(code, 'F_SETLEASE unsupported on this kernel');
       if (status === 7) throw fail(code, 'lease denied - file is not ours');
       throw fail(code);
     }
-    throw fail('grant_file_lease_unavailable',
+    throw fail(`${prefix}_lease_unavailable`,
       `helper exited ${status}${res.signal ? ` (${res.signal})` : ''}: ${(res.stderr || '').toString().trim()}`);
   }
 
   const out = res.stdout;
   const nl = out.indexOf(0x0a);
-  if (nl < 0) throw fail('grant_file_lease_unavailable', 'helper produced no metadata line');
-  const meta = parseMeta(out.slice(0, nl).toString('utf8'));
+  if (nl < 0) throw fail(`${prefix}_lease_unavailable`, 'helper produced no metadata line');
+  const meta = parseMeta(out.slice(0, nl).toString('utf8'), prefix);
   const bytes = out.slice(nl + 1);
 
   // The writer got in while we were reading: the bytes are no longer ours to
   // vouch for, even though the helper delivered them for a precise error.
-  if (meta.lease !== 'held') throw fail('grant_file_held_writer', 'writer opened during the read');
+  if (meta.lease !== 'held') throw fail(`${prefix}_held_writer`, 'writer opened during the read');
 
   return { meta, bytes };
 }

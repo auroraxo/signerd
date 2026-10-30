@@ -149,7 +149,7 @@ npm ci
 npm test
 ```
 
-**Not safe for real keys yet.** The policy prototype is unit-tested and the daemon is tested end-to-end over a real socket (98 tests: 9 policy, 20 ledger, 18 daemon, 8 signer, 7 grant file, 8 keystore, 8 review-#2 regressions, 5 envelope-fit, 2 user-zero, 6 R4-1 lease regressions incl. one live-daemon end-to-end). The daemon's signing path passed **three independent adversarial reviews** (2026-10-27 on the hardening diff, 2026-10-29 on the signing path, 2026-10-30 on R4-1), each with every finding fixed and regression-tested — but neither is a professional audit, so do not point it at a key with funds yet. It has no authentication beyond the socket's file mode, no key rotation, and the ledger does not bind transaction lifetime (blockhash freshness) — a stale blockhash simply fails on-chain.
+**Not safe for real keys yet.** The policy prototype is unit-tested and the daemon is tested end-to-end over a real socket (107 tests: 9 policy, 20 ledger, 18 daemon, 8 signer, 7 grant file, 8 keystore, 8 review-#2 regressions, 5 envelope-fit, 2 user-zero, 6 R4-1 lease regressions incl. one live-daemon end-to-end, 9 R4-2 journal-lease regressions incl. one live-daemon end-to-end). The daemon's signing path passed **three independent adversarial reviews** (2026-10-27 on the hardening diff, 2026-10-29 on the signing path, 2026-10-30 on R4-1), each with every finding fixed and regression-tested — but neither is a professional audit, so do not point it at a key with funds yet. It has no authentication beyond the socket's file mode, no key rotation, and the ledger does not bind transaction lifetime (blockhash freshness) — a stale blockhash simply fails on-chain.
 
 ### Adversarial review of the daemon (2026-10-27) — findings and fixes
 
@@ -208,6 +208,25 @@ The lease type is the whole design and the first version got it wrong: `F_WRLCK`
 | `F_SETLEASE` (shipped) | **6** | 0 |
 
 **Limits, stated rather than hidden:** point-in-time — it proves the state *at read time*, not that the file was never written before the daemon started; the mode/owner/directory checks still carry that part. Linux-only (`F_SETLEASE`): on a kernel without leases the helper exits 4 and the daemon **refuses** rather than reporting a pass it could not observe. The helper binary is not committed (built from `tools/leasecheck.c` by `npm run build`, wired as `pretest`) — a checked-in binary would be an opaque trust dependency. Verification: 98 tests green from a clean build, crash harness 25 rounds / 121 approvals all durable.
+
+### R4-2 (2026-10-30) — the journal had the same open-handle hole
+
+**Finding.** R4-1 closed the grant file; the **journal** still read itself with `fs.readFileSync`. A process that opened the journal for writing before a `chmod 0600` keeps writing through that descriptor, and the journal *is* the replay set and the spend budget: bytes believed at load (and at the append's unchanged-check) could differ from what a surviving descriptor writes a moment later. `assertJournalPath` only inspects the path, so nothing observed the open handle. Reproduced against `a806edd`: with a stranger holding the journal open, a live daemon **signed** the request.
+
+**Fix.** The journal now goes through the same `readUnderLease` primitive as the grant file — at load (`#load`), at the append's unchanged-check (`#appendLine`), and in both reads of `migrateJournal` (the read, and the byte-compare before the `rename` that commits the migration). `readUnderLease(file, {prefix})` parameterizes only the error-code prefix, so every existing caller keeps byte-identical `grant_file_*` codes while the journal reports `ledger_held_writer`, `ledger_lease_unsupported`, `ledger_lease_denied`, `ledger_too_large`. ENOENT is carried in `err.detail`, so a missing journal is still the normal fresh start and a missing migration target is still `ledger_missing`. The daemon passes `ledger_held_writer` through `approve()` to the client verbatim instead of flattening it to `ledger_write_failed`.
+
+**Falsification** — 9 tests in `test/r4-2.test.js` + `test/r4-2-e2e.test.js`, run against both trees:
+
+| tree | pass | fail |
+|---|---|---|
+| `a806edd` pre-fix | 1 | 8 |
+| journal `F_SETLEASE` (shipped) | **9** | 0 |
+
+The single pre-fix pass is the false-positive guard (`held open for READING is still loaded and usable`) — it is what would make the daemon refuse whenever anybody inspected the journal.
+
+**Cost, measured:** 17.5 ms per append vs 9.2 ms before (6.4 ms of that is the lease probe — one helper process per load/append, on top of the ~5.8 ms/req the grant-file lease already costs). This is the price of the guarantee, not an optimisation target yet; if it matters later the probe belongs at the trust points that already exist (`fsync` per approval), not in a cache.
+
+**Limits:** same point-in-time limit as R4-1 — a descriptor opened *after* the probe but before our own append is caught by the next load/append, not this one; the mode/owner/directory checks and the chain hash still carry the rest. Linux-only, and the helper refuses (exit 4) rather than fakes a pass, exactly like R4-1. Verification: 107 tests green from a clean build, crash harness 25 rounds / 92 reported approvals all durable.
 
 ## Next qualification
 
