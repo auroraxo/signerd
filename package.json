@@ -8,6 +8,8 @@
     "signerd": "bin/signerd.js"
   },
   "scripts": {
+    "build": "cc -O2 -o tools/leasecheck tools/leasecheck.c",
+    "pretest": "npm run build",
     "test": "node --test",
     "test:crash": "node scripts/crash-consistency.js 25"
   },

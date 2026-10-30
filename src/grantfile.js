@@ -2,6 +2,7 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
+const { readUnderLease } = require('./lease');
 
 const REQUIRED_FIELDS = [
   'signer', 'destination', 'maxLamports', 'expiresAt',
@@ -87,33 +88,32 @@ function loadGrantFile(file) {
       dirStat.uid !== process.getuid() && dirStat.uid !== 0) {
     throw fail('grant_file_dir_owner', String(dirStat.uid));
   }
-  let fileStat;
-  try {
-    fileStat = fs.lstatSync(resolved);
-  } catch (err) {
-    if (err.code === 'ENOENT') fileStat = null;
-    else throw fail('grant_file_unreadable', err.code);
+  // Read THROUGH a kernel-enforced read lease: the helper's fstat describes
+  // the inode the bytes actually came from, and it fails outright if any
+  // process (of any uid) holds the file open for writing. This replaces both
+  // the lstat-then-read sequence and the /proc scan that preceded it - there
+  // is no window left in which the path can be swapped or the file opened.
+  const { meta, bytes } = readUnderLease(resolved);
+  // The mode/owner checks now run on the fd we read, not on a separate lstat
+  // of the path: a stat that precedes the read can describe a different file
+  // than the one that gets parsed. O_NOFOLLOW in the helper means a symlink
+  // at this path is refused (ELOOP -> grant_file_invalid), and a non-regular
+  // file is refused too.
+  if (typeof process.getuid === 'function' &&
+      meta.uid !== process.getuid() && meta.uid !== 0) {
+    throw fail('grant_file_owner', String(meta.uid));
   }
-  if (fileStat !== null) {
-    // A symlink (or any non-regular file) at this path can be redirected at
-    // will by whoever controls it; the grants decide what may be signed.
-    if (!fileStat.isFile()) throw fail('grant_file_invalid', 'not a regular file');
-    if (typeof process.getuid === 'function' &&
-        fileStat.uid !== process.getuid() && fileStat.uid !== 0) {
-      throw fail('grant_file_owner', String(fileStat.uid));
-    }
-    // R3-1: writable by anybody else means the grants - and with them the set
-    // of transactions the daemon will sign - may already have been forged, or
-    // a stranger may still hold an open write descriptor (chmod does not
-    // revoke those). Tightening the mode cannot restore content provenance, so
-    // the file is REFUSED outright, exactly like the journal. Readable is
-    // harmless (no secret in this file).
-    const mode = fileStat.mode & 0o777;
-    if ((mode & 0o022) !== 0) throw fail('grant_file_mode', mode.toString(8));
-  }
+  // R3-1: writable by anybody else means the grants - and with them the set
+  // of transactions the daemon will sign - may already have been forged.
+  // Tightening the mode cannot restore content provenance, so the file is
+  // REFUSED outright, exactly like the journal. Readable is harmless (no
+  // secret in this file).
+  const mode = meta.mode & 0o777;
+  if ((mode & 0o022) !== 0) throw fail('grant_file_mode', mode.toString(8));
+
   let raw;
   try {
-    raw = fs.readFileSync(resolved, 'utf8');
+    raw = Buffer.isBuffer(bytes) ? bytes.toString('utf8') : String(bytes);
   } catch (err) {
     throw fail('grant_file_unreadable', err.code);
   }

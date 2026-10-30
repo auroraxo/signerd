@@ -149,7 +149,7 @@ npm ci
 npm test
 ```
 
-**Not safe for real keys yet.** The policy prototype is unit-tested and the daemon is tested end-to-end over a real socket (86 tests: 9 policy, 20 ledger, 18 daemon, 8 signer, 7 grant file, 8 keystore, 8 review-#2 regressions, 5 envelope-fit, 2 user-zero). The daemon's signing path passed **two independent adversarial reviews** (2026-10-27 on the hardening diff, 2026-10-29 on the signing path), each with every finding fixed and regression-tested — but neither is a professional audit, so do not point it at a key with funds yet. It has no authentication beyond the socket's file mode, no key rotation, and the ledger does not bind transaction lifetime (blockhash freshness) — a stale blockhash simply fails on-chain.
+**Not safe for real keys yet.** The policy prototype is unit-tested and the daemon is tested end-to-end over a real socket (98 tests: 9 policy, 20 ledger, 18 daemon, 8 signer, 7 grant file, 8 keystore, 8 review-#2 regressions, 5 envelope-fit, 2 user-zero, 6 R4-1 lease regressions incl. one live-daemon end-to-end). The daemon's signing path passed **three independent adversarial reviews** (2026-10-27 on the hardening diff, 2026-10-29 on the signing path, 2026-10-30 on R4-1), each with every finding fixed and regression-tested — but neither is a professional audit, so do not point it at a key with funds yet. It has no authentication beyond the socket's file mode, no key rotation, and the ledger does not bind transaction lifetime (blockhash freshness) — a stale blockhash simply fails on-chain.
 
 ### Adversarial review of the daemon (2026-10-27) — findings and fixes
 
@@ -188,6 +188,26 @@ Reviewed commit `2d0f1d9`; verdict VULNERABLE (1 HIGH, 1 MED, 1 LOW), all reprod
 - **Fixed — R3-1 (HIGH): a group/other-writable grant file was chmod-"tightened" and then trusted.** chmod cannot undo a forged edit or revoke a write descriptor a stranger already holds, so the daemon signed attacker-chosen transfers. The grant file is now refused outright (`grant_file_mode`), like the journal.
 - **Fixed — R3-2 (MED): the format 1 → 2 migration dropped message-level replay** (same message + different signature slot was re-approved and re-signed). Format-1 journals now fail closed; migration is explicit (see Replay above). Regression tests use genuine format-1 bytes in `test/fixtures/` (`test/journal-migration.test.js`).
 - **Documented — R3-3 (LOW):** the hash chain is unkeyed SHA-256: it detects corruption and naive edits, **not** a rewrite by the journal's owner who recomputes hashes. Same-uid compromise is out of scope.
+
+### Adversarial review #4 (2026-10-30) — R4-1: an open write handle survives `chmod`
+
+**Finding (HIGH, reproduced).** R3-1 refuses a group/other-writable grant file, but `chmod` does not revoke a descriptor opened *before* the tightening. A process that opened the file while it was writable keeps writing through it afterwards, the mode still reads `0600`, and the daemon re-reads the file on **every** request — so forged grants reach the signer. Reproduced against `5c72342`: with a stranger holding the file open for writing, a live daemon signed the request (`test/r4-1-e2e.test.js`, pre-fix: fail).
+
+**Fix — kernel-enforced read lease, not a `/proc` scan.** `tools/leasecheck.c` takes an `F_RDLCK` lease on the file it is about to read: the kernel grants it **only if nobody holds the file open for writing**, and it decides that for *every* uid. The bytes are read through the lease-holding fd, and the lease is re-checked afterwards (`F_GETLEASE`) so a writer that got in mid-read yields `lease=broken` and is refused instead of handed over.
+
+An intermediate `/proc`-scan fix was built first and then **measured and rejected** — it could not see a foreign uid's descriptors at all (D2), and its cached verdict under `dev:ino:ctime:size` never changed when a file was *opened*, so a writer appearing after the first scan was invisible for the process's lifetime (D1). Cost was 7.8 ms per request (D3); the lease probe is ~5.8 ms including the helper process (the daemon already spends ~2 ms per request on the journal's `fsync`).
+
+The lease type is the whole design and the first version got it wrong: `F_WRLCK` conflicts with *every* opener, so a single `cat grants.json` would have made the daemon refuse to sign. `F_RDLCK` conflicts only with writers — both are pinned by `test/r4-1.test.js` (`held open for READING is still accepted` passes on all three trees; it is the false-positive guard).
+
+**Falsification ladder** (6 tests, run against copies of each tree):
+
+| tree | pass | fail |
+|---|---|---|
+| `5c72342` pre-fix (no writer check) | 1 | 5 |
+| `/proc`-scan intermediate | 2 | 4 |
+| `F_SETLEASE` (shipped) | **6** | 0 |
+
+**Limits, stated rather than hidden:** point-in-time — it proves the state *at read time*, not that the file was never written before the daemon started; the mode/owner/directory checks still carry that part. Linux-only (`F_SETLEASE`): on a kernel without leases the helper exits 4 and the daemon **refuses** rather than reporting a pass it could not observe. The helper binary is not committed (built from `tools/leasecheck.c` by `npm run build`, wired as `pretest`) — a checked-in binary would be an opaque trust dependency. Verification: 98 tests green from a clean build, crash harness 25 rounds / 121 approvals all durable.
 
 ## Next qualification
 
