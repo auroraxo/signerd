@@ -38,6 +38,25 @@ A later, explicitly labeled `--simulate` mode may add RPC-backed checking for th
 - Per-transaction and per-window caps, summed across transactions by the daemon.
 - Structured refusals: `{refused: "alt", detail: …}`, so a caller can learn why instead of working around it.
 
+## What the traffic actually looks like (measured 2026-10-30)
+
+The envelope decision (v1 SPL-Token vs. a message-grant envelope) was a judgement call until it was measured against real mainnet traffic. `tools/envelope-traffic.mjs` samples finalized mainnet blocks and classifies every transaction by *shape* — whether it could fit an envelope at all. Output: `research/envelope-traffic-2026-10-30.json` (25 blocks, 13,390 transactions).
+
+| Shape | Count | Share |
+|---|---|---|
+| `v0_fit` — exactly what `policy.evaluate` accepts today (1 signer, 3 keys, 1 System transfer) | 55 | 0.41% |
+| `spl_v1` — 1 signer, 1 SPL Token instruction, authority is the signer | 3 | 0.02% |
+| versioned / ALT message (refused by construction) | 1,336 | 9.98% |
+| everything else (multi-ix, CPI, DEX, compute budget) | 11,996 | 89.6% |
+
+**The honest reading:** the current v0 envelope covers about 4 in 1,000 transactions, and the proposed v1 SPL-Token envelope would cover about 2 in 10,000 *more* — because real token transfers are overwhelmingly wrapped in DEX programs, compute-budget instructions, or address tables, not bare single-instruction transfers. Adding an SPL-Token envelope would not make this product useful to real Solana traffic; it would add a second narrow envelope to an already narrow one.
+
+What that points at instead is the message-grant envelope: the work that needs a scoped signature in this ecosystem is signing a *message* (a receipt, an attestation, a quote), not a transaction shape — and the one measured own site (`openreceipts`) is exactly that. This measurement does not settle the question; it removes the argument that v1 SPL-Token would.
+
+Limits of this measurement: classification is structural (the shape fits), not a statement that any grant would be issued — amount caps, expiry, replay and window limits still apply on top; the sample is a bounded recent window of finalized blocks, not a full-history census; v0/ALT transactions are counted as out-of-envelope rather than re-indexed through loaded addresses.
+
+Four defects in the measuring tool were found and fixed by measurement, each of which had produced a clean-looking but false result: `--blocks=25` was sliced to `'=25'` → `NaN`, so the sampling loop never ran and the tool reported "0 transactions" as if it were a finding; `getBlock` with `maxSupportedTransactionVersion: 0` now fails for *every* slot because mainnet serves version 1; `getBlock` returns `{transaction, meta}` wrappers, so classifying them directly marked everything malformed; and the file carried a fabricated SPL Token program id (`TokenkegQdZ1…`) while the real one is `TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA` — which is why an early run reported 0 token matches while 731 real `Tokenkeg` instructions sat in six blocks. The classifier now self-checks against hand-built fixtures (`--selftest`, 8/8) before it reports a number, and refuses to report at all on a zero-transaction sample.
+
 ## Shape
 
 ```bash
@@ -233,3 +252,4 @@ The single pre-fix pass is the false-positive guard (`held open for READING is s
 1. A **third** independent adversarial review of the signing path after the review-#2 fixes land (`src/signer.js`, `src/daemon.js`, `src/keystore.js`, `src/grantfile.js`, `src/ledger.js`), before pointing it at a key with funds: two reviews have run (2026-10-27 hardening diff, 2026-10-29 signing path) and all 12 findings are fixed and regression-tested, but neither was a professional audit and the fixes themselves have not been independently reviewed.
 2. Expand supported instructions only when the fee and authority effects can be bounded; refuse anything undecidable, rather than widening policy to pass tests.
 3. Migrate own key-loading sites that fit the reviewed envelope as user zero; then run the 30-day restart/over-limit/refusal test. **The one remaining own site (`openreceipts`) was measured on 2026-10-28** — it does not fit the v0 message domain (canonical JSON receipts vs. legacy System transfer wires), though the key itself is adoptable after conversion. No own legacy site remains to migrate: user zero must now come from an envelope that can express the work (a message-grant for receipt signing, or v1 SPL-Token for real Solana transfers), or from an outside adopter. No outside users yet.
+4. **The SPL-Token option is now measured and rejected as the main path** (2026-10-30, `tools/envelope-traffic.mjs`): a v1 SPL-Token envelope would cover ~3 of 13,390 sampled mainnet transactions (0.02%), because real token transfers are wrapped in DEX programs, compute-budget instructions or address tables rather than being bare single-instruction transfers. The message-grant envelope (signing a receipt/attestation rather than a transaction shape) is the direction this evidence points at — it is the domain of the one measured own site. This is a scope decision, not a safety claim: no envelope has been reviewed for it yet.
