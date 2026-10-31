@@ -99,6 +99,21 @@ The artifact is an ordinary `openreceipts/v1` document — `{receipt, pubkey,
 sig}` — so `python3 receipt.py verify receipt.json` and `node verify.mjs
 receipt.json` accept it unchanged.
 
+**The receipt-producing flow exists on both ends now** (2026-10-31):
+`receipt.py sign --via-signerd <socket> --grant <name>` builds the body,
+sends it to the daemon and — before writing any file — verifies the signature
+it got back against its own body and against a locally pinned public key.
+That client path needs **no key material at all**: no `OPENRECEIPTS_HOME` is
+created, no `.key` file is read or written. Refusals from the daemon
+(`window_cap`, `replay`, `type`, `subject`, …) exit non-zero and write
+nothing. Checked end to end in `test/via-signerd-consumer.test.js` (7 tests:
+empty client home, verify-before-write with a lying daemon, pinned-key
+mismatch, restart + replay, overdraw, off-scope type/subject, unreachable
+socket — all **red on the pre-client tree** and green after) and live against
+the real issuer key (`research/consumer-live-2026-10-31/`: site key == pinned
+key, both verifiers accept, overdraw and cross-restart replay refused, no
+client key file ever created).
+
 **Measured, not claimed** (`test/message-e2e.test.js`, live daemon, real
 socket):
 
@@ -356,5 +371,5 @@ The single pre-fix pass is the false-positive guard (`held open for READING is s
 
 0. A **third** independent adversarial review of the signing path after the review-#2 fixes land (`src/signer.js`, `src/daemon.js`, `src/keystore.js`, `src/grantfile.js`, `src/ledger.js`), before pointing it at a key with funds: two reviews have run (2026-10-27 hardening diff, 2026-10-29 signing path) and all 12 findings are fixed and regression-tested, but neither was a professional audit and the fixes themselves have not been independently reviewed.
 1. Expand supported instructions only when the fee and authority effects can be bounded; refuse anything undecidable, rather than widening policy to pass tests.
-2. Migrate own key-loading sites that fit the reviewed envelope as user zero; then run the 30-day restart/over-limit/refusal test. **The one remaining own site (`openreceipts`) was measured on 2026-10-28** — it does not fit the v0 message domain (canonical JSON receipts vs. legacy System transfer wires), though the key itself is adoptable after conversion. No own legacy site remains to migrate: user zero must now come from an envelope that can express the work (a message-grant for receipt signing, or v1 SPL-Token for real Solana transfers), or from an outside adopter. No outside users yet. **2026-10-31: the message-grant envelope exists and a live daemon signs receipts that both openreceipts verifiers accept** (`test/message-e2e.test.js`); what is still open is the adversarial review of that envelope and wiring an actual receipt-producing flow through the socket.
+2. Migrate own key-loading sites that fit the reviewed envelope as user zero; then run the 30-day restart/over-limit/refusal test. **The one remaining own site (`openreceipts`) was measured on 2026-10-28** — it does not fit the v0 message domain (canonical JSON receipts vs. legacy System transfer wires), though the key itself is adoptable after conversion. No own legacy site remains to migrate: user zero must now come from an envelope that can express the work (a message-grant for receipt signing, or v1 SPL-Token for real Solana transfers), or from an outside adopter. No outside users yet. **2026-10-31: the message-grant envelope exists, a live daemon signs receipts that both openreceipts verifiers accept (`test/message-e2e.test.js`), and the receipt-producing flow is wired end to end: `receipt.py sign --via-signerd` runs the real client with zero key material (`test/via-signerd-consumer.test.js`, 7 tests; live run `research/consumer-live-2026-10-31/`).** What is still open: the adversarial review of the message envelope, and the 30-day test itself (started 2026-10-31 with restart + overdraw + replay checks, to be run daily).
 3. **The SPL-Token option is now measured and rejected as the main path** (2026-10-30, `tools/envelope-traffic.mjs`): a v1 SPL-Token envelope would cover ~3 of 13,390 sampled mainnet transactions (0.02%), because real token transfers are wrapped in DEX programs, compute-budget instructions or address tables rather than being bare single-instruction transfers. The message-grant envelope (signing a receipt/attestation rather than a transaction shape) is the direction this evidence points at — it is the domain of the one measured own site. This is a scope decision, not a safety claim: no envelope has been reviewed for it yet.
