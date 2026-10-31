@@ -3,6 +3,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { readUnderLease } = require('./lease');
+const { verifySealMac, parseSeal } = require('./grantseal');
 
 const REQUIRED_FIELDS = [
   'signer', 'destination', 'maxLamports', 'expiresAt',
@@ -65,7 +66,12 @@ function validateGrant(name, grant) {
  * Returns a null-prototype map so `hasOwnProperty`-style lookups on request
  * data can never resolve through Object.prototype, plus the sorted names.
  */
-function loadGrantFile(file) {
+function loadGrantFile(file, options = {}) {
+  // options.sealKeyFor: (salt) => key buffer. Provided by the daemon when the
+  // operator passed --grant-seal-passphrase-file; then the document MUST
+  // carry a valid HMAC seal. Absent: legacy behaviour, unsealed files load.
+  const sealKeyFor = typeof (options && options.sealKeyFor) === 'function'
+    ? options.sealKeyFor : null;
   const resolved = path.resolve(file);
   // The grant file is re-read on EVERY request (revocation must take effect
   // immediately), so its path has to stay trustworthy for the whole process
@@ -126,6 +132,19 @@ function loadGrantFile(file) {
   if (doc === null || typeof doc !== 'object' || doc.version !== 1 ||
       typeof doc.grants !== 'object' || doc.grants === null || Array.isArray(doc.grants)) {
     throw fail('grant_file_invalid');
+  }
+  // R5-2 (probe p2): a lease proves nobody holds the file open for writing
+  // AT THE INSTANT OF THE READ; it cannot say where the bytes came from. When
+  // the operator runs the daemon with a seal passphrase, the document MUST
+  // carry a valid HMAC under that passphrase - forged grants left behind
+  // before a chmod are refused even though owner, mode, directory and lease
+  // all look clean. Unsealed, mismatching and shape-broken documents all
+  // fail CLOSED with distinct reasons.
+  if (sealKeyFor !== null) {
+    const parsed = parseSeal(doc);
+    if (!parsed.ok) throw fail(parsed.reason);
+    const verdict = verifySealMac(doc, sealKeyFor(parsed.salt));
+    if (!verdict.ok) throw fail(verdict.reason);
   }
   const entries = Object.getOwnPropertyNames(doc.grants);
   if (entries.length > MAX_GRANTS) throw fail('grant_file_invalid', 'too many grants');

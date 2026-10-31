@@ -68,10 +68,15 @@ function pidAlive(pid) {
  * policy -> ledger -> sign -> verify chain, and a refusal is returned as
  * structured data so a caller can learn why instead of working around it.
  *
+ * `grantSealPassphrase` (optional) turns ON sealed-grant mode: every load and
+ * reload of the grant file must verify the document's HMAC seal against a key
+ * derived from that passphrase (R5-2). Without it the daemon accepts unsealed
+ * grant files exactly as before.
+ *
  * This is an early prototype, NOT a reviewed wallet or a production daemon.
  */
 class Daemon {
-  constructor({ socketPath, keystorePath, grantFile, passphrase, ledgerFile, keypair }) {
+  constructor({ socketPath, keystorePath, grantFile, passphrase, ledgerFile, keypair, grantSealPassphrase }) {
     if (typeof socketPath !== 'string' || socketPath.length === 0) throw fail('socket_path_required');
     if (path.resolve(socketPath).length > 100) throw fail('socket_path_too_long');
     this.socketPath = socketPath;
@@ -87,6 +92,11 @@ class Daemon {
     this.grants = Object.create(null);
     this.grantNames = [];
     this.grantFile = grantFile;
+    // Sealed-grant mode: key derivation from the seal passphrase, cached per
+    // salt (grantfile re-reads the document on every request).
+    this.sealKeyFor = typeof grantSealPassphrase === 'string' && grantSealPassphrase.length > 0
+      ? require('./grantseal').makeSealKeyProvider(grantSealPassphrase)
+      : null;
     this.ledger = null;
     this.server = null;
     this.started = false;
@@ -126,7 +136,8 @@ class Daemon {
    * daemon refuses every request until it is valid again - never the reverse.
    */
   #reloadGrants() {
-    const loaded = loadGrantFile(this.grantFile);
+    const loaded = loadGrantFile(this.grantFile,
+      this.sealKeyFor === null ? {} : { sealKeyFor: this.sealKeyFor });
     for (const name of loaded.names) {
       // A grant that this daemon's key cannot satisfy would be refused on every
       // request anyway; make it an explicit refusal at load/reload time too.
