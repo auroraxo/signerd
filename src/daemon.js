@@ -7,9 +7,15 @@ const path = require('node:path');
 const { Ledger } = require('./ledger');
 const { loadGrantFile } = require('./grantfile');
 const { signApproved } = require('./signer');
+const { signMessageApproved } = require('./signer-message');
 const { classifySocketPath } = require('./socketprobe');
 
-const MAX_REQUEST_BYTES = 4096;
+// The request frame cap bounds memory per connection. It must leave room for
+// a message body (<= 4096 chars) embedded as an escaped JSON string: worst
+// case every character escapes to two (\"), so 4096*2 + envelope (~90) =
+// 8282 < 8704. Transaction wires stay far below this (wire <= 1232 bytes ->
+// ~1644 base64 chars).
+const MAX_REQUEST_BYTES = 8704;
 const REQUEST_TIMEOUT_MS = 10_000;
 // Grant names are request data: never resolve them through Object.prototype.
 const NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
@@ -32,9 +38,30 @@ function decodeRequest(raw) {
   }
   if (doc === null || typeof doc !== 'object' || Array.isArray(doc)) throw fail('request_invalid');
   const grantName = Object.getOwnPropertyDescriptor(doc, 'grant');
-  const wireField = Object.getOwnPropertyDescriptor(doc, 'wire');
   if (!grantName || !('value' in grantName) || typeof grantName.value !== 'string') {
     throw fail('request_invalid');
+  }
+  const wireField = Object.getOwnPropertyDescriptor(doc, 'wire');
+  const bodyField = Object.getOwnPropertyDescriptor(doc, 'body');
+  // A request carries EITHER a transaction wire (base64) OR a message body
+  // (a JSON text). Both at once is a malformed request, never "both paths".
+  if (wireField && bodyField) throw fail('request_invalid');
+  if (bodyField) {
+    // The message-grant envelope: `body` is a JSON TEXT the client wants
+    // signed as an openreceipts/v1 receipt. The daemon parses it, and the
+    // canonical bytes signed are derived from the parsed value - so two
+    // textual spellings of the same object are one message.
+    if (!('value' in bodyField) || typeof bodyField.value !== 'string' ||
+        bodyField.value.length === 0 || bodyField.value.length > 4096) {
+      throw fail('request_invalid');
+    }
+    let body;
+    try {
+      body = JSON.parse(bodyField.value);
+    } catch {
+      throw fail('body_invalid');
+    }
+    return { grantName: grantName.value, body };
   }
   if (!wireField || !('value' in wireField)) throw fail('request_invalid');
   // The wire is a BASE64 STRING. Buffer.from(array, 'base64') silently
@@ -151,9 +178,19 @@ class Daemon {
     const loaded = loadGrantFile(this.grantFile,
       this.sealKeyFor === null ? {} : { sealKeyFor: this.sealKeyFor });
     for (const name of loaded.names) {
+      const grant = loaded.grants[name];
       // A grant that this daemon's key cannot satisfy would be refused on every
       // request anyway; make it an explicit refusal at load/reload time too.
-      if (loaded.grants[name].signer !== this.keypair.publicKey.toBase58()) {
+      // Message grants pin the key as base64 `pubkey` (the openreceipts
+      // encoding); transaction grants as base58 `signer`.
+      const kindField = Object.getOwnPropertyDescriptor(grant, 'kind');
+      const isMessage = kindField !== undefined && kindField.value === 'message';
+      if (isMessage) {
+        const { messagePublicKey } = require('./signer-message');
+        if (grant.pubkey !== messagePublicKey(this.keypair)) {
+          throw fail('grant_key_mismatch', name);
+        }
+      } else if (grant.signer !== this.keypair.publicKey.toBase58()) {
         throw fail('grant_signer_mismatch', name);
       }
     }
@@ -181,14 +218,35 @@ class Daemon {
     } catch (err) {
       return { ok: false, error: err.code || 'request_invalid' };
     }
-    const { grantName, wire } = parsed;
+    const { grantName } = parsed;
     if (!NAME.test(grantName)) return { ok: false, error: 'grant_not_found' };
     if (!Object.prototype.hasOwnProperty.call(this.grants, grantName)) {
       return { ok: false, error: 'grant_not_found' };
     }
     const grant = this.grants[grantName];
+    // Grant kind and request shape must agree: a message body on a
+    // transaction grant (or a wire on a message grant) is a refusal, never
+    // an accidental cross-envelope approval.
+    if (parsed.body !== undefined) {
+      if (grant.kind !== 'message') return { ok: false, error: 'grant_kind_mismatch' };
+      const verdict = signMessageApproved({
+        body: parsed.body, grant, ledger: this.ledger, keypair: this.keypair, now: new Date(),
+      });
+      if (!verdict.allowed) return { ok: false, error: verdict.refused, detail: verdict };
+      return {
+        ok: true,
+        kind: 'message',
+        signature: verdict.signature,
+        pubkey: verdict.pubkey,
+        messageSha256: verdict.messageSha256,
+        seq: verdict.seq,
+        windowMessages: verdict.windowMessages,
+        windowRemainingMessages: verdict.windowRemainingMessages,
+      };
+    }
+    if (grant.kind === 'message') return { ok: false, error: 'grant_kind_mismatch' };
     const verdict = signApproved({
-      wire, grant, ledger: this.ledger, keypair: this.keypair, now: new Date(),
+      wire: parsed.wire, grant, ledger: this.ledger, keypair: this.keypair, now: new Date(),
     });
     if (!verdict.allowed) return { ok: false, error: verdict.refused, detail: verdict };
     return {
@@ -532,13 +590,18 @@ class Daemon {
 }
 
 /** Client: connect, send one request, read one response. */
-function request({ socketPath, grant, wire, timeoutMs = REQUEST_TIMEOUT_MS }) {
+function request({ socketPath, grant, wire, body, timeoutMs = REQUEST_TIMEOUT_MS }) {
   return new Promise((resolve, reject) => {
     const socket = net.connect(socketPath);
     let buffer = Buffer.alloc(0);
     const timer = setTimeout(() => { socket.destroy(); reject(new Error('request_timeout')); }, timeoutMs);
     socket.on('connect', () => {
-      socket.write(JSON.stringify({ grant, wire: Buffer.from(wire).toString('base64') }) + '\n');
+      // Exactly one payload per request: a transaction wire (base64) or a
+      // message body (JSON text) - never both.
+      const payload = body !== undefined
+        ? { grant, body }
+        : { grant, wire: Buffer.from(wire).toString('base64') };
+      socket.write(JSON.stringify(payload) + '\n');
     });
     socket.on('data', (chunk) => {
       buffer = Buffer.concat([buffer, chunk]);

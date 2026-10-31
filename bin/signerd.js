@@ -15,6 +15,10 @@ Usage:
             [--grant-seal-passphrase-file <file>]
             [--journal-seal-passphrase-file <file>]
   signerd sign --socket <file> --grant <name> --tx <wire-file> [--out <file>]
+  signerd sign-message --socket <file> --grant <name> --body <json-file> [--out <file>]
+            ask the daemon to sign an openreceipts/v1 receipt BODY (the
+            message-grant envelope): the daemon canonicalizes, checks the
+            grant and writes {receipt..., pubkey, sig} with the DAEMON's key
   signerd status --grants <file> --ledger <file>
             [--grant-seal-passphrase-file <file>]
             [--journal-seal-passphrase-file <file>]
@@ -135,6 +139,39 @@ async function main() {
     if (response.ok && typeof args.out === 'string') {
       fs.writeFileSync(args.out, Buffer.from(response.signed, 'base64'), { mode: 0o600 });
       delete response.signed;
+    }
+    process.stdout.write(JSON.stringify(response) + '\n');
+    process.exit(response.ok ? 0 : 1);
+  }
+
+  if (command === 'sign-message') {
+    const { request } = require('../src/daemon');
+    const socketPath = requireArg(args, 'socket');
+    const grant = requireArg(args, 'grant');
+    const bodyText = fs.readFileSync(requireArg(args, 'body'), 'utf8');
+    // Shape check BEFORE the round trip: the body must be a JSON object (a
+    // bare number or string would only fail at the policy layer).
+    try {
+      const parsed = JSON.parse(bodyText);
+      if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        process.stderr.write('body_invalid: expected a JSON object\n');
+        process.exit(2);
+      }
+    } catch {
+      process.stderr.write('body_invalid: not JSON\n');
+      process.exit(2);
+    }
+    const response = await request({ socketPath, grant, body: bodyText });
+    if (response.ok && typeof args.out === 'string') {
+      // The receipt file, openreceipts-shaped: the body the daemon signed
+      // (re-serialized with sorted keys, indent 2 - formatting is not
+      // payload), plus pubkey and sig, exactly what `receipt.py verify` and
+      // verify.mjs read.
+      const bodyObj = JSON.parse(bodyText);
+      const ordered = {};
+      for (const key of Object.keys(bodyObj).sort()) ordered[key] = bodyObj[key];
+      const doc = { receipt: ordered, pubkey: response.pubkey, sig: response.signature };
+      fs.writeFileSync(args.out, JSON.stringify(doc, null, 2) + '\n', { mode: 0o600 });
     }
     process.stdout.write(JSON.stringify(response) + '\n');
     process.exit(response.ok ? 0 : 1);

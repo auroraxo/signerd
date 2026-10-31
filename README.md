@@ -57,6 +57,87 @@ Limits of this measurement: classification is structural (the shape fits), not a
 
 Four defects in the measuring tool were found and fixed by measurement, each of which had produced a clean-looking but false result: `--blocks=25` was sliced to `'=25'` → `NaN`, so the sampling loop never ran and the tool reported "0 transactions" as if it were a finding; `getBlock` with `maxSupportedTransactionVersion: 0` now fails for *every* slot because mainnet serves version 1; `getBlock` returns `{transaction, meta}` wrappers, so classifying them directly marked everything malformed; and the file carried a fabricated SPL Token program id (`TokenkegQdZ1…`) while the real one is `TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA` — which is why an early run reported 0 token matches while 731 real `Tokenkeg` instructions sat in six blocks. The classifier now self-checks against hand-built fixtures (`--selftest`, 8/8) before it reports a number, and refuses to report at all on a zero-transaction sample.
 
+### The message-grant envelope (built and measured 2026-10-31)
+
+The traffic measurement above points at a different job than "sign this
+transaction": signing a **message** — a receipt, an attestation, a quote. That
+envelope now exists, next to the transaction envelope, in the same daemon.
+
+A message grant is a different schema, on purpose: it speaks about a receipt
+domain, not about a money destination, so the field sets are disjoint and a
+grant that mixes them is refused rather than sorted out at request time.
+
+```json
+{
+  "kind": "message",
+  "issuer": "auroraxo",
+  "type": "release",
+  "subject": "auroraxo/signerd",
+  "pubkey": "<base64 Ed25519 public key the daemon must hold>",
+  "maxBytes": "700",
+  "expiresAt": "2026-11-01T00:00:00.000Z",
+  "windowMaxMessages": "5",
+  "windowSeconds": "3600",
+  "claimKeys": "version,build"
+}
+```
+
+The grant authorizes exactly one thing: *the key this daemon holds may sign an
+`openreceipts/v1` receipt body for this issuer, this type and this subject,
+whose canonical bytes are at most `maxBytes` long, at most
+`windowMaxMessages` times per `windowSeconds`, until `expiresAt`.* Everything
+else in the body is either pinned by the grant (issuer, type, subject, the
+issuer's public key) or bounded (claims, note, issued_at). `claimKeys` is
+optional; when present it is the allowlist of claim keys that may be signed.
+
+```bash
+signerd sign-message --socket ~/.local/share/signerd/signerd.sock \
+            --grant releases-24h --body receipt-body.json --out receipt.json
+```
+
+The artifact is an ordinary `openreceipts/v1` document — `{receipt, pubkey,
+sig}` — so `python3 receipt.py verify receipt.json` and `node verify.mjs
+receipt.json` accept it unchanged.
+
+**Measured, not claimed** (`test/message-e2e.test.js`, live daemon, real
+socket):
+
+- a receipt signed by the daemon verifies under **both** openreceipts
+  verifiers — the Python CLI and the zero-dependency Node verifier — against
+  the pinned issuer key, with the canonical bytes produced by signerd's own
+  canonicalizer;
+- the daemon canonicalizes: a body whose *textual* key order differs from the
+  canonical order yields the same signature target, and the signed bytes
+  verify under OpenSSL ed25519 with the imported key;
+- **the two envelopes cannot borrow each other**: a receipt on a transaction
+  grant and a transaction wire on a message grant are both refused with
+  `grant_kind_mismatch`, never signed;
+- the window counts **messages**, not lamports (a receipt costs nothing on
+  chain): at `windowMaxMessages: 2` the third distinct receipt is refused with
+  `window_cap` and `windowRemainingMessages: 0`; the same receipt body again
+  is refused with `replay` — one signature per distinct receipt, ever;
+- expiry takes effect on the next request without a restart (the grant file
+  is re-read per request);
+- a grant that pins **another** public key poisons the whole file: the daemon
+  refuses to start, and a running daemon refuses every request (including the
+  healthy grant next to it) — fail-closed, not fail-open;
+- cost: **p50 31.4 ms, p95 63.4 ms** per signed receipt (n=50, fsync-dominated;
+  the transaction path's measured roundtrip was 31.0 ms).
+
+**Falsification ladder**: all 15 new tests (11 policy + 4 e2e) are **red on
+the pre-envelope tree** (`c1b1c09`): the policy module does not exist there,
+and the daemon refuses to even load a grant file that carries a `kind` field
+(`grant_unknown_field`). On the fix tree they are green. The transaction
+path is untouched: the suite went from 140 to 155 with 0 failures, and both
+crash-harness modes (sealed and unsealed) stay green.
+
+**What this does not do**: it does not check that a receipt is *true*. A
+signed receipt says "the issuer said this", never "this happened". The grant
+bounds who may speak for the issuer and about what — not the truth. The
+message-grant envelope has had **no independent adversarial review** (the
+transaction path has had six rounds); this is a scope decision, not a safety
+claim.
+
 ## Shape
 
 ```bash
@@ -143,7 +224,7 @@ The v0 daemon still only speaks the narrow legacy System-transfer envelope of `s
 
 Checked on 2026-10-24/26, re-measured on 2026-10-28 with `tools/key-load-sites.mjs` (output in `research/key-load-sites-2026-10-28.json`): the earlier "21 files across six of my own repositories" was wrong — it counted checkouts sitting in my working directory as if they were repositories I control. Of 85 key-load files across 51 local checkouts, 72 are in third-party clones with no write access, 4 in my fork of `orca-so/whirlpools`, and 9 in the two repos I author: 8 in signerd itself (keystore, signer, tests — this is where the key is supposed to be) and 1 in `openreceipts` (Ed25519 receipt signing, not a Solana transaction path). "Migrate my 21 key-load sites" was therefore never a real backlog.
 
-**Envelope fit of that one remaining site, measured 2026-10-28/29** (`tools/envelope-fit.mjs`, output in `research/envelope-fit-openreceipts-2026-10-28.json`, offline proof in `test/envelope-fit.test.js` + `test/envelope-fit-tool.test.js`): the note had guessed "probably not, Ed25519 instead of Solana-Tx". The verdict holds, the reason does not — both are Ed25519. The PKCS8 seed in `~/.openreceipts/auroraxo.key` derives the same public key under both OpenSSL and web3.js, `signerd import` accepts that key after a mechanical PEM→raw conversion, and the **published identity is measured, not assumed**: the site-derived key equals the pinned issuer key (`openreceipts/keys/auroraxo.pub`, byte-for-byte) and verifies all 6 published receipts under their canonical `json.dumps(sort_keys=True, separators=(",", ":"), ensure_ascii=True)` bytes — the JS canonicalizer in `src/receipt-identity.js` is hash-identical to Python's on all 6 receipts, and a receipt signed by a different key, a flipped byte, or a mismatched pinned key makes the tool report FAILED rather than pass (the harness asserts that refusal). What does not fit is the **message domain**: openreceipts signs canonical JSON receipts, the v0 envelope signs a legacy System transfer wire, so `policy.evaluate` refuses a receipt body (`invalid_wire`) and should. The refusal is not a tooling gap — importing the key without a message-grant envelope would move a key the daemon cannot use, so no migration is built. Unchanged: `sendaifun/solana-agent-kit` documents a raw private key as its setup path; a keyword scan of 1,123 live Solana-ecosystem repositories found no local scoped-signing daemon (a scan, not a semantic census); this remains a hypothesis with zero outside users.
+**Envelope fit of that one remaining site, measured 2026-10-28/29** (`tools/envelope-fit.mjs`, output in `research/envelope-fit-openreceipts-2026-10-28.json`, offline proof in `test/envelope-fit.test.js` + `test/envelope-fit-tool.test.js`): the note had guessed "probably not, Ed25519 instead of Solana-Tx". The verdict holds, the reason does not — both are Ed25519. The PKCS8 seed in `~/.openreceipts/auroraxo.key` derives the same public key under both OpenSSL and web3.js, `signerd import` accepts that key after a mechanical PEM→raw conversion, and the **published identity is measured, not assumed**: the site-derived key equals the pinned issuer key (`openreceipts/keys/auroraxo.pub`, byte-for-byte) and verifies all 6 published receipts under their canonical `json.dumps(sort_keys=True, separators=(",", ":"), ensure_ascii=True)` bytes — the JS canonicalizer in `src/receipt-identity.js` is hash-identical to Python's on all 6 receipts, and a receipt signed by a different key, a flipped byte, or a mismatched pinned key makes the tool report FAILED rather than pass (the harness asserts that refusal). What does not fit is the **message domain**: openreceipts signs canonical JSON receipts, the v0 envelope signs a legacy System transfer wire, so `policy.evaluate` refuses a receipt body (`invalid_wire`) and should. The refusal is not a tooling gap — importing the key without a message-grant envelope would move a key the daemon cannot use, so no migration was built **until the message-grant envelope landed (2026-10-31, see "The message-grant envelope" above): the daemon now signs these bodies, and the refusal of the old envelope stays correct.** Unchanged: `sendaifun/solana-agent-kit` documents a raw private key as its setup path; a keyword scan of 1,123 live Solana-ecosystem repositories found no local scoped-signing daemon (a scan, not a semantic census); this remains a hypothesis with zero outside users.
 
 ## First executable increment (policy only, not a signer)
 
@@ -275,5 +356,5 @@ The single pre-fix pass is the false-positive guard (`held open for READING is s
 
 0. A **third** independent adversarial review of the signing path after the review-#2 fixes land (`src/signer.js`, `src/daemon.js`, `src/keystore.js`, `src/grantfile.js`, `src/ledger.js`), before pointing it at a key with funds: two reviews have run (2026-10-27 hardening diff, 2026-10-29 signing path) and all 12 findings are fixed and regression-tested, but neither was a professional audit and the fixes themselves have not been independently reviewed.
 1. Expand supported instructions only when the fee and authority effects can be bounded; refuse anything undecidable, rather than widening policy to pass tests.
-2. Migrate own key-loading sites that fit the reviewed envelope as user zero; then run the 30-day restart/over-limit/refusal test. **The one remaining own site (`openreceipts`) was measured on 2026-10-28** — it does not fit the v0 message domain (canonical JSON receipts vs. legacy System transfer wires), though the key itself is adoptable after conversion. No own legacy site remains to migrate: user zero must now come from an envelope that can express the work (a message-grant for receipt signing, or v1 SPL-Token for real Solana transfers), or from an outside adopter. No outside users yet.
+2. Migrate own key-loading sites that fit the reviewed envelope as user zero; then run the 30-day restart/over-limit/refusal test. **The one remaining own site (`openreceipts`) was measured on 2026-10-28** — it does not fit the v0 message domain (canonical JSON receipts vs. legacy System transfer wires), though the key itself is adoptable after conversion. No own legacy site remains to migrate: user zero must now come from an envelope that can express the work (a message-grant for receipt signing, or v1 SPL-Token for real Solana transfers), or from an outside adopter. No outside users yet. **2026-10-31: the message-grant envelope exists and a live daemon signs receipts that both openreceipts verifiers accept** (`test/message-e2e.test.js`); what is still open is the adversarial review of that envelope and wiring an actual receipt-producing flow through the socket.
 3. **The SPL-Token option is now measured and rejected as the main path** (2026-10-30, `tools/envelope-traffic.mjs`): a v1 SPL-Token envelope would cover ~3 of 13,390 sampled mainnet transactions (0.02%), because real token transfers are wrapped in DEX programs, compute-budget instructions or address tables rather than being bare single-instruction transfers. The message-grant envelope (signing a receipt/attestation rather than a transaction shape) is the direction this evidence points at — it is the domain of the one measured own site. This is a scope decision, not a safety claim: no envelope has been reviewed for it yet.

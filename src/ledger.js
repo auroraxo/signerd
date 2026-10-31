@@ -126,6 +126,53 @@ function scopeKey(grant) {
   return `${signer}\u0000${destination}`;
 }
 
+// The message-grant scope key (2026-10-31). A message grant speaks about a
+// receipt domain, not about a money destination, so it gets its OWN scope:
+// "msg\0issuer\0type\0subject".
+//
+// The prefix plus the fixed part count makes the two scope spaces disjoint: a
+// transaction scope always has exactly two NUL-separated parts, a message
+// scope always has four. No transaction record can ever carry a message
+// scope, so the two window budgets can never be charged against each other.
+const MESSAGE_SCOPE_PREFIX = 'msg';
+
+function messageScopeKey(grant) {
+  const issuerField = ownField(grant, 'issuer');
+  const typeField = ownField(grant, 'type');
+  const subjectField = ownField(grant, 'subject');
+  if (!issuerField.ok || !typeField.ok || !subjectField.ok) return null;
+  const issuer = issuerField.value;
+  const type = typeField.value;
+  const subject = subjectField.value;
+  if (typeof issuer !== 'string' || typeof type !== 'string' ||
+      typeof subject !== 'string') return null;
+  if (issuer.length === 0 || type.length === 0 || subject.length === 0) return null;
+  return `${MESSAGE_SCOPE_PREFIX}\u0000${issuer}\u0000${type}\u0000${subject}`;
+}
+
+// The replay identity of a MESSAGE is domain-separated from the replay
+// identity of a transaction. Without the separator a receipt's canonical
+// bytes could in principle collide with a transaction message image (both
+// are sha256 digests of bytes), and the message grant would then refuse a
+// transaction or vice versa. The prefix is part of the recorded identity, so
+// the two spaces cannot meet.
+const MESSAGE_DOMAIN = Buffer.from('signerd/message/v1\u0000', 'utf8');
+
+// The message window counts MESSAGES, not lamports: a receipt costs nothing
+// on chain, so a lamport budget would never engage. The cap is a count of
+// signed receipts per scope per window.
+function parseMessageWindow(grant) {
+  const maxField = ownField(grant, 'windowMaxMessages');
+  const secondsField = ownField(grant, 'windowSeconds');
+  if (!maxField.ok || !secondsField.ok) return null;
+  const max = parseU64(maxField.value);
+  const seconds = typeof secondsField.value === 'string' &&
+    /^(0|[1-9][0-9]*)$/.test(secondsField.value) ? Number(secondsField.value) : null;
+  if (max === null || seconds === null || !Number.isSafeInteger(seconds) || seconds <= 0) return null;
+  if (max > BigInt(Number.MAX_SAFE_INTEGER)) return null;
+  return { max: Number(max), seconds };
+}
+
 // Each record carries the sha256 of its own fields plus the previous
 // record's chain hash, so the journal is self-verifying: an in-place edit
 // (even a same-size one, e.g. "a":"42" -> "a":"12") breaks the chain at load
@@ -833,6 +880,101 @@ class Ledger {
   }
 
   /**
+   * Decide whether an already policy-verified receipt MESSAGE may consume
+   * budget. Callers must have a positive verdict from evaluateMessage() first.
+   *
+   * Same durability contract as approve(): the record is fsynced (and, in
+   * sealed mode, anchored) BEFORE the caller is told it may sign. One journal,
+   * one chain, one lock — message records ride the existing format with
+   * a=0/f=0 (no lamports move on chain) and a four-part message scope, so no
+   * journal format change and no second file to keep consistent.
+   */
+  approveMessage({ messageBytes, grant, now = new Date() }) {
+    if (this.poisoned) return refused('ledger_inconsistent');
+    if ((!Buffer.isBuffer(messageBytes) && !(messageBytes instanceof Uint8Array)) ||
+        messageBytes.length === 0) {
+      return refused('invalid_message');
+    }
+    const window = parseMessageWindow(grant);
+    if (window === null) return refused('invalid_grant_window');
+    const scope = messageScopeKey(grant);
+    if (scope === null) return refused('invalid_grant');
+    const expiry = expiryMs(grant);
+    if (!Number.isFinite(expiry)) return refused('invalid_grant');
+    const nowMs = readClock(now);
+    if (!Number.isFinite(nowMs)) return refused('invalid_clock');
+    if (nowMs >= expiry) return refused('expired');
+
+    // Domain-separated replay identity (MESSAGE_DOMAIN): one signature per
+    // distinct receipt body, ever, and never colliding with a transaction's
+    // message-image hashes in the shared replay sets.
+    const identity = crypto.createHash('sha256')
+      .update(MESSAGE_DOMAIN).update(messageBytes).digest('hex');
+    if (this.messageHashes.has(identity)) return refused('replay');
+    if (this.fingerprints.has(identity)) return refused('replay');
+
+    // The message window is a COUNT of signed messages in the scope inside
+    // (now - windowSeconds, now], future-dated records included (a backwards
+    // clock must not shrink what was already signed).
+    const windowMs = window.seconds * 1000;
+    const cutoff = Number.isSafeInteger(windowMs) ? nowMs - windowMs : -Infinity;
+    let signed = 0;
+    for (const record of this.records) {
+      if (record.k === scope && record.t > cutoff) signed += 1;
+    }
+    if (signed + 1 > window.max) {
+      return refused('window_cap', {
+        windowMessages: String(signed),
+        windowRemainingMessages: String(Math.max(0, window.max - signed)),
+      });
+    }
+
+    const recordBody = {
+      v: this.macKey ? SEALED_JOURNAL_FORMAT : JOURNAL_FORMAT,
+      s: this.seq + 1,
+      t: nowMs,
+      w: identity,
+      m: identity,
+      a: '0',
+      f: '0',
+      k: scope,
+    };
+    const record = { ...recordBody, h: chainHash(this.lastHash, recordBody) };
+    if (this.macKey) {
+      record.x = seal.chainMac(this.macKey, this.xHead, record.h);
+    }
+    const preBytes = this.fileBytes;
+    const preDigest = this.digest;
+    try {
+      this.#appendLine(record);
+    } catch (err) {
+      // Nothing entered in-memory state: the caller saw a refusal, so no
+      // signature may be produced for this message under this ledger.
+      const code = err && typeof err.code === 'string' && err.code.startsWith('ledger_')
+        ? err.code : 'ledger_write_failed';
+      return refused(code);
+    }
+    // Same anchor contract as approve(): the approval implies sealed history
+    // includes it, or the record is rolled back and the caller is refused.
+    if (this.macKey && !this.#advanceAnchor(record, preBytes, preDigest)) {
+      return refused('ledger_anchor_unwritable');
+    }
+    this.records.push(record);
+    this.fingerprints.add(identity);
+    this.messageHashes.add(identity);
+    this.seq = record.s;
+    this.lastHash = record.h;
+    this.xHead = record.x;
+    return {
+      allowed: true,
+      messageIdentity: identity,
+      seq: record.s,
+      windowMessages: String(signed + 1),
+      windowRemainingMessages: String(Math.max(0, window.max - signed - 1)),
+    };
+  }
+
+  /**
    * Move the floor forward after the record is durable. Order matters and is
    * deliberate: record first, anchor second, caller told third. A crash
    * between record and anchor leaves the journal AHEAD of the floor, which
@@ -892,4 +1034,5 @@ module.exports = {
   Ledger, gate, BASE_FEE_LAMPORTS,
   parseJournal, messageImage, assertJournalPath, chainHash, JOURNAL_FORMAT, GENESIS_HASH,
   JOURNAL_LEASE_MAX_BYTES, SEALED_JOURNAL_FORMAT, anchorPath: seal.anchorPath,
+  messageScopeKey, parseMessageWindow, MESSAGE_DOMAIN,
 };

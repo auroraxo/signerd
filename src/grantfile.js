@@ -9,6 +9,16 @@ const REQUIRED_FIELDS = [
   'signer', 'destination', 'maxLamports', 'expiresAt',
   'windowMaxLamports', 'windowSeconds',
 ];
+// Message grants (the message-grant envelope, 2026-10-31): a DIFFERENT
+// schema for a different act. They speak about a receipt domain, not about
+// a Solana destination, so the two field sets are kept disjoint on purpose —
+// a grant that mixes them is a mistake in a security-relevant config file
+// and is refused, not sorted out at request time.
+const MESSAGE_FIELDS = [
+  'kind', 'issuer', 'type', 'subject', 'pubkey', 'maxBytes', 'expiresAt',
+  'windowMaxMessages', 'windowSeconds',
+];
+const MESSAGE_OPTIONAL = ['claimKeys'];
 // Names that could reach Object.prototype if copied naively. The pattern below
 // already excludes them (it must start with an alphanumeric), kept for clarity.
 const RESERVED = new Set(['__proto__', 'constructor', 'prototype']);
@@ -18,6 +28,8 @@ const MAX_GRANTS = 1000;
 const BASE58 = /^[1-9A-HJ-NP-Za-km-z]+$/;
 const U64 = /^(0|[1-9][0-9]*)$/;
 const EXPIRES = /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d{1,3})?Z$/;
+// A 32-byte Ed25519 public key in base64: 43 chars plus one '=' pad.
+const PUBKEY_B64 = /^[A-Za-z0-9+/]{43}=$/;
 
 function fail(reason, detail) {
   const err = new Error(detail === undefined ? reason : `${reason}: ${detail}`);
@@ -38,6 +50,49 @@ function validateGrant(name, grant) {
     throw fail('grant_invalid', name);
   }
   const own = Object.getOwnPropertyNames(grant);
+  const kindField = Object.getOwnPropertyDescriptor(grant, 'kind');
+  const isMessage = kindField !== undefined && ('value' in kindField);
+  if (isMessage) {
+    if (kindField.value !== 'message') throw fail('grant_field_invalid', `${name}.kind`);
+    for (const field of own) {
+      if (!MESSAGE_FIELDS.includes(field) && !MESSAGE_OPTIONAL.includes(field)) {
+        // A tx-only field (destination, maxLamports, ...) inside a message
+        // grant is refused by the same unknown-field rule.
+        throw fail('grant_unknown_field', `${name}.${field}`);
+      }
+    }
+    for (const field of MESSAGE_FIELDS) {
+      const descriptor = Object.getOwnPropertyDescriptor(grant, field);
+      if (descriptor === undefined || !('value' in descriptor) ||
+          typeof descriptor.value !== 'string' || descriptor.value.length === 0) {
+        throw fail('grant_field_invalid', `${name}.${field}`);
+      }
+    }
+    if (!NAME.test(grant.issuer) || !NAME.test(grant.type) ||
+        !/^[A-Za-z0-9][A-Za-z0-9._/-]{0,199}$/.test(grant.subject)) {
+      throw fail('grant_field_invalid', `${name}.scope`);
+    }
+    if (!PUBKEY_B64.test(grant.pubkey) ||
+        Buffer.from(grant.pubkey, 'base64').length !== 32) {
+      throw fail('grant_field_invalid', `${name}.pubkey`);
+    }
+    if (!U64.test(grant.maxBytes) || Number(grant.maxBytes) < 1 ||
+        Number(grant.maxBytes) > 3072 || !U64.test(grant.windowMaxMessages) ||
+        !U64.test(grant.windowSeconds) || grant.windowSeconds === '0' ||
+        !EXPIRES.test(grant.expiresAt)) {
+      throw fail('grant_field_invalid', `${name}.format`);
+    }
+    if (Object.getOwnPropertyDescriptor(grant, 'claimKeys')) {
+      const value = Object.getOwnPropertyDescriptor(grant, 'claimKeys').value;
+      if (typeof value !== 'string') throw fail('grant_field_invalid', `${name}.claimKeys`);
+      for (const key of value.split(',')) {
+        if (key.length === 0 || !NAME.test(key)) {
+          throw fail('grant_field_invalid', `${name}.claimKeys`);
+        }
+      }
+    }
+    return;
+  }
   for (const field of own) {
     if (!REQUIRED_FIELDS.includes(field)) throw fail('grant_unknown_field', `${name}.${field}`);
   }

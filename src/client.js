@@ -46,4 +46,44 @@ async function signViaDaemon({ socketPath, grant, wire, timeoutMs }) {
   return request({ socketPath, grant, wire, timeoutMs });
 }
 
-module.exports = { buildTransferWire, signViaDaemon, SIGNATURE_SLOT_BYTES };
+/**
+ * Build an openreceipts/v1 receipt BODY for the message-grant envelope.
+ *
+ * The body is built from public values only (issuer name, type, subject,
+ * claims, note, issued_at) - no key material is involved, and the daemon
+ * signs the canonical bytes it derives from this object.
+ */
+function buildReceiptBody({ issuer, type, subject, claims = {}, note, issuedAt }) {
+  if (typeof issuer !== 'string' || issuer.length === 0) throw new TypeError('issuer is required');
+  if (typeof type !== 'string' || type.length === 0) throw new TypeError('type is required');
+  if (typeof subject !== 'string' || subject.length === 0) throw new TypeError('subject is required');
+  if (claims === null || typeof claims !== 'object' || Array.isArray(claims)) {
+    throw new TypeError('claims must be an object');
+  }
+  const body = {
+    schema: 'openreceipts/v1',
+    issuer,
+    type,
+    subject,
+    claims: { ...claims },
+  };
+  if (typeof note === 'string') body.note = note;
+  if (typeof issuedAt === 'string') body.issued_at = issuedAt;
+  return body;
+}
+
+/**
+ * Ask the daemon to sign a receipt body (the message-grant envelope).
+ *
+ * The body travels as a JSON TEXT; the daemon parses it and signs the
+ * canonical bytes derived from the parsed value. A refusal is data, not an
+ * exception.
+ */
+async function signMessageViaDaemon({ socketPath, grant, body, timeoutMs }) {
+  return request({ socketPath, grant, body: JSON.stringify(body), timeoutMs });
+}
+
+module.exports = {
+  buildTransferWire, signViaDaemon, SIGNATURE_SLOT_BYTES,
+  buildReceiptBody, signMessageViaDaemon,
+};
