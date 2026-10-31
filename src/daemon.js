@@ -128,6 +128,21 @@ class Daemon {
     this.grantFile = grantFile;
     // Sealed-grant mode: key derivation from the seal passphrase, cached per
     // salt (grantfile re-reads the document on every request).
+    // R6-1 (review #6, p1): an EXPLICITLY requested but empty seal passphrase
+    // must refuse, not silently degrade to unsealed mode. bin/signerd.js
+    // readPassphrase() turns an empty or newline-only passphrase file into '',
+    // and the .length>0 test below would then run the daemon UNSEALED while
+    // the operator believes sealed mode is on - a forged, unsealed grant
+    // document gets signed (measured: p1 e2e, forged destination signed).
+    // `status` and the journal side already refuse the same empty passphrase
+    // (seal_passphrase_required / journal_seal_passphrase_required); the
+    // daemon now refuses identically.
+    if (typeof grantSealPassphrase === 'string' && grantSealPassphrase.length === 0) {
+      throw fail('seal_passphrase_required', 'grant-seal passphrase file is empty');
+    }
+    if (typeof journalSealPassphrase === 'string' && journalSealPassphrase.length === 0) {
+      throw fail('journal_seal_passphrase_required', 'journal-seal passphrase file is empty');
+    }
     this.sealKeyFor = typeof grantSealPassphrase === 'string' && grantSealPassphrase.length > 0
       ? require('./grantseal').makeSealKeyProvider(grantSealPassphrase)
       : null;
@@ -159,9 +174,8 @@ class Daemon {
     // process umask - happens on the first append.
     this.ledger = new Ledger({
       file: ledgerFile,
-      sealPassphrase: typeof journalSealPassphrase === 'string' && journalSealPassphrase.length > 0
-        ? journalSealPassphrase
-        : undefined,
+      sealPassphrase: typeof journalSealPassphrase === 'string' &&
+        journalSealPassphrase.length > 0 ? journalSealPassphrase : undefined,
     });
   }
 

@@ -495,8 +495,15 @@ class Ledger {
       // A missing journal is the normal first start, not an error - unless a
       // seal floor exists that claims history the file no longer holds (p3:
       // delete-or-truncate to empty). That is refused, not "fresh start".
+      // R6-2 (review #6, p2/p3): this must hold for the UNSEALED daemon too.
+      // The no-key downgrade guard used to live only on the success path of
+      // #load(), so deleting the journal file made an unsealed restart start
+      // FRESH with an empty replay set while the floor still claimed history
+      // - the same message was then signed twice (measured: p3 e2e double
+      // sign). Both guards now fire from the same ENOENT branch.
       if (err && err.detail === 'ENOENT') {
         if (this.macKey) this.#checkAnchorOnMissingJournal();
+        else this.#refuseIfSealFloorExists();
         return;
       }
       // Fail closed, with the reason intact, for everything the lease probe

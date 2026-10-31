@@ -70,15 +70,43 @@ function requireArg(args, name) {
   return value;
 }
 
+// R6-6 (review #6, p6): the passphrase path had a mode check on statSync only
+// - no symlink refusal (a symlink here was followed), no owner check, no
+// directory check. Every other security-relevant path in this codebase
+// (keystore, grant file, journal, anchor, socket dir) refuses symlinks and
+// foreign/world-writable locations; the passphrase unlocks those very
+// protections and deserves the same hygiene. Checks run BEFORE the read; a
+// race after them is the same residual window every other path here has.
 function readPassphrase(args, flag = 'passphrase-file') {
   if (typeof args[flag] !== 'string') {
     process.stderr.write(`missing --${flag}\n`);
     process.exit(2);
   }
   const file = requireArg(args, flag);
-  const mode = fs.statSync(file).mode & 0o777;
+  const lstat = fs.lstatSync(file); // a symlink at this path is refused (ELOOP)
+  if (!lstat.isFile()) {
+    process.stderr.write(`${flag} must be a regular file\n`);
+    process.exit(2);
+  }
+  const mode = lstat.mode & 0o777;
   if ((mode & 0o077) !== 0) {
     process.stderr.write(`${flag} must not be group/other accessible (mode ${mode.toString(8)})\n`);
+    process.exit(2);
+  }
+  if (typeof process.getuid === 'function' &&
+      lstat.uid !== process.getuid() && lstat.uid !== 0) {
+    process.stderr.write(`${flag} must be owned by the operator (uid ${lstat.uid})\n`);
+    process.exit(2);
+  }
+  const dirStat = fs.statSync(path.dirname(path.resolve(file)));
+  const dirMode = dirStat.mode & 0o7777;
+  if ((dirMode & 0o022) !== 0 && (dirMode & 0o1000) === 0) {
+    process.stderr.write(`${flag} must not live in a group/other writable directory (mode ${dirMode.toString(8)})\n`);
+    process.exit(2);
+  }
+  if (typeof process.getuid === 'function' &&
+      dirStat.uid !== process.getuid() && dirStat.uid !== 0) {
+    process.stderr.write(`${flag} directory must be owned by the operator (uid ${dirStat.uid})\n`);
     process.exit(2);
   }
   return fs.readFileSync(file, 'utf8').replace(/\r?\n$/, '');
