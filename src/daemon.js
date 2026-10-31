@@ -73,10 +73,17 @@ function pidAlive(pid) {
  * derived from that passphrase (R5-2). Without it the daemon accepts unsealed
  * grant files exactly as before.
  *
+ * `journalSealPassphrase` (optional) turns ON sealed-journal mode: every
+ * journal record carries a keyed chain MAC and a seal floor next to the
+ * journal says how much history this daemon approved (R5-2 journal half).
+ * Without it the daemon accepts unsealed journals exactly as before - but a
+ * journal that HAS a seal floor is then refused, not degraded.
+ *
  * This is an early prototype, NOT a reviewed wallet or a production daemon.
  */
 class Daemon {
-  constructor({ socketPath, keystorePath, grantFile, passphrase, ledgerFile, keypair, grantSealPassphrase }) {
+  constructor({ socketPath, keystorePath, grantFile, passphrase, ledgerFile, keypair,
+    grantSealPassphrase, journalSealPassphrase }) {
     if (typeof socketPath !== 'string' || socketPath.length === 0) throw fail('socket_path_required');
     if (path.resolve(socketPath).length > 100) throw fail('socket_path_too_long');
     this.socketPath = socketPath;
@@ -123,7 +130,12 @@ class Daemon {
     // readable. A blanket chmod before this check would silently adopt a
     // world-writable journal. Creation with an explicit 0600 - never by
     // process umask - happens on the first append.
-    this.ledger = new Ledger({ file: ledgerFile });
+    this.ledger = new Ledger({
+      file: ledgerFile,
+      sealPassphrase: typeof journalSealPassphrase === 'string' && journalSealPassphrase.length > 0
+        ? journalSealPassphrase
+        : undefined,
+    });
   }
 
   /**

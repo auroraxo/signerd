@@ -9,6 +9,12 @@
 //
 // Run standalone: node scripts/crash-consistency.js [rounds]
 
+// Usage: node scripts/crash-consistency.js [rounds] [sealed]
+// With `sealed`, every round runs the child in SEALED mode (passphrase given,
+// anchor written before the verdict is returned) and the journal is reopened
+// WITH the key - the crash window (record durable, anchor not yet) must load
+// and every reported approval must be durable.
+
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -18,13 +24,17 @@ const { spawn } = require('node:child_process');
 const { Ledger } = require('../src/ledger');
 
 const ROUNDS = Number(process.argv[2]) || 25;
+const SEALED = process.argv[3] === 'sealed';
+const SEAL_PASSPHRASE = 'crash-harness-seal-passphrase';
 const CHILD = path.join(__dirname, 'crash-child.js');
 
 function runRound(round) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'signerd-crash-'));
   const journal = path.join(dir, 'journal.jsonl');
   const report = path.join(dir, 'report.jsonl');
-  const child = spawn(process.execPath, [CHILD, journal, report, '100000'], {
+  const args = [CHILD, journal, report, '100000'];
+  if (SEALED) args.push(SEAL_PASSPHRASE);
+  const child = spawn(process.execPath, args, {
     stdio: ['ignore', 'ignore', 'pipe'],
   });
   let stderr = '';
@@ -32,9 +42,13 @@ function runRound(round) {
 
   // Wait until the child has reported at least one approval (startup of
   // node + web3.js takes a few hundred ms), THEN kill at a pseudo-random
-  // later point so rounds land mid-run, plausibly mid-append.
+  // later point so rounds land mid-run, plausibly mid-append. Sealed mode
+  // pays an anchor fsync per approval, so its window is wider to still land
+  // mid-loop instead of on the first approval.
   const killAfterFirstApproval = () => {
-    const delay = 5 + ((round * 977) % 120); // deterministic 5..125ms of racing
+    const base = SEALED ? 40 : 5;
+    const span = SEALED ? 260 : 120;
+    const delay = base + ((round * 977) % span); // deterministic racing window
     setTimeout(() => child.kill('SIGKILL'), delay);
   };
   const waitForApproval = setInterval(() => {
@@ -63,7 +77,7 @@ function readReport(file) {
   });
 }
 
-test(`crash consistency: SIGKILL rounds preserve reported approvals (${ROUNDS} rounds)`, async () => {
+test(`crash consistency: SIGKILL rounds preserve reported approvals (${ROUNDS} rounds${SEALED ? ', sealed' : ''})`, async () => {
   let reportedApprovals = 0;
   let journalReopens = 0;
   let bytesObserved = 0;
@@ -79,7 +93,9 @@ test(`crash consistency: SIGKILL rounds preserve reported approvals (${ROUNDS} r
     // Invariant 1: the journal must load (torn tail repaired, no throw).
     let ledger;
     try {
-      ledger = new Ledger({ file: journal });
+      ledger = new Ledger(SEALED
+        ? { file: journal, sealPassphrase: SEAL_PASSPHRASE }
+        : { file: journal });
     } catch (err) {
       assert.fail(`round ${round}: journal failed to load after SIGKILL: ${err.message}`);
     }
@@ -105,5 +121,5 @@ test(`crash consistency: SIGKILL rounds preserve reported approvals (${ROUNDS} r
   // Sanity: the rounds actually exercised the path (not all instantly killed).
   assert.ok(reportedApprovals >= 10, `too few approvals observed: ${reportedApprovals}`);
   assert.ok(bytesObserved > 0, 'journal never existed: rounds did not exercise appends');
-  console.log(`    crash harness: ${ROUNDS} rounds, ${reportedApprovals} reported approvals, all durable`);
+  console.log(`    crash harness: ${ROUNDS} rounds${SEALED ? ' (sealed)' : ''}, ${reportedApprovals} reported approvals, all durable`);
 });

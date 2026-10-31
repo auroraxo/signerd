@@ -13,13 +13,20 @@ Usage:
   signerd run --keystore <file> --passphrase-file <file>
             --grants <file> --ledger <file> --socket <file>
             [--grant-seal-passphrase-file <file>]
+            [--journal-seal-passphrase-file <file>]
   signerd sign --socket <file> --grant <name> --tx <wire-file> [--out <file>]
   signerd status --grants <file> --ledger <file>
             [--grant-seal-passphrase-file <file>]
+            [--journal-seal-passphrase-file <file>]
   signerd seal-grants --grants <file> --seal-passphrase-file <file> [--out <file>]
             add/replace the HMAC seal of a grant file (provenance, R5-2)
   signerd verify-grants --grants <file> --seal-passphrase-file <file>
             check a grant file's seal without touching the journal
+  signerd seal-journal --journal <file> --journal-seal-passphrase-file <file>
+            verify the journal's chain, then seal it (provenance, R5-2):
+            every record gets a keyed chain MAC and a seal floor <journal>.anchor
+            records how much history the daemon approved; refused while a
+            daemon holds the journal lock; prints exactly what it sealed
   signerd migrate --ledger <file> (--wires <dir> | --discard-legacy)
             upgrade a format-1 journal; --wires restores message-level replay
             protection, --discard-legacy explicitly accepts losing it
@@ -29,6 +36,9 @@ Notes:
   --grant-seal-passphrase-file turns on sealed-grant mode: the daemon then
   REFUSES a grant file whose HMAC seal does not verify (an unsealed or
   altered file cannot be used to have the daemon sign).
+  --journal-seal-passphrase-file turns on sealed-journal mode the same way:
+  without the key the daemon refuses a journal that was ever sealed, and a
+  journal shorter than its seal floor (truncation) is refused with it.
   Every refusal is a machine-readable reason; nothing is signed outside the
   grant's scope. This is NOT a reviewed wallet or a production daemon.
 `;
@@ -97,6 +107,8 @@ async function main() {
     const { Daemon } = require('../src/daemon');
     const sealPassphrase = typeof args['grant-seal-passphrase-file'] === 'string'
       ? readPassphrase(args, 'grant-seal-passphrase-file') : undefined;
+    const journalSealPassphrase = typeof args['journal-seal-passphrase-file'] === 'string'
+      ? readPassphrase(args, 'journal-seal-passphrase-file') : undefined;
     const daemon = new Daemon({
       socketPath: requireArg(args, 'socket'),
       keystorePath: requireArg(args, 'keystore'),
@@ -104,6 +116,7 @@ async function main() {
       grantFile: requireArg(args, 'grants'),
       ledgerFile: requireArg(args, 'ledger'),
       grantSealPassphrase: sealPassphrase,
+      journalSealPassphrase,
     });
     await daemon.start();
     process.stdout.write(JSON.stringify({ ok: true, ...daemon.status() }) + '\n');
@@ -132,15 +145,30 @@ async function main() {
     const { Ledger } = require('../src/ledger');
     const sealPassphrase = typeof args['grant-seal-passphrase-file'] === 'string'
       ? readPassphrase(args, 'grant-seal-passphrase-file') : undefined;
+    const journalSealPassphrase = typeof args['journal-seal-passphrase-file'] === 'string'
+      ? readPassphrase(args, 'journal-seal-passphrase-file') : undefined;
     const options = sealPassphrase === undefined ? {} : {
       sealKeyFor: require('../src/grantseal').makeSealKeyProvider(sealPassphrase),
     };
     const loaded = loadGrantFile(requireArg(args, 'grants'), options);
-    const ledger = new Ledger({ file: requireArg(args, 'ledger') });
+    const ledger = new Ledger({
+      file: requireArg(args, 'ledger'),
+      sealPassphrase: journalSealPassphrase,
+    });
     process.stdout.write(JSON.stringify({
       ok: true, grants: loaded.names, ledger: ledger.snapshot(), legacyState: ledger.legacyState(),
-      sealed: sealPassphrase !== undefined,
+      sealed: sealPassphrase !== undefined, journalSealed: journalSealPassphrase !== undefined,
     }) + '\n');
+    return;
+  }
+
+  if (command === 'seal-journal') {
+    const { sealExistingJournal } = require('../src/journalseal-ops');
+    const result = sealExistingJournal({
+      journalFile: requireArg(args, 'journal'),
+      passphrase: readPassphrase(args, 'journal-seal-passphrase-file'),
+    });
+    process.stdout.write(JSON.stringify(result) + '\n');
     return;
   }
 

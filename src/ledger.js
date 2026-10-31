@@ -5,6 +5,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { evaluate, ownField, readClock } = require('./policy');
 const { readUnderLease } = require('./lease');
+const seal = require('./journalseal');
 
 // The journal is loaded and re-read through the same kernel-enforced read
 // lease that guards the grant file (R4-2): a write handle that predates a
@@ -55,6 +56,14 @@ function refused(reason, extra) {
   return extra === undefined
     ? { allowed: false, refused: reason }
     : { allowed: false, refused: reason, ...extra };
+}
+
+// A refusal with a named code, so the loader's error names reach the
+// operator (ledger_mac_short, ledger_anchor_missing, ...).
+function ledgerError(code, detail) {
+  const err = new Error(detail === undefined ? code : `${code}: ${detail}`);
+  err.code = code;
+  return err;
 }
 
 function parseU64(value) {
@@ -147,8 +156,19 @@ const GENESIS_HASH = '0'.repeat(64);
 // upgraded or downgraded: dropping or adding `v` changes the body and breaks
 // the chain hash, which the loader reports as ledger_tampered.
 const JOURNAL_FORMAT = 3;
+
+// Journal format 4 (2026-10-31, the sealed journal): format 3 plus a keyed
+// chain MAC `x` on every record (R5-2 journal half, probes p3/p10/p15).
+// A sealed journal is loaded ONLY with the seal key: without it the loader
+// refuses (ledger_sealed) rather than trusting unauthenticated history - an
+// unkeyed daemon must never believe sealed history, and a sealed daemon must
+// believe ONLY sealed history.
+const SEALED_JOURNAL_FORMAT = 4;
+
+// Format 2 is still accepted; format 4 = format 3's fields plus `x`.
 const FORMAT_V2_FIELDS = ['v', 's', 't', 'w', 'm', 'a', 'f', 'k', 'h'].sort();
 const FORMAT_1_FIELDS = ['s', 't', 'w', 'a', 'f', 'k', 'h'].sort();
+const FORMAT_4_FIELDS = [...FORMAT_V2_FIELDS, 'x'].sort();
 
 function recordBody(record) {
   // Format 1 (pre-2026-10-29): no `v`, no `m`.
@@ -177,7 +197,7 @@ function sameFields(actual, expected) {
   return actual.length === expected.length && actual.every((f, i) => f === expected[i]);
 }
 
-function validRecord(record, previousSeq, seenWires, seenMessages) {
+function validRecord(record, previousSeq, seenWires, seenMessages, format) {
   if (typeof record !== 'object' || record === null) return false;
   const { s, t, w, a, f, k, h } = record;
   if (!Number.isSafeInteger(s) || s !== previousSeq + 1) return false;
@@ -186,12 +206,15 @@ function validRecord(record, previousSeq, seenWires, seenMessages) {
   if (typeof h !== 'string' || !/^[0-9a-f]{64}$/.test(h)) return false;
   if (typeof k !== 'string' || k.length === 0) return false;
   if (parseU64(a) === null || parseU64(f) === null) return false;
+  // Format 4 carries exactly the v3 fields plus the keyed MAC `x`.
+  if (format === 4 &&
+      (typeof record.x !== 'string' || !/^[0-9a-f]{64}$/.test(record.x))) return false;
   const fields = ownFields(record);
-  if (record.v === 2 || record.v === 3) {
-    if (!sameFields(fields, FORMAT_2_FIELDS)) return false;
+  if (record.v === 2 || record.v === 3 || record.v === 4) {
+    if (!sameFields(fields, format === 4 ? FORMAT_4_FIELDS : FORMAT_2_FIELDS)) return false;
     const hexM = typeof record.m === 'string' && /^[0-9a-f]{64}$/.test(record.m);
-    // null ("identity unknown") exists only in format 3.
-    if (!hexM && !(record.v === 3 && record.m === null)) return false;
+    // null ("identity unknown") exists only in formats 3 and 4.
+    if (!hexM && !((record.v === 3 || record.v === 4) && record.m === null)) return false;
     if (seenWires.has(w)) return false;
     if (hexM && seenMessages.has(record.m)) return false;
     return true;
@@ -207,7 +230,19 @@ function validRecord(record, previousSeq, seenWires, seenMessages) {
  * policy about formats. Shared by the loader and the migration tool so both
  * apply identical rules. Throws ledger_corrupt / ledger_tampered.
  */
-function parseJournal(raw) {
+/**
+ * Parse and verify journal bytes (structure + hash chain). Pure: no repair, no
+ * policy about formats. Shared by the loader and the migration tool so both
+ * apply identical rules. Throws ledger_corrupt / ledger_tampered.
+ *
+ * options.macKey: the sealed-journal key. When present, every record must be
+ *   a format-4 record and its keyed chain MAC `x` is verified, so an edited,
+ *   dropped, reordered or re-chained record is refused
+ *   (ledger_mac_invalid). When absent, a format-4 record is refused
+ *   (ledger_sealed): unauthenticated history is never trusted, and a sealed
+ *   journal is never silently degraded into an unsealed one.
+ */
+function parseJournal(raw, options = {}) {
   // Locate the torn tail in BYTES, never through a decoded string (a decoded
   // invalid byte becomes 3 bytes of U+FFFD and the repair would cut into the
   // last durable record).
@@ -222,20 +257,47 @@ function parseJournal(raw) {
   let seq = 0;
   let lastHash = GENESIS_HASH;
   let legacyRecords = 0;
+  let sealedRecords = 0;
+  const macKey = Buffer.isBuffer(options.macKey) ? options.macKey : null;
+  // The keyed chain starts at a key-dependent genesis, so the first record's
+  // MAC is not a constant that an attacker could precompute.
+  let prevX = macKey ? seal.genesisMac(macKey) : null;
+  let xHead = prevX;
   for (const line of segments) {
     let record;
     try { record = JSON.parse(line); } catch { throw new Error('ledger_corrupt'); }
-    if (!validRecord(record, seq, fingerprints, messageHashes)) throw new Error('ledger_corrupt');
+    const isSealed = record !== null && typeof record === 'object' &&
+      record.v === SEALED_JOURNAL_FORMAT;
+    // A sealed record without the key: refuse, never accept-and-ignore.
+    if (isSealed && !macKey) throw new Error('ledger_sealed');
+    if (!validRecord(record, seq, fingerprints, messageHashes,
+      isSealed ? SEALED_JOURNAL_FORMAT : undefined)) {
+      throw new Error('ledger_corrupt');
+    }
     if (chainHash(lastHash, record) !== record.h) throw new Error('ledger_tampered');
+    if (isSealed) {
+      // The keyed chain: prev_x -> this record's chain hash. The chain hash
+      // commits to the record body, so this commits to the body AND to every
+      // record before it.
+      if (seal.chainMac(macKey, prevX, record.h) !== record.x) {
+        throw new Error('ledger_mac_invalid');
+      }
+      prevX = record.x;
+      xHead = record.x;
+      sealedRecords += 1;
+    }
     records.push(record);
     fingerprints.add(record.w);
-    // A null `m` (format 3, identity unknown) never enters the replay set.
+    // A null `m` (formats 3/4, identity unknown) never enters the replay set.
     if (typeof record.m === 'string') messageHashes.add(record.m);
     if (record.v === undefined) legacyRecords += 1;
     seq = record.s;
     lastHash = record.h;
   }
-  return { records, validBytes, tailTorn, legacyRecords, fingerprints, messageHashes, seq, lastHash };
+  return {
+    records, validBytes, tailTorn, legacyRecords, sealedRecords,
+    fingerprints, messageHashes, seq, lastHash, xHead,
+  };
 }
 
 /**
@@ -336,9 +398,23 @@ function assertJournalPath(file) {
  * only the old wire-level guarantee.
  */
 class Ledger {
-  constructor({ file }) {
+  constructor({ file, sealPassphrase }) {
     if (typeof file !== 'string' || file.length === 0) throw new Error('ledger_file_required');
     this.file = file;
+    this.macKey = null;
+    this.xHead = null;
+    if (sealPassphrase !== undefined && sealPassphrase !== null) {
+      if (typeof sealPassphrase !== 'string' || sealPassphrase.length === 0) {
+        throw new Error('journal_seal_passphrase_required');
+      }
+      // Derived EAGERLY, from a fixed public salt (see journalseal): with a
+      // passphrase there is no "journal keeps running unsealed" fallback.
+      // Deriving lazily from an anchor that may not exist yet silently
+      // downgraded a sealed daemon to the unkeyed path - exactly the hole
+      // this feature closes.
+      this.macKey = seal.deriveJournalKey(sealPassphrase);
+      this.xHead = seal.genesisMac(this.macKey);
+    }
     this.records = [];
     this.fingerprints = new Set();
     this.messageHashes = new Set();
@@ -363,14 +439,19 @@ class Ledger {
   }
 
   #load() {
-    let raw;
+    let raw = null;
     try {
       raw = readUnderLease(this.file, {
         prefix: 'ledger', maxBytes: JOURNAL_LEASE_MAX_BYTES,
       }).bytes;
     } catch (err) {
-      // A missing journal is the normal first start, not an error.
-      if (err && err.detail === 'ENOENT') return;
+      // A missing journal is the normal first start, not an error - unless a
+      // seal floor exists that claims history the file no longer holds (p3:
+      // delete-or-truncate to empty). That is refused, not "fresh start".
+      if (err && err.detail === 'ENOENT') {
+        if (this.macKey) this.#checkAnchorOnMissingJournal();
+        return;
+      }
       // Fail closed, with the reason intact, for everything the lease probe
       // can name: a held write handle, leases unsupported on this kernel, a
       // file the lease was denied on. The pre-lease code path reported all of
@@ -380,7 +461,7 @@ class Ledger {
       }
       throw new Error('ledger_unreadable');
     }
-    const parsed = parseJournal(raw);
+    const parsed = parseJournal(raw, { macKey: this.macKey });
     // FAIL CLOSED on format 1 (R3-2): those records carry no message identity,
     // so loading them would silently break "one message approved at most once,
     // ever" across the upgrade (same message + different signature slot was
@@ -391,6 +472,29 @@ class Ledger {
       err.code = 'ledger_legacy_format';
       throw err;
     }
+    if (this.macKey) {
+      // Sealed daemon, journal that is not (fully) sealed. Our own tools
+      // never produce a mixed journal (seal-journal rewrites every line), so
+      // a MIXED chain means records were spliced in without the key.
+      if (parsed.sealedRecords !== parsed.records.length) {
+        if (parsed.sealedRecords === 0) {
+          throw ledgerError('ledger_unsealed_journal',
+            `passphrase given but ${parsed.records.length} record(s) are unsealed; ` +
+            `run "signerd seal-journal --journal ${this.file} --journal-seal-passphrase-file <file>" ` +
+            '(it verifies the existing chain first and prints what it seals)');
+        }
+        throw ledgerError('ledger_mac_invalid',
+          `${parsed.records.length - parsed.sealedRecords} unsealed record(s) spliced into a sealed chain`);
+      }
+      this.#checkAnchor(parsed);
+      this.xHead = parsed.xHead;
+    } else {
+      // No key, but a seal floor exists: this journal WAS sealed. Loading it
+      // without the passphrase would trust history nobody authenticated - and
+      // a journal truncated to ZERO records would look like a fresh start.
+      // Refuse instead of degrading.
+      this.#refuseIfSealFloorExists();
+    }
     this.records = parsed.records;
     this.fingerprints = parsed.fingerprints;
     this.messageHashes = parsed.messageHashes;
@@ -398,6 +502,105 @@ class Ledger {
     this.lastHash = parsed.lastHash;
     this.#setDurable(parsed.validBytes, raw.subarray(0, parsed.validBytes));
     if (parsed.tailTorn) this.#repair(parsed.validBytes);
+  }
+
+  /**
+   * Refuse a journal that has a seal floor when no passphrase was given.
+   * The floor is the marker that this journal was ever sealed; without the
+   * key its content cannot be verified, so it must not be trusted.
+   */
+  #refuseIfSealFloorExists() {
+    const anchorFile = seal.anchorPath(this.file);
+    let exists;
+    try {
+      exists = seal.assertAnchorPath(anchorFile);
+    } catch (err) {
+      throw ledgerError(err.code || 'ledger_anchor_invalid', err.message);
+    }
+    if (!exists) return;
+    const read = seal.readAnchor(anchorFile);
+    if (!read.ok) throw ledgerError(read.reason, `cannot trust the seal floor ${anchorFile}`);
+    throw ledgerError('ledger_sealed',
+      `the journal has a seal floor (${anchorFile}) but no passphrase was given: ` +
+      'start the daemon with --journal-seal-passphrase-file');
+  }
+
+  /**
+   * The length floor (R5-2 p3): a chain alone cannot see truncation, because
+   * every PREFIX of a valid chain is a valid chain. The anchor says how much
+   * history this daemon itself approved; a journal shorter than that is
+   * refused.
+   *
+   * The comparison is deliberately NOT an equality on the head: after a crash
+   * between the record write and the anchor write the journal is AHEAD of its
+   * anchor. That tail was never reported to a caller (the caller only sees
+   * "allowed" after the anchor is durable), so dropping it is safe - and
+   * requiring equality would brick the daemon on a crash. The rule is
+   * therefore: the journal must contain AT LEAST the anchored prefix, and
+   * that prefix must verify.
+   */
+  #checkAnchor(parsed) {
+    const anchorFile = seal.anchorPath(this.file);
+    let exists;
+    try {
+      exists = seal.assertAnchorPath(anchorFile);
+    } catch (err) {
+      throw ledgerError(err.code || 'ledger_anchor_invalid', err.message);
+    }
+    if (!exists) {
+      // No floor yet. A fresh journal is legitimate; a journal WITH records
+      // but no floor is not: the floor is what makes the history provable.
+      if (parsed.records.length > 0) {
+        throw ledgerError('ledger_anchor_missing',
+          `the journal holds ${parsed.records.length} record(s) but its seal floor ${anchorFile} is missing`);
+      }
+      return;
+    }
+    const read = seal.readAnchor(anchorFile);
+    if (!read.ok) throw ledgerError(read.reason, `cannot trust the seal floor ${anchorFile}`);
+    const doc = read.doc;
+    const check = seal.verifyAnchor(this.macKey, doc);
+    if (!check.ok) {
+      throw ledgerError(check.reason,
+        `the seal floor ${anchorFile} does not verify under this passphrase`);
+    }
+    // The anchored prefix must be exactly the first doc.count records, and
+    // its keyed chain head must be the anchored head. Verifying the chain of
+    // the WHOLE journal already happened in parseJournal (every record's `x`
+    // is checked against its predecessor), so reaching this point means the
+    // journal's chain is intact; what is left is the LENGTH question.
+    if (parsed.records.length < doc.count) {
+      throw ledgerError('ledger_mac_short',
+        `the journal holds ${parsed.records.length} record(s), the seal floor claims ${doc.count}: ` +
+        'history was removed (truncation) or the floor belongs to another journal');
+    }
+    // The anchored prefix must end at the anchored head: the floor's head is
+    // the chain head after exactly doc.count records.
+    const anchoredHead = doc.count === 0
+      ? seal.genesisMac(this.macKey)
+      : parsed.records[doc.count - 1].x;
+    if (anchoredHead !== doc.head) {
+      throw ledgerError('ledger_anchor_mismatch',
+        'the anchored prefix does not end at the anchored chain head');
+    }
+  }
+
+  /** A journal that is gone entirely, but whose floor still claims history. */
+  #checkAnchorOnMissingJournal() {
+    const anchorFile = seal.anchorPath(this.file);
+    let exists;
+    try {
+      exists = seal.assertAnchorPath(anchorFile);
+    } catch (err) {
+      throw ledgerError(err.code || 'ledger_anchor_invalid', err.message);
+    }
+    if (!exists) return; // no floor, no history: a genuine first start
+    const read = seal.readAnchor(anchorFile);
+    if (!read.ok) throw ledgerError(read.reason, `cannot trust the seal floor ${anchorFile}`);
+    if (read.doc.count === 0) return; // the floor never claimed any record
+    throw ledgerError('ledger_mac_short',
+      `the journal is missing but its seal floor claims ${read.doc.count} record(s): ` +
+      'history was deleted (truncation)');
   }
 
   #repair(validBytes) {
@@ -562,8 +765,8 @@ class Ledger {
       });
     }
 
-    const record = {
-      v: JOURNAL_FORMAT,
+    const recordBody = {
+      v: this.macKey ? SEALED_JOURNAL_FORMAT : JOURNAL_FORMAT,
       s: this.seq + 1,
       t: nowMs,
       w: wireSha256,
@@ -571,11 +774,19 @@ class Ledger {
       a: amount.toString(),
       f: BASE_FEE_LAMPORTS.toString(),
       k: scope,
-      h: chainHash(this.lastHash, {
-        v: JOURNAL_FORMAT, s: this.seq + 1, t: nowMs, w: wireSha256, m: messageSha256,
-        a: amount.toString(), f: BASE_FEE_LAMPORTS.toString(), k: scope,
-      }),
     };
+    const record = { ...recordBody, h: chainHash(this.lastHash, recordBody) };
+    if (this.macKey) {
+      // The keyed chain link. this.xHead is always known here: a sealed
+      // daemon either loaded a verified chain or starts at the keyed
+      // genesis.
+      record.x = seal.chainMac(this.macKey, this.xHead, record.h);
+    }
+    // Captured so an anchor failure after the record write can undo the
+    // record: journal and floor must not diverge in a direction the caller
+    // was told is safe.
+    const preBytes = this.fileBytes;
+    const preDigest = this.digest;
     try {
       this.#appendLine(record);
     } catch (err) {
@@ -593,11 +804,20 @@ class Ledger {
         : 'ledger_write_failed';
       return refused(code);
     }
+    // In-memory state advances only after the record is durable AND, in
+    // sealed mode, the anchor is durable: the caller's "allowed" therefore
+    // implies "sealed history includes it". If the anchor write fails, the
+    // journal is rolled back and the approval is refused - a sealed daemon
+    // never returns an approval that outlives its floor.
+    if (this.macKey && !this.#advanceAnchor(record, preBytes, preDigest)) {
+      return refused('ledger_anchor_unwritable');
+    }
     this.records.push(record);
     this.fingerprints.add(wireSha256);
     this.messageHashes.add(messageSha256);
     this.seq = record.s;
     this.lastHash = record.h;
+    this.xHead = record.x;
     const totalSpent = spent + cost;
     return {
       allowed: true,
@@ -610,6 +830,38 @@ class Ledger {
       windowSpentLamports: totalSpent.toString(),
       windowRemainingLamports: (window.max - totalSpent).toString(),
     };
+  }
+
+  /**
+   * Move the floor forward after the record is durable. Order matters and is
+   * deliberate: record first, anchor second, caller told third. A crash
+   * between record and anchor leaves the journal AHEAD of the floor, which
+   * the loader accepts (the tail was never reported - it is dropped only if
+   * it is torn, and kept otherwise because it verifies). The reverse order
+   * would put the floor ahead of the journal, which is indistinguishable
+   * from truncation and would brick the daemon.
+   *
+   * If the anchor cannot be written, the just-appended record is rolled
+   * back so journal and floor stay identical, and the approval is refused.
+   * If even the rollback fails, the poisoned flag refuses every later
+   * approval: a sealed daemon fails closed, never "sealed most of the time".
+   */
+  #advanceAnchor(record, preBytes, preDigest) {
+    try {
+      seal.writeAnchor(seal.anchorPath(this.file), seal.sealAnchor(this.macKey, {
+        count: record.s,
+        head: record.x,
+      }));
+      return true;
+    } catch (err) {
+      if (this.#rollback(preBytes)) {
+        this.fileBytes = preBytes;
+        this.digest = preDigest;
+      } else {
+        this.poisoned = true;
+      }
+      return false;
+    }
   }
 
   snapshot() {
@@ -639,5 +891,5 @@ function gate(wire, grant, now = new Date(), ledger) {
 module.exports = {
   Ledger, gate, BASE_FEE_LAMPORTS,
   parseJournal, messageImage, assertJournalPath, chainHash, JOURNAL_FORMAT, GENESIS_HASH,
-  JOURNAL_LEASE_MAX_BYTES,
+  JOURNAL_LEASE_MAX_BYTES, SEALED_JOURNAL_FORMAT, anchorPath: seal.anchorPath,
 };
