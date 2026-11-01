@@ -26,16 +26,29 @@ function grant(overrides = {}) {
 }
 
 // H11: does buildReceiptBody produce a body the daemon accepts, WITHOUT an
-// explicit issuedAt? EXPECTED (H11): NO — the helper treats issued_at as
-// opt-in; the daemon requires it since 84888d4. A caller following the
-// helper's signature gets refused at the socket. Measured on the policy
-// layer (the daemon's refusal reason is 'envelope' for the missing field).
+// explicit issuedAt?
+// EXPECTED (H11, pre-fix state as measured on 5770b59): refused='envelope'
+// — the helper treated issued_at as opt-in while 84888d4 made it required;
+// that was finding R9-2.
+// EXPECTED (H11, after the R9-2 fix on this branch): the helper's own
+// default output is now ACCEPTED (it stamps now, like receipt.py). The
+// assertion below is the POST-fix invariant; the pre-fix measurement
+// (refused='envelope') is kept in the R9-2 section of report.md.
 {
   const b = buildReceiptBody({ issuer: 'auroraxo', type: 'release',
     subject: 'auroraxo/signerd', claims: { version: 'v1' } });
   const v = evaluateMessage(b, grant());
-  verdict('H11: buildReceiptBody WITHOUT issuedAt is refused by the policy',
-    v.refused === 'envelope', `refused=${v.refused}`);
+  verdict('H11: buildReceiptBody WITHOUT issuedAt builds an ACCEPTED body (R9-2 fixed)',
+    v.allowed === true, `outcome=${v.allowed ? 'ALLOW' : 'refused=' + v.refused}`);
+
+  // The pre-fix defect, still reproducible on 5770b59: a body WITHOUT an
+  // issued_at key (what the old helper emitted) is refused. This half must
+  // stay green on every tree — it pins the daemon side of R9-2.
+  const noKey = { schema: 'openreceipts/v1', issuer: 'auroraxo', type: 'release',
+    subject: 'auroraxo/signerd', claims: { version: 'v1' } };
+  const vNo = evaluateMessage(noKey, grant());
+  verdict('H11b-strict: a body with NO issued_at key at all is refused (daemon side unchanged)',
+    vNo.refused === 'envelope', `refused=${vNo.refused}`);
 
   const b2 = buildReceiptBody({ issuer: 'auroraxo', type: 'release',
     subject: 'auroraxo/signerd', claims: { version: 'v1' },
@@ -148,18 +161,23 @@ function daemonVerdict(b) {
 // The claim under test: a LEXICOGRAPHIC sort of RFC3339 strings with
 // differing offsets does NOT yield chronological order, so two receipts can
 // be ordered the wrong way round in the feed.
-// EXPECTED: '2027-01-01T05:00:00+05:30' (== 2026-12-31T23:30Z) must sort
-// BEFORE '2026-12-31T23:00:00+00:00' (== 2026-12-31T23:00Z) if the order is
-// chronological — but the string sort puts it AFTER, because '2027' > '2026'.
+// EXPECTED: the defect EXISTS for a pair where the offset flips the order —
+// A = '2027-01-01T00:30:00+05:30' (= 2026-12-31T19:00Z, string-wise LATER)
+// B = '2026-12-31T23:00:00+00:00' (= 2026-12-31T23:00Z, actually LATER):
+// feed.py's descending string sort puts A first although B is newer.
+// NOTE (probe bug, found and fixed): the first pair (+05:30 with only a
+// 30-minute nominal difference) made BOTH orders coincide, so the probe
+// reported VIOLATION for a pair that does not demonstrate the defect. The
+// pair below is chosen so the two orders necessarily differ.
 {
-  const a = '2026-12-31T23:00:00+00:00'; // 2026-12-31T23:00:00Z
-  const b = '2027-01-01T05:00:00+05:30'; // 2026-12-31T23:30:00Z  (30 min LATER)
-  const stringOrder = a > b ? [a, b] : [b, a]; // what feed.py's sort produces
-  const chronoOrder = Date.parse(a) > Date.parse(b) ? [a, b] : [b, a];
-  const wrong = stringOrder.join('|') !== chronoOrder.join('|');
+  const A = '2027-01-01T00:30:00+05:30'; // 2026-12-31T19:00:00Z
+  const B = '2026-12-31T23:00:00+00:00'; // 2026-12-31T23:00:00Z (4h LATER)
+  const stringDesc = A > B ? [A, B] : [B, A]; // feed.py: reverse lexicographic
+  const chronoDesc = Date.parse(A) > Date.parse(B) ? [A, B] : [B, A];
+  const wrong = stringDesc.join('|') !== chronoDesc.join('|');
   verdict('H12d: feed-style string sort mis-orders two receipts whose offsets differ (consumer-side ordering defect)',
     wrong,
-    `string-sort: ${stringOrder[0]} then ${stringOrder[1]} | chronological: ${chronoOrder[0]} then ${chronoOrder[1]} (b is 30min later)`);
+    `string-desc: ${stringDesc[0]} first | chrono-desc: ${chronoDesc[0]} first (B is 4h later)`);
 }
 
 console.log('probe-client-consumer done.');

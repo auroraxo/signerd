@@ -240,7 +240,7 @@ WEGWERF-LOKALSCHLÜSSEL (kein Repo-Key, kein Daemon), damit die Verifier
 
 ### Ehrliche Protokollierung eigener Probe-Fehler
 
-Meine Messkette hat sechs eigene Fehler ergeben, alle VOR der Endfassung
+Meine Messkette hat NEUN eigene Fehler ergeben, alle vor der Endfassung
 gefunden und im Probe-Code als Kommentar dokumentiert („probe bug, found and
 fixed") — sie sind NICHT als Produktbefunde verkauft worden:
 
@@ -272,6 +272,19 @@ fixed") — sie sind NICHT als Produktbefunde verkauft worden:
 7. **Kanonisierungs-Erwartungen ohne `refuse:`-Präfix**: jede korrekte
    Verweigerung sah aus wie eine Verletzung (Formatierungsfehler meiner
    Assertion, nicht der Sache).
+8. **H11-Assertion nach meinem eigenen Fix nicht angehoben**: der Probe
+   behauptete weiter „ohne issuedAt → refused=envelope", obwohl der R9-2-Fix
+   genau das beseitigt hatte — der Verdict kippte auf `refused=undefined`.
+   Jetzt post-fix-Invariant („ACCEPTED", R9-2 gefixt) plus ein halb-strict
+   Halter („KEY ganz ohne issued_at → envelope"), der die Daemon-Seite weiter
+   pinnt und auf BEIDEN Bäumen grün ist.
+9. **H12d-Wahlpaar ohne Effekt**: mein erstes Offset-Paar (`+05:30` mit
+   30-min-Differenz) ließ String- und Chrono-Reihenfolge ZUSAMMENFALLEN,
+   der Defekt war an diesem Paar nicht demonstrierbar — der Verdict meldete
+   VIOLATION für einen nicht-bewiesenen Defekt. Neu gewählt: `+05:30` bei
+   4 h Unterschied, wo die Reihenfolgen notwendig auseinanderlaufen
+   (`2027-…+05:30` sortiert vor `2026-12-31T23:00Z`, obwohl letzteres 4 h
+   SPÄTER ist).
 
 Zusätzlich zwei Umgebungs-/Unabhängigkeits-Offenlegungen:
 
@@ -326,7 +339,14 @@ Testdatei: `test/review9-independent.test.js`, 15 Tests = 5 Fixes
 | `probe-ledger.js` | 10/10 PASS |
 | `probe-envelope.js` | 7/7 PASS |
 | `probe-canonical.js` | 4/4 PASS + Kostenzeile |
-| `probe-client-consumer.js` | 4/4 PASS (H12d Consumer-Befund als PASS der Behauptung) |
+| `probe-client-consumer.js` | 8/8 PASS (H12d Consumer-Befund als PASS der Behauptung; auf `5770b59` exakt 1 VIOLATION: H11 = R9-2) |
+
+**Probe-Zählung, alle sechs Dateien, Endzustand:** 12 + 11 + 4 + 7 + 8 + 16 =
+**58 PASS / 0 VIOLATION**. Auf dem Vor-Baum `5770b59` (Worktree
+`/tmp/signerd-review9-5770`, mit dem Consumer unter `/tmp/openreceipts`
+verlinkt) meldet `probe-client-consumer.js` exakt **1 VIOLATION** — H11, also
+mein R9-2; alle anderen Probes sind auf beiden Bäumen grün (die
+„Halten"-Klassen sind definitionsgemäß baum-unabhängig).
 
 ## Kostenmessung
 
@@ -450,7 +470,7 @@ nachgeahmt).
   openreceipts, nicht gefixt).
 
 **Nicht überlappend (ausschließlich meine Findung):** R9-1, R9-2, H12d
-(Feed-Sortierung), die 7 eigenen Probe-Fehler, die abstrakte
+(Feed-Sortierung), die 9 eigenen Probe-Fehler, die abstrakte
 Sortier-Divergenz mit ihrem Erreichbarkeits-Nachweis (31/31 + `refuse:claims`).
 
 ## Änderungen auf diesem Branch (nicht gepusht)
