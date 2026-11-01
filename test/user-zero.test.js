@@ -52,6 +52,19 @@ function waitForLine(child, predicate, timeoutMs = 15_000) {
 }
 
 /**
+ * Render the holes of a scan for an assertion message: which mapping, with
+ * which permissions, and why it could not be read. A completeness failure
+ * that names no mapping cannot be diagnosed from a CI log.
+ */
+function scanHoles(scan) {
+  const parts = [
+    ...scan.regionsFailed.map((f) => `failed ${f.perms} ${f.code} ${f.label}`),
+    ...scan.regionsSkipped.map((f) => `skipped ${f.perms} too-large(${f.size}) ${f.label}`),
+  ];
+  return parts.length ? parts.join(' | ') : 'none';
+}
+
+/**
  * Read a live child's stdout into a buffer and resolve the FIRST line.
  * The child is kept alive afterwards (used with --hold) so it can be scanned.
  */
@@ -244,14 +257,15 @@ test('user zero: a client signs without ever holding the key, measured in live m
     // The instrument is proven: it found the key in a process that has it.
     assert.ok(legacyScan.hits.length > 0, 'positive control must find the key');
     assert.ok(daemonScan.hits.length > 0, 'the daemon is where the key lives; it must be found there');
-    assert.ok(scanIsComplete(daemonScan), 'daemon scan must cover all writable mappings');
+    assert.ok(scanIsComplete(daemonScan),
+      `daemon scan must cover all writable mappings — holes: ${scanHoles(daemonScan)}`);
 
     // The claim itself: the client, which just produced that signature,
     // contains no copy of the secret key anywhere in its address space.
     assert.equal(clientScan.hits.length, 0,
       `client process must hold no copy of the secret key (found ${clientScan.hits.length} copies)`);
     assert.ok(scanIsComplete(clientScan),
-      'client scan must cover every writable mapping before absence may be claimed');
+      `client scan must cover every writable mapping before absence may be claimed — holes: ${scanHoles(clientScan)}`);
 
     t.diagnostic(
       `secret-key copies -> legacy client (control): ${legacyScan.hits.length}, ` +
