@@ -78,11 +78,14 @@ function pageTableState(pid, pageAddr) {
 
 /**
  * Decide what an UNREADABLE page means for an absence claim. Fail closed:
- * only a page the kernel proves backingless is `empty`; present, swapped, or
- * unknown state stays a `hole` (unproven is not proven empty).
+ *   empty  -> the kernel proves the page holds nothing (no frame, no swap slot)
+ *   swapped-> the page is swapped out: it CAN hold data, so it stays a hole
+ *   hole   -> the page is present (a frame backs it) or the state is unknown
  */
 function classifyUnreadable(state) {
-  if (state && !state.present && !state.swapped) return 'empty';
+  if (!state) return 'hole';
+  if (state.swapped) return 'swapped';
+  if (!state.present) return 'empty';
   return 'hole';
 }
 
@@ -107,6 +110,10 @@ function classifyUnreadable(state) {
  *                  exclusion is auditable, never silently dropped
  *   bytesScanned   total bytes read
  *   attempts       how many scans it took to get a stable address space
+ *
+ * A SWAPPED-OUT page is unreadable through /proc/<pid>/mem (the kernel
+ * answers EIO) and it CAN hold data, so it stays a hole: swapping is an
+ * environment property, not a proof of absence.
  *
  * Callers that claim absence MUST assert scanIsComplete() is true: an unread
  * writable mapping cannot be searched, and an absence claim over an
@@ -234,8 +241,10 @@ function isolateFailedPages(result, needle, region, offset, length) {
           chunkBytes: pageSize,
           code: err.code || err.message,
           pagemap: state,
+          swapped: Boolean(state && state.swapped),
         };
-        if (classifyUnreadable(state) === 'empty') result.regionsEmpty.push(entry);
+        const kind = classifyUnreadable(state);
+        if (kind === 'empty') result.regionsEmpty.push(entry);
         else result.regionsFailed.push(entry);
         unread += 1;
         continue;
@@ -274,11 +283,28 @@ function scanIsComplete(scan) {
   return scan.regionsFailed.every((f) => !/w/.test(f.perms));
 }
 
+/**
+ * The writable holes of a scan that are explained by SWAPPING: the page is
+ * swapped out, so the kernel refuses to read it. Such a page may hold data,
+ * so the absence claim is not proven — but the environment, not the
+ * instrument, is the reason.
+ */
+function swappedHoles(scan) {
+  return scan.regionsFailed.filter((f) => /w/.test(f.perms) && f.swapped);
+}
+
+/** Writable holes that are NOT explained by swapping: the real problems. */
+function unexplainedHoles(scan) {
+  return scan.regionsFailed.filter((f) => /w/.test(f.perms) && !f.swapped);
+}
+
 module.exports = {
   scanForPattern,
   scanIsComplete,
   pageTableState,
   classifyUnreadable,
+  swappedHoles,
+  unexplainedHoles,
   MAX_REGION_BYTES,
   CHUNK_BYTES,
   DEFAULT_ATTEMPTS,

@@ -13,7 +13,7 @@ const crypto = require('node:crypto');
 const { spawn } = require('node:child_process');
 const { Keypair } = require('@solana/web3.js');
 const { importKeystore, loadKeystore } = require('../src/keystore');
-const { scanForPattern, scanIsComplete } = require('../scripts/memscan');
+const { scanForPattern, scanIsComplete, unexplainedHoles } = require('../scripts/memscan');
 
 const PASSPHRASE = 'a passphrase for the user-zero test only';
 const BIN = path.join(__dirname, '..', 'bin', 'signerd.js');
@@ -58,7 +58,7 @@ function waitForLine(child, predicate, timeoutMs = 15_000) {
  */
 function scanHoles(scan) {
   const parts = [
-    ...scan.regionsFailed.map((f) => `failed ${f.perms} ${f.code} ${f.label}`),
+    ...scan.regionsFailed.map((f) => `failed ${f.perms} ${f.code}${f.swapped ? ' SWAPPED' : ''} ${f.label}`),
     ...scan.regionsSkipped.map((f) => `skipped ${f.perms} too-large(${f.size}) ${f.label}`),
   ];
   return parts.length ? parts.join(' | ') : 'none';
@@ -257,15 +257,28 @@ test('user zero: a client signs without ever holding the key, measured in live m
     // The instrument is proven: it found the key in a process that has it.
     assert.ok(legacyScan.hits.length > 0, 'positive control must find the key');
     assert.ok(daemonScan.hits.length > 0, 'the daemon is where the key lives; it must be found there');
-    assert.ok(scanIsComplete(daemonScan),
-      `daemon scan must cover all writable mappings — holes: ${scanHoles(daemonScan)}`);
+    // A swapped-out page is unreadable and CAN hold the key: the absence
+    // claim is not proven there. That is an environment property (the runner
+    // swapped the daemon), not an instrument failure — named, not hidden.
+    const daemonUnexplained = unexplainedHoles(daemonScan);
+    assert.ok(daemonUnexplained.length === 0,
+      `daemon scan has unexplained writable holes: ${scanHoles(daemonScan)}`);
+    if (!scanIsComplete(daemonScan)) {
+      t.diagnostic(`daemon scan incomplete because pages are swapped out — absence not proven for those pages: ${scanHoles(daemonScan)}`);
+    }
 
     // The claim itself: the client, which just produced that signature,
     // contains no copy of the secret key anywhere in its address space.
     assert.equal(clientScan.hits.length, 0,
       `client process must hold no copy of the secret key (found ${clientScan.hits.length} copies)`);
+    // The client's completeness is HARD: the client is the claim's subject,
+    // and it is short-lived — if the runner swapped it out, the measurement
+    // must say so instead of claiming absence.
+    const clientUnexplained = unexplainedHoles(clientScan);
+    assert.ok(clientUnexplained.length === 0,
+      `client scan has unexplained writable holes: ${scanHoles(clientScan)}`);
     assert.ok(scanIsComplete(clientScan),
-      `client scan must cover every writable mapping before absence may be claimed — holes: ${scanHoles(clientScan)}`);
+      `client scan must cover every writable page before absence may be claimed — holes: ${scanHoles(clientScan)}`);
 
     t.diagnostic(
       `secret-key copies -> legacy client (control): ${legacyScan.hits.length}, ` +
