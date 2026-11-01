@@ -13,7 +13,7 @@ const crypto = require('node:crypto');
 const { spawn } = require('node:child_process');
 const { Keypair } = require('@solana/web3.js');
 const { importKeystore, loadKeystore } = require('../src/keystore');
-const { scanForPattern, scanIsComplete, unexplainedHoles } = require('../scripts/memscan');
+const { scanForPattern, scanIsComplete, unexplainedHoles, swappedHoles } = require('../scripts/memscan');
 
 const PASSPHRASE = 'a passphrase for the user-zero test only';
 const BIN = path.join(__dirname, '..', 'bin', 'signerd.js');
