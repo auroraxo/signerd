@@ -33,9 +33,13 @@ test('a read failure is bounded to ONE chunk, not the whole mapping', async (t) 
     const target = parseInt(line.split('-')[0], 16);
 
     const realReadSync = fs.readSync;
+    const realReadFileSync = fs.readFileSync;
     let failedOnce = false;
+    let mapsReads = 0;
+    // Fail every read inside the first chunk of this mapping: a real
+    // unreadable chunk must not lose the whole mapping, only its pages.
     fs.readSync = function patched(fd, buf, off, len, pos) {
-      if (!failedOnce && pos !== null && pos >= target && pos < target + CHUNK) {
+      if (typeof pos === 'number' && pos >= target && pos < target + CHUNK) {
         failedOnce = true;
         const err = new Error('EIO');
         err.code = 'EIO';
@@ -43,14 +47,29 @@ test('a read failure is bounded to ONE chunk, not the whole mapping', async (t) 
       }
       return realReadSync.call(fs, fd, buf, off, len, pos);
     };
-    t.after(() => { fs.readSync = realReadSync; });
+    fs.readFileSync = function patchedRead(p, ...rest) {
+      const out = realReadFileSync.call(fs, p, ...rest);
+      if (typeof p === 'string' && /^\/proc\/\d+\/maps$/.test(p)) mapsReads += 1;
+      return out;
+    };
+    t.after(() => {
+      fs.readSync = realReadSync;
+      fs.readFileSync = realReadFileSync;
+    });
 
     const scan = scanForPattern(c.pid, secret, { attempts: 1 });
     assert.equal(failedOnce, true, 'the injected failure must have fired');
-    const hole = scan.regionsFailed.find((f) => f.offset === 0 && f.code === 'EIO');
-    assert.ok(hole, 'exactly the failing chunk is the hole');
-    assert.ok(hole.size > CHUNK, 'the hole lives in a mapping wider than one chunk');
-    assert.ok(scan.bytesScanned > CHUNK, 'the rest of the mapping was still read');
+    const entries = [...scan.regionsFailed, ...scan.regionsEmpty]
+      .filter((e) => /w/.test(e.perms));
+    assert.ok(entries.length > 0, 'the unreadable chunk must be reported, page-pinned');
+    for (const e of entries) {
+      assert.ok(e.offset !== undefined && e.offset < CHUNK,
+        `every hole is pinned inside the failed chunk, got offset=${e.offset}`);
+      assert.ok(e.pageAddr >= target && e.pageAddr < target + CHUNK,
+        'no page outside the failed chunk is a hole');
+    }
+    assert.ok(scan.bytesScanned > CHUNK,
+      'the rest of the mapping was still read');
     assert.equal(scanIsComplete(scan), false, 'a lost writable chunk is not evidence');
   } finally {
     c.kill('SIGKILL');
@@ -83,8 +102,9 @@ test('a read-only kernel mapping that fails does NOT invalidate the scan', async
     t.after(() => { fs.readSync = realReadSync; });
 
     const scan = scanForPattern(c.pid, secret);
-    assert.ok(scan.regionsFailed.length > 0, 'the injected EIO must show up');
-    assert.ok(scan.regionsFailed.every((f) => !/w/.test(f.perms)),
+    const entries = [...scan.regionsFailed, ...scan.regionsEmpty];
+    assert.ok(entries.length > 0, 'the injected EIO must show up (failed or proven-empty)');
+    assert.ok(entries.every((f) => !/w/.test(f.perms)),
       'only read-only mappings may fail without becoming holes');
     assert.equal(scanIsComplete(scan), true, 'read-only EIOs are not holes');
   } finally {
@@ -148,7 +168,7 @@ test('a stale snapshot is rescanned: holes from a changed address space are supe
     const scan = scanForPattern(c.pid, secret);
     assert.ok(scan.attempts >= 2, `retry must happen, got attempts=${scan.attempts}`);
     assert.equal(scanIsComplete(scan), true,
-      `the rescan supersedes the stale hole, holes=${JSON.stringify(scan.regionsFailed)}`);
+      `the rescan supersedes the stale hole, holes=${JSON.stringify([...scan.regionsFailed, ...scan.regionsEmpty])}`);
     assert.equal(scan.hits.length, 0, 'absence still reported after the retry');
   } finally {
     c.kill('SIGKILL');
