@@ -78,8 +78,10 @@ const MAX_FUTURE_SKEW_MS = 24 * 60 * 60 * 1000;
 
 // RFC3339 with the seconds field pinned to 00-59 (a leap second has no
 // place in a signed artifact) and the offset inside the grammar's range.
+// The fraction is a CAPTURED group (review #9, R9-1): it is part of the
+// moment the receipt claims, so it must reach the future-bound comparison.
 const ISSUED_AT =
-  /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d{1,6})?(Z|([+-])(\d{2}):(\d{2}))$/;
+  /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,6}))?(Z|([+-])(\d{2}):(\d{2}))$/;
 
 function daysInMonth(year, month) {
   const lengths = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
@@ -99,6 +101,12 @@ function daysInMonth(year, month) {
  * that does not exist. Every component is range-checked, the day number is
  * checked against the real length of that month (leap years included), and
  * the instant is assembled explicitly from the parts.
+ *
+ * Returns { ms, us }: the whole-millisecond instant (seconds granularity
+ * after the offset is applied) plus the leftover MICROSECONDS of the
+ * fraction (0..999999). Both parts are needed because the future bound is
+ * decided exactly: a Date cannot carry microseconds, and dropping them made
+ * the bound permissive by up to 999.999ms (review #9, R9-1).
  */
 function issuedAtMs(value) {
   if (typeof value !== 'string') return null;
@@ -110,15 +118,16 @@ function issuedAtMs(value) {
   const hour = Number(m[4]);
   const minute = Number(m[5]);
   const second = Number(m[6]);
+  const fraction = m[7];
   if (month < 1 || month > 12) return null;
   if (hour > 23 || minute > 59 || second > 59) return null;
   if (day < 1 || day > daysInMonth(year, month)) return null;
   let offsetMinutes = 0;
-  if (m[7] !== 'Z') {
-    const offsetHours = Number(m[9]);
-    const offsetMins = Number(m[10]);
+  if (m[8] !== 'Z') {
+    const offsetHours = Number(m[10]);
+    const offsetMins = Number(m[11]);
     if (offsetHours > 23 || offsetMins > 59) return null;
-    offsetMinutes = (m[8] === '-' ? -1 : 1) * (offsetHours * 60 + offsetMins);
+    offsetMinutes = (m[9] === '-' ? -1 : 1) * (offsetHours * 60 + offsetMins);
   }
   // setUTCFullYear instead of Date.UTC: Date.UTC maps the years 0-99 onto
   // 1900-1999, which would silently shift a timestamp by centuries.
@@ -127,7 +136,11 @@ function issuedAtMs(value) {
   when.setUTCHours(hour, minute, second, 0);
   const instant = when.getTime();
   if (!Number.isFinite(instant)) return null;
-  return instant - offsetMinutes * 60000;
+  // The fraction is NOT folded into `ms` (a Date cannot hold it): it is
+  // returned beside it so the bound can compare exactly, with no rounding
+  // in either direction.
+  const us = fraction === undefined ? 0 : Number(fraction.padEnd(6, '0'));
+  return { ms: instant - offsetMinutes * 60000, us };
 }
 
 function refused(reason, extra) {
@@ -272,7 +285,17 @@ function evaluateMessage(body, grant, now = new Date()) {
   // tolerance): the artifact would claim a moment that has not happened.
   // The past is allowed - backdating is legitimate, and expiresAt already
   // bounds the signing itself.
-  if (issuedAtInstant > nowMs + MAX_FUTURE_SKEW_MS) return refused('issued_at_in_future');
+  //
+  // The comparison is EXACT to the microsecond the grammar allows (review
+  // #9, R9-1): the bound is whole milliseconds, so a fraction on an instant
+  // that lands exactly on the bound is already "beyond" it. Folding the
+  // fraction into ms instead would round in one direction or the other and
+  // reopen the boundary.
+  const boundMs = nowMs + MAX_FUTURE_SKEW_MS;
+  if (issuedAtInstant.ms > boundMs ||
+      (issuedAtInstant.ms === boundMs && issuedAtInstant.us > 0)) {
+    return refused('issued_at_in_future');
+  }
 
   // The canonical bytes were derived above; the message identity is the same
   // bytes the grant was checked against.

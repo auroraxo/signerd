@@ -52,6 +52,13 @@ async function signViaDaemon({ socketPath, grant, wire, timeoutMs }) {
  * The body is built from public values only (issuer name, type, subject,
  * claims, note, issued_at) - no key material is involved, and the daemon
  * signs the canonical bytes it derives from this object.
+ *
+ * issuedAt is OPTIONAL here on purpose: when absent the helper stamps the
+ * current UTC time, matching receipt.py's own default (review #9, R9-2 —
+ * before this, omitting issuedAt produced a body the daemon ALWAYS refuses
+ * with 'envelope', because 84888d4 made issued_at a required field). An
+ * explicit issuedAt (the daily runner's own stamp, a backdate, an offset
+ * spelling) is used verbatim.
  */
 function buildReceiptBody({ issuer, type, subject, claims = {}, note, issuedAt }) {
   if (typeof issuer !== 'string' || issuer.length === 0) throw new TypeError('issuer is required');
@@ -65,10 +72,12 @@ function buildReceiptBody({ issuer, type, subject, claims = {}, note, issuedAt }
     issuer,
     type,
     subject,
+    issued_at: typeof issuedAt === 'string'
+      ? issuedAt
+      : new Date().toISOString().replace(/\.\d{3}Z$/, '+00:00'),
     claims: { ...claims },
   };
   if (typeof note === 'string') body.note = note;
-  if (typeof issuedAt === 'string') body.issued_at = issuedAt;
   return body;
 }
 
