@@ -16,3 +16,35 @@ jobs:
       - run: npm ci --ignore-scripts
       - run: npm test
       - run: npm run test:crash
+      - run: npm run test:crash:sealed
+
+  # The consumer e2e is the client half of the message-grant envelope: the
+  # real receipt.py signs through the daemon socket with no key material in
+  # the client. It lives in this repo (test/via-signerd-consumer.test.js) but
+  # needs the openreceipts checkout as a sibling — same path the local dev
+  # layout uses (~/github_repos/{signerd,openreceipts}).
+  #
+  # A separate job on purpose: openreceipts main is an EXTERNAL repo from this
+  # workflow's point of view. If it ever breaks, the daemon's own test job
+  # must stay green and only this cross-check goes red.
+  consumer-e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install the Python verifier backend
+        run: pip install cryptography
+      - name: Check out openreceipts next to this repo
+        run: git clone --depth 1 https://github.com/auroraxo/openreceipts.git "$GITHUB_WORKSPACE/../openreceipts"
+      - run: npm ci --ignore-scripts
+      # pretest normally builds tools/leasecheck; this job bypasses npm test.
+      # Without the helper the daemon refuses grant reads (fail-closed), so
+      # building it is required, not an optimization.
+      - run: npm run build
+      - run: SIGNERD_OPENRECEIPTS="$GITHUB_WORKSPACE/../openreceipts" node --test test/via-signerd-consumer.test.js

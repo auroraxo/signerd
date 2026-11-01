@@ -12,11 +12,37 @@ Usage:
             encrypt an EXISTING plaintext key (id.json / base58 / raw 64 bytes)
   signerd run --keystore <file> --passphrase-file <file>
             --grants <file> --ledger <file> --socket <file>
+            [--grant-seal-passphrase-file <file>]
+            [--journal-seal-passphrase-file <file>]
   signerd sign --socket <file> --grant <name> --tx <wire-file> [--out <file>]
+  signerd sign-message --socket <file> --grant <name> --body <json-file> [--out <file>]
+            ask the daemon to sign an openreceipts/v1 receipt BODY (the
+            message-grant envelope): the daemon canonicalizes, checks the
+            grant and writes {receipt..., pubkey, sig} with the DAEMON's key
   signerd status --grants <file> --ledger <file>
+            [--grant-seal-passphrase-file <file>]
+            [--journal-seal-passphrase-file <file>]
+  signerd seal-grants --grants <file> --seal-passphrase-file <file> [--out <file>]
+            add/replace the HMAC seal of a grant file (provenance, R5-2)
+  signerd verify-grants --grants <file> --seal-passphrase-file <file>
+            check a grant file's seal without touching the journal
+  signerd seal-journal --journal <file> --journal-seal-passphrase-file <file>
+            verify the journal's chain, then seal it (provenance, R5-2):
+            every record gets a keyed chain MAC and a seal floor <journal>.anchor
+            records how much history the daemon approved; refused while a
+            daemon holds the journal lock; prints exactly what it sealed
+  signerd migrate --ledger <file> (--wires <dir> | --discard-legacy)
+            upgrade a format-1 journal; --wires restores message-level replay
+            protection, --discard-legacy explicitly accepts losing it
 
 Notes:
   --passphrase-file must be mode 0600 and is read once at startup.
+  --grant-seal-passphrase-file turns on sealed-grant mode: the daemon then
+  REFUSES a grant file whose HMAC seal does not verify (an unsealed or
+  altered file cannot be used to have the daemon sign).
+  --journal-seal-passphrase-file turns on sealed-journal mode the same way:
+  without the key the daemon refuses a journal that was ever sealed, and a
+  journal shorter than its seal floor (truncation) is refused with it.
   Every refusal is a machine-readable reason; nothing is signed outside the
   grant's scope. This is NOT a reviewed wallet or a production daemon.
 `;
@@ -44,15 +70,43 @@ function requireArg(args, name) {
   return value;
 }
 
-function readPassphrase(args) {
-  if (typeof args['passphrase-file'] !== 'string') {
-    process.stderr.write('missing --passphrase-file\n');
+// R6-6 (review #6, p6): the passphrase path had a mode check on statSync only
+// - no symlink refusal (a symlink here was followed), no owner check, no
+// directory check. Every other security-relevant path in this codebase
+// (keystore, grant file, journal, anchor, socket dir) refuses symlinks and
+// foreign/world-writable locations; the passphrase unlocks those very
+// protections and deserves the same hygiene. Checks run BEFORE the read; a
+// race after them is the same residual window every other path here has.
+function readPassphrase(args, flag = 'passphrase-file') {
+  if (typeof args[flag] !== 'string') {
+    process.stderr.write(`missing --${flag}\n`);
     process.exit(2);
   }
-  const file = requireArg(args, 'passphrase-file');
-  const mode = fs.statSync(file).mode & 0o777;
+  const file = requireArg(args, flag);
+  const lstat = fs.lstatSync(file); // a symlink at this path is refused (ELOOP)
+  if (!lstat.isFile()) {
+    process.stderr.write(`${flag} must be a regular file\n`);
+    process.exit(2);
+  }
+  const mode = lstat.mode & 0o777;
   if ((mode & 0o077) !== 0) {
-    process.stderr.write(`passphrase file must not be group/other accessible (mode ${mode.toString(8)})\n`);
+    process.stderr.write(`${flag} must not be group/other accessible (mode ${mode.toString(8)})\n`);
+    process.exit(2);
+  }
+  if (typeof process.getuid === 'function' &&
+      lstat.uid !== process.getuid() && lstat.uid !== 0) {
+    process.stderr.write(`${flag} must be owned by the operator (uid ${lstat.uid})\n`);
+    process.exit(2);
+  }
+  const dirStat = fs.statSync(path.dirname(path.resolve(file)));
+  const dirMode = dirStat.mode & 0o7777;
+  if ((dirMode & 0o022) !== 0 && (dirMode & 0o1000) === 0) {
+    process.stderr.write(`${flag} must not live in a group/other writable directory (mode ${dirMode.toString(8)})\n`);
+    process.exit(2);
+  }
+  if (typeof process.getuid === 'function' &&
+      dirStat.uid !== process.getuid() && dirStat.uid !== 0) {
+    process.stderr.write(`${flag} directory must be owned by the operator (uid ${dirStat.uid})\n`);
     process.exit(2);
   }
   return fs.readFileSync(file, 'utf8').replace(/\r?\n$/, '');
@@ -83,12 +137,18 @@ async function main() {
 
   if (command === 'run') {
     const { Daemon } = require('../src/daemon');
+    const sealPassphrase = typeof args['grant-seal-passphrase-file'] === 'string'
+      ? readPassphrase(args, 'grant-seal-passphrase-file') : undefined;
+    const journalSealPassphrase = typeof args['journal-seal-passphrase-file'] === 'string'
+      ? readPassphrase(args, 'journal-seal-passphrase-file') : undefined;
     const daemon = new Daemon({
       socketPath: requireArg(args, 'socket'),
       keystorePath: requireArg(args, 'keystore'),
       passphrase: readPassphrase(args),
       grantFile: requireArg(args, 'grants'),
       ledgerFile: requireArg(args, 'ledger'),
+      grantSealPassphrase: sealPassphrase,
+      journalSealPassphrase,
     });
     await daemon.start();
     process.stdout.write(JSON.stringify({ ok: true, ...daemon.status() }) + '\n');
@@ -112,14 +172,124 @@ async function main() {
     process.exit(response.ok ? 0 : 1);
   }
 
+  if (command === 'sign-message') {
+    const { request } = require('../src/daemon');
+    const socketPath = requireArg(args, 'socket');
+    const grant = requireArg(args, 'grant');
+    const bodyText = fs.readFileSync(requireArg(args, 'body'), 'utf8');
+    // Shape check BEFORE the round trip: the body must be a JSON object (a
+    // bare number or string would only fail at the policy layer).
+    try {
+      const parsed = JSON.parse(bodyText);
+      if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        process.stderr.write('body_invalid: expected a JSON object\n');
+        process.exit(2);
+      }
+    } catch {
+      process.stderr.write('body_invalid: not JSON\n');
+      process.exit(2);
+    }
+    const response = await request({ socketPath, grant, body: bodyText });
+    if (response.ok && typeof args.out === 'string') {
+      // The receipt file, openreceipts-shaped: the body the daemon signed
+      // (re-serialized with sorted keys, indent 2 - formatting is not
+      // payload), plus pubkey and sig, exactly what `receipt.py verify` and
+      // verify.mjs read.
+      const bodyObj = JSON.parse(bodyText);
+      const ordered = {};
+      for (const key of Object.keys(bodyObj).sort()) ordered[key] = bodyObj[key];
+      const doc = { receipt: ordered, pubkey: response.pubkey, sig: response.signature };
+      fs.writeFileSync(args.out, JSON.stringify(doc, null, 2) + '\n', { mode: 0o600 });
+    }
+    process.stdout.write(JSON.stringify(response) + '\n');
+    process.exit(response.ok ? 0 : 1);
+  }
+
   if (command === 'status') {
     const { loadGrantFile } = require('../src/grantfile');
     const { Ledger } = require('../src/ledger');
-    const loaded = loadGrantFile(requireArg(args, 'grants'));
-    const ledger = new Ledger({ file: requireArg(args, 'ledger') });
+    const sealPassphrase = typeof args['grant-seal-passphrase-file'] === 'string'
+      ? readPassphrase(args, 'grant-seal-passphrase-file') : undefined;
+    const journalSealPassphrase = typeof args['journal-seal-passphrase-file'] === 'string'
+      ? readPassphrase(args, 'journal-seal-passphrase-file') : undefined;
+    const options = sealPassphrase === undefined ? {} : {
+      sealKeyFor: require('../src/grantseal').makeSealKeyProvider(sealPassphrase),
+    };
+    const loaded = loadGrantFile(requireArg(args, 'grants'), options);
+    const ledger = new Ledger({
+      file: requireArg(args, 'ledger'),
+      sealPassphrase: journalSealPassphrase,
+    });
     process.stdout.write(JSON.stringify({
-      ok: true, grants: loaded.names, ledger: ledger.snapshot(),
+      ok: true, grants: loaded.names, ledger: ledger.snapshot(), legacyState: ledger.legacyState(),
+      sealed: sealPassphrase !== undefined, journalSealed: journalSealPassphrase !== undefined,
     }) + '\n');
+    return;
+  }
+
+  if (command === 'seal-journal') {
+    const { sealExistingJournal } = require('../src/journalseal-ops');
+    const result = sealExistingJournal({
+      journalFile: requireArg(args, 'journal'),
+      passphrase: readPassphrase(args, 'journal-seal-passphrase-file'),
+    });
+    process.stdout.write(JSON.stringify(result) + '\n');
+    return;
+  }
+
+  if (command === 'seal-grants') {
+    const { sealDocument } = require('../src/grantseal');
+    const file = requireArg(args, 'grants');
+    const passphrase = readPassphrase(args, 'seal-passphrase-file');
+    const raw = fs.readFileSync(file, 'utf8');
+    let doc;
+    try {
+      doc = JSON.parse(raw);
+    } catch {
+      process.stderr.write('grant_file_invalid: not JSON\n');
+      process.exit(1);
+    }
+    if (doc === null || typeof doc !== 'object' || Array.isArray(doc) ||
+        doc.version !== 1 || typeof doc.grants !== 'object' || doc.grants === null ||
+        Array.isArray(doc.grants)) {
+      process.stderr.write('grant_file_invalid: expected {version:1, grants:{...}}\n');
+      process.exit(1);
+    }
+    const sealed = sealDocument(doc, passphrase);
+    const out = typeof args.out === 'string' ? args.out : file;
+    fs.writeFileSync(out, JSON.stringify(sealed, null, 2) + '\n', { mode: 0o600 });
+    // The operator must see WHAT was sealed: sealing a forged file makes the
+    // forgery valid, so the names and the caps are printed.
+    const summary = Object.keys(sealed.grants).sort().map((name) => ({
+      name,
+      signer: sealed.grants[name].signer,
+      destination: sealed.grants[name].destination,
+      maxLamports: sealed.grants[name].maxLamports,
+      expiresAt: sealed.grants[name].expiresAt,
+    }));
+    process.stdout.write(JSON.stringify({ ok: true, out, grants: summary }) + '\n');
+    return;
+  }
+
+  if (command === 'verify-grants') {
+    const { loadGrantFile } = require('../src/grantfile');
+    const { makeSealKeyProvider } = require('../src/grantseal');
+    const passphrase = readPassphrase(args, 'seal-passphrase-file');
+    const loaded = loadGrantFile(requireArg(args, 'grants'), {
+      sealKeyFor: makeSealKeyProvider(passphrase),
+    });
+    process.stdout.write(JSON.stringify({ ok: true, grants: loaded.names }) + '\n');
+    return;
+  }
+
+  if (command === 'migrate') {
+    const { migrateJournal } = require('../src/migrate');
+    const result = migrateJournal({
+      file: requireArg(args, 'ledger'),
+      wiresDir: typeof args.wires === 'string' ? args.wires : null,
+      discardLegacy: args['discard-legacy'] === true,
+    });
+    process.stdout.write(JSON.stringify({ ok: true, ...result }) + '\n');
     return;
   }
 

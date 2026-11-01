@@ -1,0 +1,67 @@
+{
+  "generatedAt": "2026-10-30T16:18:27.314Z",
+  "rpc": "https://api.mainnet-beta.solana.com",
+  "finalizedTipAtStart": 463349516,
+  "firstSlot": 463349396,
+  "blocksSampled": 25,
+  "slots": [
+    463349396,
+    463349395,
+    463349394,
+    463349393,
+    463349392,
+    463349391,
+    463349390,
+    463349389,
+    463349388,
+    463349387,
+    463349386,
+    463349385,
+    463349384,
+    463349383,
+    463349382,
+    463349381,
+    463349380,
+    463349379,
+    463349378,
+    463349377,
+    463349376,
+    463349375,
+    463349374,
+    463349373,
+    463349372
+  ],
+  "counts": {
+    "v0_fit": 55,
+    "spl_v1": 3,
+    "legacy_other": 11996,
+    "vtx": 1336,
+    "malformed": 0
+  },
+  "totals": {
+    "transactions": 13390,
+    "legacy": 12054,
+    "v0_fit_pct_of_all": "0.411",
+    "spl_v1_pct_of_all": "0.022",
+    "vtx_pct_of_all": "9.978",
+    "v0_fit_pct_of_legacy": "0.456",
+    "spl_v1_pct_of_legacy": "0.025"
+  },
+  "detailCounts": {
+    "versioned/ALT message": 1336,
+    "system transfer, 1 ix, 3 keys": 55,
+    "TransferChecked, authority = signer (4th account)": 3
+  },
+  "definitions": {
+    "v0_fit": "exactly what src/policy.js evaluate() accepts: 1 signer, 3 static keys, 1 SystemProgram.transfer ix (data len 12, tag 2)",
+    "spl_v1": "proposed v1: 1 signer, 4 static keys [signer, source, destination, token program], 1 Transfer/TransferChecked ix with authority = signer",
+    "vtx": "versioned message / address table lookups - refused by the current policy by construction",
+    "legacy_other": "any other legacy shape (multi-ix, CPI, DEX, compute budget, ...)"
+  },
+  "limits": [
+    "Classification is structural, from encoding=json: it proves the SHAPE fits, not that any grant would be issued.",
+    "A transaction can be in-envelope and still be refused by grant/ledger (amount cap, expiry, replay, window).",
+    "Sample is a bounded recent window of finalized mainnet blocks, not a full-history census.",
+    "v0/ALT transactions are counted as out of envelope, never re-indexed through loaded addresses."
+  ]
+}

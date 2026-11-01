@@ -2,7 +2,7 @@
 
 Scoped signing daemon for Solana: the ssh-agent pattern, applied to Solana keys. signerd signs only the subset of transactions it can fully verify offline; everything else gets a structured refusal — and that refusal is the feature.
 
-**Status: v0 prototype (October 2026), NOT a signing service or security-reviewed wallet.** The scope was narrowed on 2026-10-26 after an adversarial review (see Safety boundary). On 2026-10-27 the first tested *legacy System-transfer-only* refusal checker and its atomic expenditure/replay ledger were added; on 2026-10-27/28 the local daemon (Unix socket, encrypted keystore, grant file) was added. **The daemon holds a real key and produces real signatures — it has passed two independent adversarial reviews (the daemon hardening diff on 2026-10-27, and the signing path on 2026-10-29), each with every finding fixed and regression-tested against the reviewed code, but no professional audit has happened and no real funds should use it yet.** The rest of the v1 envelope below remains a plan.
+**Status: v0 prototype (October 2026), NOT a signing service or security-reviewed wallet.** The scope was narrowed on 2026-10-26 after an adversarial review (see Safety boundary). On 2026-10-27 the first tested *legacy System-transfer-only* refusal checker and its atomic expenditure/replay ledger were added; on 2026-10-27/28 the local daemon (Unix socket, encrypted keystore, grant file) was added. **The daemon holds a real key and produces real signatures — it has passed five independent adversarial review rounds (daemon hardening 2026-10-27; signing path 2026-10-29, #2; migration/replay 2026-10-29, #3; open-handle 2026-10-30, #4; and 18 external attack probes, #5), and every finding from all five rounds (the last one, R5-2 — content provenance of a grant file or journal that was once writable by others — was closed on 2026-10-31 with opt-in sealed grant files and a sealed journal, see Review #5 below) is fixed and regression-tested against the reviewed code, no professional audit has happened, and no real funds should use it yet.** The rest of the v1 envelope below remains a plan.
 
 ## The idea
 
@@ -38,6 +38,130 @@ A later, explicitly labeled `--simulate` mode may add RPC-backed checking for th
 - Per-transaction and per-window caps, summed across transactions by the daemon.
 - Structured refusals: `{refused: "alt", detail: …}`, so a caller can learn why instead of working around it.
 
+## What the traffic actually looks like (measured 2026-10-30)
+
+The envelope decision (v1 SPL-Token vs. a message-grant envelope) was a judgement call until it was measured against real mainnet traffic. `tools/envelope-traffic.mjs` samples finalized mainnet blocks and classifies every transaction by *shape* — whether it could fit an envelope at all. Output: `research/envelope-traffic-2026-10-30.json` (25 blocks, 13,390 transactions).
+
+| Shape | Count | Share |
+|---|---|---|
+| `v0_fit` — exactly what `policy.evaluate` accepts today (1 signer, 3 keys, 1 System transfer) | 55 | 0.41% |
+| `spl_v1` — 1 signer, 1 SPL Token instruction, authority is the signer | 3 | 0.02% |
+| versioned / ALT message (refused by construction) | 1,336 | 9.98% |
+| everything else (multi-ix, CPI, DEX, compute budget) | 11,996 | 89.6% |
+
+**The honest reading:** the current v0 envelope covers about 4 in 1,000 transactions, and the proposed v1 SPL-Token envelope would cover about 2 in 10,000 *more* — because real token transfers are overwhelmingly wrapped in DEX programs, compute-budget instructions, or address tables, not bare single-instruction transfers. Adding an SPL-Token envelope would not make this product useful to real Solana traffic; it would add a second narrow envelope to an already narrow one.
+
+What that points at instead is the message-grant envelope: the work that needs a scoped signature in this ecosystem is signing a *message* (a receipt, an attestation, a quote), not a transaction shape — and the one measured own site (`openreceipts`) is exactly that. This measurement does not settle the question; it removes the argument that v1 SPL-Token would.
+
+Limits of this measurement: classification is structural (the shape fits), not a statement that any grant would be issued — amount caps, expiry, replay and window limits still apply on top; the sample is a bounded recent window of finalized blocks, not a full-history census; v0/ALT transactions are counted as out-of-envelope rather than re-indexed through loaded addresses.
+
+Four defects in the measuring tool were found and fixed by measurement, each of which had produced a clean-looking but false result: `--blocks=25` was sliced to `'=25'` → `NaN`, so the sampling loop never ran and the tool reported "0 transactions" as if it were a finding; `getBlock` with `maxSupportedTransactionVersion: 0` now fails for *every* slot because mainnet serves version 1; `getBlock` returns `{transaction, meta}` wrappers, so classifying them directly marked everything malformed; and the file carried a fabricated SPL Token program id (`TokenkegQdZ1…`) while the real one is `TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA` — which is why an early run reported 0 token matches while 731 real `Tokenkeg` instructions sat in six blocks. The classifier now self-checks against hand-built fixtures (`--selftest`, 8/8) before it reports a number, and refuses to report at all on a zero-transaction sample.
+
+### The message-grant envelope (built and measured 2026-10-31)
+
+The traffic measurement above points at a different job than "sign this
+transaction": signing a **message** — a receipt, an attestation, a quote. That
+envelope now exists, next to the transaction envelope, in the same daemon.
+
+A message grant is a different schema, on purpose: it speaks about a receipt
+domain, not about a money destination, so the field sets are disjoint and a
+grant that mixes them is refused rather than sorted out at request time.
+
+```json
+{
+  "kind": "message",
+  "issuer": "auroraxo",
+  "type": "release",
+  "subject": "auroraxo/signerd",
+  "pubkey": "<base64 Ed25519 public key the daemon must hold>",
+  "maxBytes": "700",
+  "expiresAt": "2026-11-01T00:00:00.000Z",
+  "windowMaxMessages": "5",
+  "windowSeconds": "3600",
+  "claimKeys": "version,build"
+}
+```
+
+The grant authorizes exactly one thing: *the key this daemon holds may sign an
+`openreceipts/v1` receipt body for this issuer, this type and this subject,
+whose canonical bytes are at most `maxBytes` long, at most
+`windowMaxMessages` times per `windowSeconds`, until `expiresAt`.* Everything
+else in the body is either pinned by the grant (issuer, type, subject, the
+issuer's public key) or bounded (claims, note). `issued_at` is REQUIRED and
+semantics-checked (review #7, 2026-11-01): the openreceipts verifier reads it
+unconditionally, so a receipt without it would crash the primary consumer, and
+an impossible timestamp (`2026-02-30`) must not normalize into a real one —
+the daemon refuses both. A receipt dated further than 24h into the future is
+refused (`issued_at_in_future`); the tolerance is measured against the daily
+runner, which stamps `issued_at` at 21:00 UTC of DAY (up to ~21.4h ahead of an
+early-morning run). The past is not bounded: backdating about a past event is
+legitimate, and `expiresAt` bounds when the signing happens. `claimKeys` is
+optional; when present it is the allowlist of claim keys that may be signed.
+
+```bash
+signerd sign-message --socket ~/.local/share/signerd/signerd.sock \
+            --grant releases-24h --body receipt-body.json --out receipt.json
+```
+
+The artifact is an ordinary `openreceipts/v1` document — `{receipt, pubkey,
+sig}` — so `python3 receipt.py verify receipt.json` and `node verify.mjs
+receipt.json` accept it unchanged.
+
+**The receipt-producing flow exists on both ends now** (2026-10-31):
+`receipt.py sign --via-signerd <socket> --grant <name>` builds the body,
+sends it to the daemon and — before writing any file — verifies the signature
+it got back against its own body and against a locally pinned public key.
+That client path needs **no key material at all**: no `OPENRECEIPTS_HOME` is
+created, no `.key` file is read or written. Refusals from the daemon
+(`window_cap`, `replay`, `type`, `subject`, …) exit non-zero and write
+nothing. Checked end to end in `test/via-signerd-consumer.test.js` (7 tests:
+empty client home, verify-before-write with a lying daemon, pinned-key
+mismatch, restart + replay, overdraw, off-scope type/subject, unreachable
+socket — all **red on the pre-client tree** and green after) and live against
+the real issuer key (`research/consumer-live-2026-10-31/`: site key == pinned
+key, both verifiers accept, overdraw and cross-restart replay refused, no
+client key file ever created).
+
+**Measured, not claimed** (`test/message-e2e.test.js`, live daemon, real
+socket):
+
+- a receipt signed by the daemon verifies under **both** openreceipts
+  verifiers — the Python CLI and the zero-dependency Node verifier — against
+  the pinned issuer key, with the canonical bytes produced by signerd's own
+  canonicalizer;
+- the daemon canonicalizes: a body whose *textual* key order differs from the
+  canonical order yields the same signature target, and the signed bytes
+  verify under OpenSSL ed25519 with the imported key;
+- **the two envelopes cannot borrow each other**: a receipt on a transaction
+  grant and a transaction wire on a message grant are both refused with
+  `grant_kind_mismatch`, never signed;
+- the window counts **messages**, not lamports (a receipt costs nothing on
+  chain): at `windowMaxMessages: 2` the third distinct receipt is refused with
+  `window_cap` and `windowRemainingMessages: 0`; the same receipt body again
+  is refused with `replay` — one signature per distinct receipt, ever;
+- expiry takes effect on the next request without a restart (the grant file
+  is re-read per request);
+- a grant that pins **another** public key poisons the whole file: the daemon
+  refuses to start, and a running daemon refuses every request (including the
+  healthy grant next to it) — fail-closed, not fail-open;
+- cost: **p50 31.4 ms, p95 63.4 ms** per signed receipt (n=50, fsync-dominated;
+  the transaction path's measured roundtrip was 31.0 ms).
+
+**Falsification ladder**: all 15 new tests (11 policy + 4 e2e) are **red on
+the pre-envelope tree** (`c1b1c09`): the policy module does not exist there,
+and the daemon refuses to even load a grant file that carries a `kind` field
+(`grant_unknown_field`). On the fix tree they are green. The transaction
+path is untouched: the suite went from 140 to 155 with 0 failures, and both
+crash-harness modes (sealed and unsealed) stay green.
+
+**What this does not do**: it does not check that a receipt is *true*. A
+signed receipt says "the issuer said this", never "this happened". The grant
+bounds who may speak for the issuer and about what — not the truth. The
+message-grant envelope has now had one adversarial review (review #7,
+2026-11-01: the issued_at contract and the canonicalization/ledger-scope
+surface — 2 HIGH + 1 MED found and fixed, all falsified against the pre-fix
+tree, see below); the transaction path has had six rounds.
+
 ## Shape
 
 ```bash
@@ -53,6 +177,16 @@ signerd run --keystore ~/.config/signerd/ops.key --passphrase-file ~/.config/sig
             --grants ~/.config/signerd/grants.json \
             --ledger ~/.local/share/signerd/journal.jsonl \
             --socket ~/.local/share/signerd/signerd.sock
+
+# optional (opt-in, fail-closed): seal grant file and journal against content
+# written by anyone who could write them before the daemon looks. After this,
+# the daemon refuses unsealed or altered files instead of trusting mode checks.
+signerd seal-grants --grants ~/.config/signerd/grants.json \
+            --grant-seal-passphrase-file ~/.config/signerd/seal.pass
+signerd seal-journal --ledger ~/.local/share/signerd/journal.jsonl \
+            --journal-seal-passphrase-file ~/.config/signerd/seal.pass
+signerd run ... --grant-seal-passphrase-file ~/.config/signerd/seal.pass \
+            --journal-seal-passphrase-file ~/.config/signerd/seal.pass
 
 # a client: no key material, only a grant name and the transaction bytes
 signerd sign --socket ~/.local/share/signerd/signerd.sock --grant ops-24h --tx tx.bin
@@ -114,7 +248,7 @@ The v0 daemon still only speaks the narrow legacy System-transfer envelope of `s
 
 Checked on 2026-10-24/26, re-measured on 2026-10-28 with `tools/key-load-sites.mjs` (output in `research/key-load-sites-2026-10-28.json`): the earlier "21 files across six of my own repositories" was wrong — it counted checkouts sitting in my working directory as if they were repositories I control. Of 85 key-load files across 51 local checkouts, 72 are in third-party clones with no write access, 4 in my fork of `orca-so/whirlpools`, and 9 in the two repos I author: 8 in signerd itself (keystore, signer, tests — this is where the key is supposed to be) and 1 in `openreceipts` (Ed25519 receipt signing, not a Solana transaction path). "Migrate my 21 key-load sites" was therefore never a real backlog.
 
-**Envelope fit of that one remaining site, measured 2026-10-28/29** (`tools/envelope-fit.mjs`, output in `research/envelope-fit-openreceipts-2026-10-28.json`, offline proof in `test/envelope-fit.test.js` + `test/envelope-fit-tool.test.js`): the note had guessed "probably not, Ed25519 instead of Solana-Tx". The verdict holds, the reason does not — both are Ed25519. The PKCS8 seed in `~/.openreceipts/auroraxo.key` derives the same public key under both OpenSSL and web3.js, `signerd import` accepts that key after a mechanical PEM→raw conversion, and the **published identity is measured, not assumed**: the site-derived key equals the pinned issuer key (`openreceipts/keys/auroraxo.pub`, byte-for-byte) and verifies all 6 published receipts under their canonical `json.dumps(sort_keys=True, separators=(",", ":"), ensure_ascii=True)` bytes — the JS canonicalizer in `src/receipt-identity.js` is hash-identical to Python's on all 6 receipts, and a receipt signed by a different key, a flipped byte, or a mismatched pinned key makes the tool report FAILED rather than pass (the harness asserts that refusal). What does not fit is the **message domain**: openreceipts signs canonical JSON receipts, the v0 envelope signs a legacy System transfer wire, so `policy.evaluate` refuses a receipt body (`invalid_wire`) and should. The refusal is not a tooling gap — importing the key without a message-grant envelope would move a key the daemon cannot use, so no migration is built. Unchanged: `sendaifun/solana-agent-kit` documents a raw private key as its setup path; a keyword scan of 1,123 live Solana-ecosystem repositories found no local scoped-signing daemon (a scan, not a semantic census); this remains a hypothesis with zero outside users.
+**Envelope fit of that one remaining site, measured 2026-10-28/29** (`tools/envelope-fit.mjs`, output in `research/envelope-fit-openreceipts-2026-10-28.json`, offline proof in `test/envelope-fit.test.js` + `test/envelope-fit-tool.test.js`): the note had guessed "probably not, Ed25519 instead of Solana-Tx". The verdict holds, the reason does not — both are Ed25519. The PKCS8 seed in `~/.openreceipts/auroraxo.key` derives the same public key under both OpenSSL and web3.js, `signerd import` accepts that key after a mechanical PEM→raw conversion, and the **published identity is measured, not assumed**: the site-derived key equals the pinned issuer key (`openreceipts/keys/auroraxo.pub`, byte-for-byte) and verifies all 6 published receipts under their canonical `json.dumps(sort_keys=True, separators=(",", ":"), ensure_ascii=True)` bytes — the JS canonicalizer in `src/receipt-identity.js` is hash-identical to Python's on all 6 receipts, and a receipt signed by a different key, a flipped byte, or a mismatched pinned key makes the tool report FAILED rather than pass (the harness asserts that refusal). What does not fit is the **message domain**: openreceipts signs canonical JSON receipts, the v0 envelope signs a legacy System transfer wire, so `policy.evaluate` refuses a receipt body (`invalid_wire`) and should. The refusal is not a tooling gap — importing the key without a message-grant envelope would move a key the daemon cannot use, so no migration was built **until the message-grant envelope landed (2026-10-31, see "The message-grant envelope" above): the daemon now signs these bodies, and the refusal of the old envelope stays correct.** Unchanged: `sendaifun/solana-agent-kit` documents a raw private key as its setup path; a keyword scan of 1,123 live Solana-ecosystem repositories found no local scoped-signing daemon (a scan, not a semantic census); this remains a hypothesis with zero outside users.
 
 ## First executable increment (policy only, not a signer)
 
@@ -123,7 +257,7 @@ Checked on 2026-10-24/26, re-measured on 2026-10-28 with `tools/key-load-sites.m
 `src/ledger.js` is the accounting layer that must sit between a positive verdict and any future signature. `gate(wire, grant, now, ledger)` refuses with `ledger_unavailable` when no ledger is attached, so a policy verdict alone never spends budget. The ledger keeps an append-only JSONL journal, fsyncs it **before** returning an approval, and charges each approval `amount + 5000` lamports (the envelope allows exactly one signature and no ComputeBudget instruction, so the base fee is fixed and no priority fee can be attached) against a rolling per-scope window:
 
 - **Scope-keyed budget**: spend is counted per signer+destination pair, so two grants aimed at the same destination share one window cap instead of each getting a fresh one.
-- **Replay**: one transaction **message** is approved at most once, ever, across restarts (SHA-256 of the message, persisted in the journal). The message — not the bytes the client sent — is the identity, because the 64-byte signature slot is client-controlled and is overwritten by the daemon: two wires that differ only there are one transaction, and the signed artifact the daemon returns carries that same message. The raw wire hash is recorded alongside it (`w` / `m` in journal format 2). **Known limitation:** a journal written before 2026-10-29 (format 1) carries only the wire hash, so across that migration boundary legacy approvals keep wire-level replay protection and cannot add message-level protection — they age out of the window like every other record.
+- **Replay**: one transaction **message** is approved at most once, ever, across restarts (SHA-256 of the message, persisted in the journal). The message — not the bytes the client sent — is the identity, because the 64-byte signature slot is client-controlled and is overwritten by the daemon: two wires that differ only there are one transaction, and the signed artifact the daemon returns carries that same message. The raw wire hash is recorded alongside it (`w` / `m` in journal format 2). A journal written before 2026-10-29 (format 1) carries only the wire hash, so it is **refused at load** (`ledger_legacy_format`) until migrated explicitly: `signerd migrate --ledger <file> --wires <dir>` (the original wires restore message identity for every record; a missing wire refuses and writes nothing) or `--discard-legacy` (keeps window spend, marks message identity unknown, and reports the accepted gap via `legacyState`). The original journal is kept as `<file>.pre-migrate.<random>.bak` (exclusive create, never overwritten); the migration holds the daemon's journal lock throughout.
 - **Self-verifying**: every record carries a hash of its own fields chained to the previous record's hash, so the journal is a hash chain. An in-place edit — even a same-size one, e.g. `"a":"42"` → `"a":"12"` — breaks the chain and makes the load fail closed (`ledger_tampered`) instead of being silently trusted.
 - **Fail closed**: an unreadable or corrupt journal makes the constructor throw; a torn final line (crash mid-append) is dropped and repaired, never parsed; an fsync failure during approval returns `ledger_write_failed` with nothing entering in-memory state; if the rollback of a failed append also fails, the ledger poisons itself and refuses every later approval (`ledger_inconsistent`); window refusals occur before any write.
 - **Foreign-write detection**: before every append the ledger re-reads the file and compares both its length and its SHA-256 with the state it last wrote, so an outside writer is refused (`ledger_changed`) rather than merged into.
@@ -149,7 +283,7 @@ npm ci
 npm test
 ```
 
-**Not safe for real keys yet.** The policy prototype is unit-tested and the daemon is tested end-to-end over a real socket (86 tests: 9 policy, 20 ledger, 18 daemon, 8 signer, 7 grant file, 8 keystore, 8 review-#2 regressions, 5 envelope-fit, 2 user-zero). The daemon's signing path passed **two independent adversarial reviews** (2026-10-27 on the hardening diff, 2026-10-29 on the signing path), each with every finding fixed and regression-tested — but neither is a professional audit, so do not point it at a key with funds yet. It has no authentication beyond the socket's file mode, no key rotation, and the ledger does not bind transaction lifetime (blockhash freshness) — a stale blockhash simply fails on-chain.
+**Not safe for real keys yet.** The policy prototype is unit-tested and the daemon is tested end-to-end over a real socket (140 tests: 9 policy, 20 ledger, 18 daemon, 8 signer, 7 grant file, 8 keystore, 8 review-#2 regressions, 5 envelope-fit, 2 user-zero, 6 R4-1 lease regressions incl. one live-daemon end-to-end, 9 R4-2 journal-lease regressions incl. one live-daemon end-to-end, 15 R5-2 journal-seal regressions, 4 sealed-journal end-to-end). The daemon's signing path passed **three independent adversarial reviews** (2026-10-27 on the hardening diff, 2026-10-29 on the signing path, 2026-10-30 on R4-1), each with every finding fixed and regression-tested — but neither is a professional audit, so do not point it at a key with funds yet. It has no authentication beyond the socket's file mode, no key rotation, and the ledger does not bind transaction lifetime (blockhash freshness) — a stale blockhash simply fails on-chain.
 
 ### Adversarial review of the daemon (2026-10-27) — findings and fixes
 
@@ -181,8 +315,96 @@ A second independent review targeted the whole signing path (`src/policy.js`, `s
 
 Re-verified against the fixed tree: the original probe scripts now report `socket_in_use` + socket still present (R2-1), `request_invalid` for a byte-array wire (R2-6), grant reload reflected on the next request (R2-4), same-message-prefills refused with `replay` and `ledgerRecords: 1` (R2-2), one response per frame with the second refused (R2-5), and `ledger_changed` for a journal swapped between construction and first append. The full suite (86 tests) and the crash harness (25 SIGKILL rounds, 118 reported approvals, all durable) are green.
 
+### Adversarial review #3 (2026-10-29) — findings and fixes
+
+Reviewed commit `2d0f1d9`; verdict VULNERABLE (1 HIGH, 1 MED, 1 LOW), all reproduced.
+
+- **Fixed — R3-1 (HIGH): a group/other-writable grant file was chmod-"tightened" and then trusted.** chmod cannot undo a forged edit or revoke a write descriptor a stranger already holds, so the daemon signed attacker-chosen transfers. The grant file is now refused outright (`grant_file_mode`), like the journal.
+- **Fixed — R3-2 (MED): the format 1 → 2 migration dropped message-level replay** (same message + different signature slot was re-approved and re-signed). Format-1 journals now fail closed; migration is explicit (see Replay above). Regression tests use genuine format-1 bytes in `test/fixtures/` (`test/journal-migration.test.js`).
+- **Documented — R3-3 (LOW):** the hash chain is unkeyed SHA-256: it detects corruption and naive edits, **not** a rewrite by a writer who recomputes hashes. Framed at the time as "same-uid compromise is out of scope"; review #5 showed the writer only needs write access *at some earlier moment*, not the same uid (R5-2 below) — so this is now a named open finding, not a scope note.
+
+### Adversarial review #4 (2026-10-30) — R4-1: an open write handle survives `chmod`
+
+**Finding (HIGH, reproduced).** R3-1 refuses a group/other-writable grant file, but `chmod` does not revoke a descriptor opened *before* the tightening. A process that opened the file while it was writable keeps writing through it afterwards, the mode still reads `0600`, and the daemon re-reads the file on **every** request — so forged grants reach the signer. Reproduced against `5c72342`: with a stranger holding the file open for writing, a live daemon signed the request (`test/r4-1-e2e.test.js`, pre-fix: fail).
+
+**Fix — kernel-enforced read lease, not a `/proc` scan.** `tools/leasecheck.c` takes an `F_RDLCK` lease on the file it is about to read: the kernel grants it **only if nobody holds the file open for writing**, and it decides that for *every* uid. The bytes are read through the lease-holding fd, and the lease is re-checked afterwards (`F_GETLEASE`) so a writer that got in mid-read yields `lease=broken` and is refused instead of handed over.
+
+An intermediate `/proc`-scan fix was built first and then **measured and rejected** — it could not see a foreign uid's descriptors at all (D2), and its cached verdict under `dev:ino:ctime:size` never changed when a file was *opened*, so a writer appearing after the first scan was invisible for the process's lifetime (D1). Cost was 7.8 ms per request (D3); the lease probe is ~5.8 ms including the helper process (the daemon already spends ~2 ms per request on the journal's `fsync`).
+
+The lease type is the whole design and the first version got it wrong: `F_WRLCK` conflicts with *every* opener, so a single `cat grants.json` would have made the daemon refuse to sign. `F_RDLCK` conflicts only with writers — both are pinned by `test/r4-1.test.js` (`held open for READING is still accepted` passes on all three trees; it is the false-positive guard).
+
+**Falsification ladder** (6 tests, run against copies of each tree):
+
+| tree | pass | fail |
+|---|---|---|
+| `5c72342` pre-fix (no writer check) | 1 | 5 |
+| `/proc`-scan intermediate | 2 | 4 |
+| `F_SETLEASE` (shipped) | **6** | 0 |
+
+**Limits, stated rather than hidden:** point-in-time — it proves the state *at read time*, not that the file was never written before the daemon started. **A finished past write is now measured, not assumed, to be caught: it is not (review #5, below).** Linux-only (`F_SETLEASE`): on a kernel without leases the helper exits 4 and the daemon **refuses** rather than reporting a pass it could not observe. The helper binary is not committed (built from `tools/leasecheck.c` by `npm run build`, wired as `pretest`) — a checked-in binary would be an opaque trust dependency. Verification: 98 tests green from a clean build, crash harness 25 rounds / 121 approvals all durable.
+
+### R4-2 (2026-10-30) — the journal had the same open-handle hole
+
+**Finding.** R4-1 closed the grant file; the **journal** still read itself with `fs.readFileSync`. A process that opened the journal for writing before a `chmod 0600` keeps writing through that descriptor, and the journal *is* the replay set and the spend budget: bytes believed at load (and at the append's unchanged-check) could differ from what a surviving descriptor writes a moment later. `assertJournalPath` only inspects the path, so nothing observed the open handle. Reproduced against `a806edd`: with a stranger holding the journal open, a live daemon **signed** the request.
+
+**Fix.** The journal now goes through the same `readUnderLease` primitive as the grant file — at load (`#load`), at the append's unchanged-check (`#appendLine`), and in both reads of `migrateJournal` (the read, and the byte-compare before the `rename` that commits the migration). `readUnderLease(file, {prefix})` parameterizes only the error-code prefix, so every existing caller keeps byte-identical `grant_file_*` codes while the journal reports `ledger_held_writer`, `ledger_lease_unsupported`, `ledger_lease_denied`, `ledger_too_large`. ENOENT is carried in `err.detail`, so a missing journal is still the normal fresh start and a missing migration target is still `ledger_missing`. The daemon passes `ledger_held_writer` through `approve()` to the client verbatim instead of flattening it to `ledger_write_failed`.
+
+**Falsification** — 9 tests in `test/r4-2.test.js` + `test/r4-2-e2e.test.js`, run against both trees:
+
+| tree | pass | fail |
+|---|---|---|
+| `a806edd` pre-fix | 1 | 8 |
+| journal `F_SETLEASE` (shipped) | **9** | 0 |
+
+The single pre-fix pass is the false-positive guard (`held open for READING is still loaded and usable`) — it is what would make the daemon refuse whenever anybody inspected the journal.
+
+**Cost, measured:** 17.5 ms per append vs 9.2 ms before (6.4 ms of that is the lease probe — one helper process per load/append, on top of the ~5.8 ms/req the grant-file lease already costs). This is the price of the guarantee, not an optimisation target yet; if it matters later the probe belongs at the trust points that already exist (`fsync` per approval), not in a cache.
+
+**Limits:** same point-in-time limit as R4-1 — a descriptor opened *after* the probe but before our own append is caught by the next load/append, not this one. **The mode/owner/directory checks and the chain hash do *not* carry the rest: review #5 measured a stranger's finished truncate and a re-chained rewrite both loading clean (R5-2 below).** Linux-only, and the helper refuses (exit 4) rather than fakes a pass, exactly like R4-1. Verification: 107 tests green from a clean build, crash harness 25 rounds / 92 reported approvals all durable.
+
+### Adversarial review #5 (2026-10-30) — 17 probes; 1 fixed, 2 findings open and named
+
+18 probe scripts (`research/review5/p*.js`) attack the tree from outside `src/`, each printing a JSON verdict. Re-run after the fix below.
+
+- **Fixed — R5-1 (HIGH, reproduced): a second start() could unlink a LIVE daemon's socket and take over the documented client path.** The stale-socket probe was one `connect()` collapsed into two verdicts ("connected" = alive, anything else = dead). A listening socket whose accept queue is saturated refuses *new* connects with `EAGAIN`, which the probe read as "dead": it unlinked the live socket, bound its own at that path, and every client trusting the path then talked to an impostor (reproduced: inode changed, old daemon alive, `research/review5/p4-socket-live-unlink.js` pre-fix).
+  **Fix — three verdicts, and only one error proves death.** `src/socketprobe.js` returns `live` / `stale` / `unknown`: `stale` requires `ECONNREFUSED` (nobody is listening) or a non-socket file; `EAGAIN`, timeouts and everything else are `unknown` and **refuse** the start (`socket_in_use`) instead of unlinking. Regression tests in `test/socketprobe.test.js` pin all three verdicts, including a real saturated accept queue.
+  Falsification: 112 tests green; `p4` and `p4b` re-run — second daemon now refused `socket_in_use`, socket inode unchanged.
+
+- **FIXED — R5-2, grant half (2026-10-31, reproduced): a stranger's finished write to the grant file survives the mode checks.** Review #4's lease only proves state *at read time*. Measured (`p2-past-write-grant.js`): a grant file that was `0666` while a stranger wrote forged grants into it, then tightened to `0600`, passes every check the daemon makes (owner, mode, directory, lease) — and the daemon **signs the attacker's destination**. A writable `MAP_SHARED` mapping with no open fd (`p10`) writes through the same way after the mapping is dropped.
+  **Fix — sealed grant files (opt-in, fail-closed).** `signerd seal-grants` adds an HMAC-SHA256 over the canonical document (keys sorted; formatting and key order are not payload), keyed by a scrypt-derived key from `--grant-seal-passphrase-file` (0600, same rule as the keystore passphrase). `signerd run --grant-seal-passphrase-file` then REFUSES an unsealed, altered or shape-broken document with `grant_file_unsealed` / `grant_file_seal_mismatch` / `grant_file_seal_invalid`, on start and on every per-request reload. The seal lives inside the file on purpose — a second seal file could be swapped wholesale by the same attacker. Re-sealing an honestly edited file (salt changes) costs one scrypt; every ordinary request pays one HMAC, measured at +0.38 ms per grant load (6.36 ms sealed vs 5.98 ms unsealed, 200 loads each) on top of the existing lease cost. Falsification: `test/r5-2-seal.test.js`, 9 tests — pre-fix tree 5 pass/4 fail (the four enforcement tests fail; the false-positive guard passes on both trees), post-fix 9/9; full suite 121/121. `verify-grants` checks a file without the journal; `seal-grants` prints exactly what it sealed, because sealing a forged file makes the forgery valid.
+  **Fixed — journal half (2026-10-31, reproduced): sealed journal, per-record keyed chain MAC.** The same attack shapes hit the journal: a stranger's finished truncate (`p3`) let the daemon **re-sign a message it had already signed** (double-sign), a re-chained rewrite (`p15`) reset the budget, and a writable `MAP_SHARED` mapping (`p10`) forged history. The fix, opt-in and fail-closed like the grant half: journal format 4 appends an HMAC-SHA256 over each record, chained to the previous record's MAC (`x` field), keyed by scrypt from `--journal-seal-passphrase-file`; the floor (`seq`, MAC head) is anchored in `<journal>.anchor` at fsync time so a truncated or wholly fabricated journal cannot replay as a shorter honest one. `signerd run --journal-seal-passphrase-file` refuses an unsealed journal (`ledger_sealed`), a wrong passphrase or altered bytes (`ledger_mac_invalid`) and a shortened one (`ledger_mac_short`) at load; `seal-journal` seals an existing valid journal (refuses partially sealed or already sealed) and prints `records/seqFrom/seqTo/wireSha256/floor` — because sealing a forged journal makes the forgery valid. Records verified at load; every append re-keys the chain head, so the MAC is checked on the next load too. Measured cost: startup +87 ms (one scrypt), +2.6 ms per approval (17.55 → 20.18 ms over 50 approvals), on top of the existing fsync + lease cost. The anchor write is crash-safe by construction: a record is only trusted if it chains from the anchored floor, so a crash between append and anchor drops nothing that was ever acknowledged — the crash harness runs green in both modes (`test:crash`, `test:crash:sealed`). Falsification, both directions: `p3b`/`p15b`/`p10b` on the pre-fix tree — truncate ACCEPTED + re-signed the same message, re-chain ACCEPTED + reset the budget, same-length mmap rewrite ACCEPTED; on the fixed tree all three refuse (`ledger_mac_short` / `ledger_mac_invalid`). Regression: `test/r5-2-journal-seal.test.js` 15 tests, `test/r5-2-journal-e2e.test.js` 4 (live daemon, wrong/right passphrase, live CLI), full suite 140/140; crash harness green both modes.
+
+- **Held (no finding):** lease refuses a foreign writer on grant file *and* journal (`p1`), survives a writable mmap while the mapping is alive (`p10` phase A, `p12`, `p13`), fails closed when the helper is missing/faked (`p8`: forged helper output cannot make an unreadable file pass — the real bytes are read through the helper's own fd), one request per connection (`p5`), message-level replay on both identities (`p6`), symlink/mode/format-1 refusals (`p7`), grant reload still live (`p14`), format-1 smuggling refused (`p17`), R2-1/R2-3 behaviour unchanged (`p11`). Cost (`p9`): lease probe p50 6.0 ms, full request round trip p50 31.0 ms.
+
+### Adversarial review #6 (2026-10-31) — 9 probes on the seal surface; 5 defects found and fixed, 4 held
+
+Probe scripts live in `research/review6/p*.js` and attack the tree from outside `src/`; each prints a JSON verdict. They were written against the R5-2 tree and continued to the HEAD that carries the message-grant envelope.
+
+- **Fixed — R6-1 (HIGH): an empty seal passphrase file silently turned sealed mode OFF.** `bin/signerd.js` readPassphrase() turns an empty (or newline-only) file into `''`, and `src/daemon.js` decided the mode from `.length > 0` — so `signerd run --grant-seal-passphrase-file <empty file>` ran the daemon **unsealed** while the operator believed it was sealed, and a forged, unsealed grant document was signed for the attacker's destination (measured end to end: `p1` e2e, forged destination signed). The same empty passphrase was already a hard error in `status` (`seal_passphrase_required`) and on the journal side (`journal_seal_passphrase_required`): one flag, three behaviours. **Fix:** the daemon now refuses an explicitly requested but empty seal passphrase at construction (`seal_passphrase_required` / `journal_seal_passphrase_required`), identically on both halves. Falsification: `research/review6/regression-empty-seal-passphrase.test.js` is RED on the pre-fix tree (the forged grant is accepted) and green after; its control — the same forged document refused with a *real* passphrase (`grant_file_unsealed`) — is green on **both** trees.
+
+- **Fixed — R6-2 (HIGH): deleting the journal file bypassed the no-passphrase downgrade guard, and the same message got signed twice.** The guard that refuses an unsealed daemon when a seal floor exists lived only on the success path of `Ledger#load()`, i.e. only when the journal file *exists*. A stranger with write access to the state directory could delete the journal, leave the floor claiming history, and the next unsealed restart started **fresh** with an empty replay set (measured: `p3` e2e, byte-identical signatures before and after the downgrade — a real double-sign). **Fix:** both guards now fire from the same ENOENT branch — the sealed daemon still says `ledger_mac_short`, the unsealed one now says `ledger_sealed`. Falsification: `research/review6/regression-floor-guard-journal-absent.test.js` is RED pre-fix (no throw at all) and green after; its two controls (sealed daemon refuses a deleted journal; unsealed daemon refuses an *empty* journal) are green on **both** trees.
+
+- **Fixed — R6-3 (MED): `seal-journal` laundered a forged history.** The recovery tool rewrote the seal floor to whatever the journal it was handed said, without asking whether the floor *witnessed* that journal. Handed a forged journal beside the operator's genuine floor, it replaced the floor with one derived from the forgery and turned the daemon's `ledger_anchor_mismatch` refusal into an accepted history (measured: `p4` case5). It also could not repair the one state the daemon refuses to start in (`ledger_anchor_missing`): it printed `already_sealed` and left the brick in place. **Fix:** the tool now asks the same three questions the daemon asks — is the floor authentic under this passphrase, does its count fit the chain, and does its head at that count equal the journal's keyed head at that point (`checkFloorAgainstChain`). A floor that disagrees is a refusal (`ledger_anchor_mismatch` / `ledger_mac_short`), never replaced; the old floor is preserved next to the backup; a *missing* floor on a journal that verifies record-by-record is now created and reported (`floorRepaired: true`). Residual limit, named: a floor deleted *together* with a truncation beforehand leaves no marker to find — undetectable here, and documented rather than papered over.
+
+- **Fixed — R6-4 (MED): the passphrase path had weaker hygiene than every other secret path.** `readPassphrase()` checked the file mode on a `statSync` and nothing else: no symlink refusal (a symlink there was followed), no owner check, no directory check — while the keystore, grant file, journal, anchor and socket directory all refuse those. **Fix:** the passphrase path now refuses a symlink (lstat, regular file only), a group/other-accessible file, a foreign-owned file, and a group/other-writable directory — the same rules the other paths use. Measured: `p6` Q1/Q3/Q5 before, refused after (Q5's hardlink arm remains accepted by design: a hardlink is a second name for a file whose contents the attacker already controls).
+
+- **Fixed — R6-5 (LOW): sealing a 0-record journal produced a lone newline and was refused as `ledger_corrupt`.** The tool joined an empty record list to `'\n'`, which `parseJournal` rejects as corrupt — a clean, empty file (exactly what a fresh sealed journal is) was refused with a corruption code, identically on the pre-fix tree. **Fix:** a 0-record journal seals to a 0-byte sealed journal and loads.
+
+- **Held (no finding):** the grant seal's canonicalization resists every forgery variant tried — key order, whitespace, unicode escapes, duplicate keys, number formats, extra top-level and extra in-grant fields (`p5`: no variant that loads authorizes more; the only collisions are number-vs-null in a field the loader ignores); no prototype pollution reaches the grant map, the request path or the policy fields (`p8`); every chain manipulation and anchor mutation is refused, only the documented full rollback is accepted (`p7`); the per-request sealed reload refuses every forged, altered, unreadable or revoked document and the seal-key cache never skips the MAC (`p9`). Measured cost of the seal path on the request line: 126 ms per request under salt churn (one scrypt per new salt), 12 requests measured.
+
+### Adversarial review #7 (2026-11-01) — first review of the message-grant envelope itself: 2 HIGH + 1 MED found and fixed, the rest held
+
+Probe scripts live in `research/review7-envelope/` and attack the surface review #6 skipped: `policy-message`, `signer-message`, `receipt-identity`, and `approveMessage`/`messageScopeKey`/`MESSAGE_DOMAIN`. Full report: `research/review7-envelope/report.md`.
+
+- **Fixed — R7-1 (HIGH): a receipt body WITHOUT `issued_at` was signed, and the primary consumer crashes on that artifact.** `receipt.py verify` reads `body['issued_at']` unconditionally — measured exit 1, `KeyError: 'issued_at'` (the Node verifier prints `issued undefined`). The envelope minted receipts its designated verifier cannot read. Fix: `issued_at` is a required body key; missing → `refused: envelope`. The openreceipts CLI itself always sets the field, so no real caller breaks.
+- **Fixed — R7-2 (HIGH): `issued_at` was format-checked, not semantics-checked.** Impossible calendar dates normalize through `Date.parse` (`2026-02-30` → March 2) and out-of-grammar offsets/seconds (`+99:99`, `+24:00`, hour 25, leap second `:60`) passed the old regex — all six classes were ALLOWED and signed (measured); the consumer cannot detect it (`receipt.py verify` prints `issued 2026-02-30 ... OK`). The grant expiry already refused exactly this class; the body field lagged. Fix: `issuedAtMs()` — grammar regex + component ranges + real-calendar day (leap years) + explicit assembly via `setUTCFullYear` (because `Date.UTC` maps years 0-99 onto 1900-1999). Refused → `envelope`.
+- **Fixed — R7-3 (MED): future-dated receipts were signed without bound.** `2030-01-01` and `3000-01-01` were ALLOWED. Fix: `refused: issued_at_in_future` beyond `now + 24h`. The 24h tolerance is measured, not chosen: the daily runner stamps `issued_at` at 21:00 UTC of DAY, and the Tag-2 artifact was signed at 23:40 UTC with `issued_at` +21.4h in the future — any tighter bound breaks the running 30-day test. The past stays unbounded (backdating about a past event is legitimate; `expiresAt` bounds the signing itself).
+- **Held (no finding):** the canonicalization differential does not exist on reachable bodies — 10/10 hostile strings (control chars, quotes, é/emoji, astral, lone-surrogate escape, DEL, nbsp, U+2028) are byte-identical to Python's `json.dumps` (claim values are string-typed, so number spellings never reach the bytes); the ledger's scope-disjointness claim holds under direct attack (message records are 4-part `msg\0...` in the live journal; tx approvals did not consume the message window — 1/5, not 4/5; message records did not consume the tx window — spent pinned at exactly 20400; same bytes in the other envelope are a separate identity, not a false replay); the "never throws on request data" contract holds, including an own `__proto__` property and deep nesting bounded by the daemon's 4096-char body cap (measured depths 1500/3000/4000: `message_too_large`/`request_invalid`/`request_invalid`, daemon alive after); both openreceipts verifiers accept the post-fix artifact.
+- Falsification: `test/review7-envelope.test.js` — on the pre-fix tree 20140e9 (scratch checkout) **5 red / 5 green**, post-fix **10/10**; the 5 green are the false-positive guards and pass on both trees. Full suite 176 → 186, crash harness green in both modes. Cost of the extra checks: `evaluateMessage` 29.2 µs → 25.3 µs (20k iterations) — no regression. Limits, named: `+15:00` stays legal (RFC3339 grammar, not a tz database); `issued_at` is still not pinned to signing time within the 24h tolerance; `note` remains free text the grant does not speak about.
+
 ## Next qualification
 
-1. A **third** independent adversarial review of the signing path after the review-#2 fixes land (`src/signer.js`, `src/daemon.js`, `src/keystore.js`, `src/grantfile.js`, `src/ledger.js`), before pointing it at a key with funds: two reviews have run (2026-10-27 hardening diff, 2026-10-29 signing path) and all 12 findings are fixed and regression-tested, but neither was a professional audit and the fixes themselves have not been independently reviewed.
-2. Expand supported instructions only when the fee and authority effects can be bounded; refuse anything undecidable, rather than widening policy to pass tests.
-3. Migrate own key-loading sites that fit the reviewed envelope as user zero; then run the 30-day restart/over-limit/refusal test. **The one remaining own site (`openreceipts`) was measured on 2026-10-28** — it does not fit the v0 message domain (canonical JSON receipts vs. legacy System transfer wires), though the key itself is adoptable after conversion. No own legacy site remains to migrate: user zero must now come from an envelope that can express the work (a message-grant for receipt signing, or v1 SPL-Token for real Solana transfers), or from an outside adopter. No outside users yet.
+0. A **third** independent adversarial review of the signing path after the review-#2 fixes land (`src/signer.js`, `src/daemon.js`, `src/keystore.js`, `src/grantfile.js`, `src/ledger.js`), before pointing it at a key with funds: two reviews have run (2026-10-27 hardening diff, 2026-10-29 signing path) and all 12 findings are fixed and regression-tested, but neither was a professional audit and the fixes themselves have not been independently reviewed.
+1. Expand supported instructions only when the fee and authority effects can be bounded; refuse anything undecidable, rather than widening policy to pass tests.
+2. Migrate own key-loading sites that fit the reviewed envelope as user zero; then run the 30-day restart/over-limit/refusal test. **The one remaining own site (`openreceipts`) was measured on 2026-10-28** — it does not fit the v0 message domain (canonical JSON receipts vs. legacy System transfer wires), though the key itself is adoptable after conversion. No own legacy site remains to migrate: user zero must now come from an envelope that can express the work (a message-grant for receipt signing, or v1 SPL-Token for real Solana transfers), or from an outside adopter. No outside users yet. **2026-10-31: the message-grant envelope exists, a live daemon signs receipts that both openreceipts verifiers accept (`test/message-e2e.test.js`), and the receipt-producing flow is wired end to end: `receipt.py sign --via-signerd` runs the real client with zero key material (`test/via-signerd-consumer.test.js`, 7 tests; live run `research/consumer-live-2026-10-31/`).** What is still open: an INDEPENDENT review of the message envelope (review #7 on 2026-11-01 was adversarial but not independent — same author), and the 30-day test itself (started 2026-10-31 with restart + overdraw + replay checks, to be run daily). **2026-11-01 (day 2): `research/consumer-live-daily/run.sh` — the daily runner, `DAY=YYYY-MM-DD ./research/consumer-live-daily/run.sh` writes `research/consumer-live-<DAY>/`. Day 2 additionally pins the R6-1 fix live: an empty seal passphrase file must refuse to start (`seal_passphrase_required`), which the pre-fix tree does not do — it started unsealed.**
+3. **The SPL-Token option is now measured and rejected as the main path** (2026-10-30, `tools/envelope-traffic.mjs`): a v1 SPL-Token envelope would cover ~3 of 13,390 sampled mainnet transactions (0.02%), because real token transfers are wrapped in DEX programs, compute-budget instructions or address tables rather than being bare single-instruction transfers. The message-grant envelope (signing a receipt/attestation rather than a transaction shape) is the direction this evidence points at — it is the domain of the one measured own site. This is a scope decision, not a safety claim: no envelope has been reviewed for it yet.

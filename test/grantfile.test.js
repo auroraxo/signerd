@@ -1,5 +1,9 @@
 'use strict';
 
+// Grant files and journals must not be group/other writable (R3-1); make the
+// test writers owner-only instead of relying on the host umask.
+process.umask(0o077);
+
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');

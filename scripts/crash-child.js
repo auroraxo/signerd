@@ -4,14 +4,16 @@
 // REPORTED to stdout is also appended to a report file (fsync'd), so the parent
 // can compare "what the caller believed" against "what the journal recorded".
 //
-// Usage: node scripts/crash-child.js <journal> <report> <maxIterations>
+// Usage: node scripts/crash-child.js <journal> <report> <maxIterations> [passphrase]
+// With a passphrase the journal is SEALED (R5-2 journal half): every approval
+// is anchored before the verdict is returned.
 
 const fs = require('node:fs');
 const path = require('node:path');
 const { Keypair, SystemProgram, Transaction } = require('@solana/web3.js');
 const { Ledger, gate } = require('../src/ledger');
 
-const [journal, report, maxIterationsRaw] = process.argv.slice(2);
+const [journal, report, maxIterationsRaw, passphrase] = process.argv.slice(2);
 const maxIterations = Number(maxIterationsRaw) || 10000;
 
 const signer = Keypair.generate();
@@ -26,7 +28,7 @@ const grant = {
   windowSeconds: '86400',
 };
 
-const ledger = new Ledger({ file: journal });
+const ledger = new Ledger({ file: journal, sealPassphrase: passphrase });
 const reportFd = fs.openSync(report, 'a');
 
 let iteration = 0;

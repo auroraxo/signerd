@@ -1,2 +1,5 @@
 node_modules/
 coverage/
+# Built from tools/leasecheck.c by `npm run build`; the source is committed,
+# the binary is not - a checked-in binary would be an opaque trust dependency.
+tools/leasecheck
