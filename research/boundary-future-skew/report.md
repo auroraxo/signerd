@@ -39,6 +39,20 @@ edge of `MAX_FUTURE_SKEW_MS` (src/policy-message.js:275,
 - After fix (d101512): 5/5. Full suite on the scratch tree: 191 tests,
   183 pass, 0 fail, 8 skipped (consumer-e2e needs the sibling
   openreceipts checkout; runs in the main checkout and CI).
+- Full suite WITH the real consumer wired in
+  (SIGNERD_OPENRECEIPTS=~/github_repos/openreceipts npm test): 191 tests,
+  190 pass, 0 fail, 1 skipped — all 7 consumer-e2e tests run and pass on
+  the fixed tree. CI on the pushed branch: run 41275203188, jobs
+  test=success + consumer-e2e=success.
+- Signed bytes UNCHANGED by the fix: receipt-identity.js is untouched and
+  evaluateMessage still emits the fraction verbatim into the canonical
+  bytes. Only the admission decision (the bound) changed.
+- Why this is a real ecosystem fix, not just precision: Python's
+  fromisoformat ACCEPTS and PRESERVES 6-digit fractions (measured), and
+  receipt.py can emit an explicit --issued-at; Node verify.mjs parses
+  fractions too (truncating to ms). So a fraction-bearing receipt is
+  readable by the ecosystem while the daemon mis-measured its moment.
+  Now the daemon agrees with the primary (Python) verifier.
 - The fix's own first post-fix run was RED: the initial patch read
   offset groups for "Z" spellings, Number(undefined) = NaN poisoned the
   instant, and NaN > x is false — the future bound SILENTLY STOPPED
