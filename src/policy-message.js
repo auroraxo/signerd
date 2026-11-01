@@ -79,7 +79,7 @@ const MAX_FUTURE_SKEW_MS = 24 * 60 * 60 * 1000;
 // RFC3339 with the seconds field pinned to 00-59 (a leap second has no
 // place in a signed artifact) and the offset inside the grammar's range.
 const ISSUED_AT =
-  /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d{1,6})?(Z|([+-])(\d{2}):(\d{2}))$/;
+  /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,6}))?(Z|([+-])(\d{2}):(\d{2}))$/;
 
 function daysInMonth(year, month) {
   const lengths = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
@@ -110,16 +110,29 @@ function issuedAtMs(value) {
   const hour = Number(m[4]);
   const minute = Number(m[5]);
   const second = Number(m[6]);
+  // Fractional seconds are REAL: JS Date resolves only to whole
+  // milliseconds, so the pre-2026-11-01 code passed 0 here and silently
+  // truncated .000001-.999999 to the second boundary. That loosened every
+  // bound computed from the instant (the 24h future bound accepted up to
+  // 999999 microseconds past it). The fraction is kept in fixed-point
+  // microseconds and folded in at the end, exactly.
+  const fraction = m[7] === undefined ? 0 : Number(m[7].padEnd(6, '0'));
   if (month < 1 || month > 12) return null;
   if (hour > 23 || minute > 59 || second > 59) return null;
   if (day < 1 || day > daysInMonth(year, month)) return null;
   let offsetMinutes = 0;
-  if (m[7] !== 'Z') {
-    const offsetHours = Number(m[9]);
-    const offsetMins = Number(m[10]);
+  // m[8] is the whole tail ("Z" or "±HH:MM"); only the ± form has sign
+  // groups. Reading m[9..11] for "Z" yields Number(undefined) = NaN, which
+  // would poison the instant below and — because NaN > x is always false —
+  // SILENTLY DISABLE the future bound. Caught by test/review9-fraction
+  // ("guard: the bound itself did not move" refused +1s post-fix).
+  if (m[8] !== undefined && m[8] !== 'Z') {
+    const offsetHours = Number(m[10]);
+    const offsetMins = Number(m[11]);
     if (offsetHours > 23 || offsetMins > 59) return null;
-    offsetMinutes = (m[8] === '-' ? -1 : 1) * (offsetHours * 60 + offsetMins);
+    offsetMinutes = (m[9] === '-' ? -1 : 1) * (offsetHours * 60 + offsetMins);
   }
+  if (!Number.isFinite(offsetMinutes)) return null;
   // setUTCFullYear instead of Date.UTC: Date.UTC maps the years 0-99 onto
   // 1900-1999, which would silently shift a timestamp by centuries.
   const when = new Date(0);
@@ -127,7 +140,19 @@ function issuedAtMs(value) {
   when.setUTCHours(hour, minute, second, 0);
   const instant = when.getTime();
   if (!Number.isFinite(instant)) return null;
-  return instant - offsetMinutes * 60000;
+  // Fixed-point microseconds: (seconds * 1e6 + fraction) - offset*60e6, as
+  // an integer — exact whenever the value fits Number.isSafeInteger
+  // (roughly the years 1685-2254; every real receipt lives there). Outside
+  // that range the microsecond value cannot be held exactly, so fall back
+  // to the old whole-millisecond value: fractions are far below the float
+  // resolution there and bounds keep their pre-2026-11-01 semantics
+  // (review8's year-9999 probe stays refused, only via the future bound).
+  const instantMicros = (instant - offsetMinutes * 60000) * 1000 + fraction;
+  // Fail CLOSED: a non-finite assembled instant must be a refusal (null ->
+  // 'envelope'), never a value that makes the future-bound comparison false.
+  if (!Number.isFinite(instantMicros)) return null;
+  if (!Number.isSafeInteger(instantMicros)) return instant - offsetMinutes * 60000;
+  return instantMicros / 1000;
 }
 
 function refused(reason, extra) {
