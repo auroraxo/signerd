@@ -1,5 +1,5 @@
 {
-  "measuredAt": "2026-11-02T05:52:55.867Z",
+  "measuredAt": "2026-11-02T13:58:59.646Z",
   "repo": "auroraxo/signerd",
   "checks": {
     "repoMetadata": {
@@ -28,8 +28,8 @@
         "uniques": 3
       },
       "clones": {
-        "count": 348,
-        "uniques": 139
+        "count": 476,
+        "uniques": 167
       },
       "caveat": "clone count includes every CI checkout of this repo; not an adoption signal",
       "ok": true
@@ -55,7 +55,7 @@
     "mergedBy": null,
     "mergedAt": null,
     "url": "https://github.com/solana-foundation/awesome-solana-ai/pull/280",
-    "fetchedAt": "2026-11-02T05:52:55.867Z"
+    "fetchedAt": "2026-11-02T13:58:59.646Z"
   },
   "verdict": {
     "class": "not-distributed-not-consumed",
