@@ -42,20 +42,34 @@ function isKey(x) {
 /**
  * Classify one transaction as returned by getBlock(encoding=json,
  * transactionDetails=full). Returns { bucket, detail } where bucket is one of
- * 'v0_fit' | 'spl_v1' | 'legacy_other' | 'vtx', and detail explains a refusal
- * or records the observed authority index.
+ * 'v0_fit' | 'spl_v1' | 'legacy_other' | 'vtx' | 'v1', and detail explains a
+ * refusal or records the observed authority index.
  */
 function classify(tx) {
   const msg = tx && tx.message;
   if (!msg || typeof msg !== 'object') return { bucket: 'malformed', detail: 'no message' };
-  // A versioned (v0) message with address table lookups cannot be authorized
-  // by the current policy at all: ALT data is not present in transaction
-  // bytes. Count it as out of envelope rather than guessing at indices.
-  // `version` may be absent (legacy), 0, or the string "legacy" depending on
-  // the RPC's encoding - all of those are the legacy message format.
-  const version = msg.version;
-  const isLegacyVersion = version === undefined || version === 0 || version === 'legacy';
+  // A versioned (v0) message cannot be authorized by the current policy:
+  // versioned wire is refused as version_or_alt (even with no ALTs), and ALT
+  // data is not present in transaction bytes. Count it as out of envelope
+  // rather than guessing at indices.
+  // `version` may live on the getBlock ENTRY (json encoding) - main() spreads
+  // it onto the tx object - or on the message (other encodings). Absent or
+  // "legacy" is the legacy message format. Version 0 is NOT legacy: it is
+  // versioned WIRE (D3). Without honouring the tx-level field, a v0 entry
+  // whose wrapper was unwrapped away was scored v0_fit - 7 of 201 candidates
+  // on the 2026-11-02 probe window, all of them refused by the product.
+  const version = tx.version !== undefined ? tx.version : msg.version;
+  const isLegacyVersion = version === undefined || version === 'legacy';
   const hasLookups = Array.isArray(msg.addressTableLookups) && msg.addressTableLookups.length > 0;
+  // Version-1 messages carry `transactionConfig` inside the message and NO
+  // `version` field on the transaction object (measured live: the marker is
+  // present only on v1, absent on legacy and v0). Without this check a v1
+  // transfer fell through the legacy tests and was scored as v0_fit -
+  // measured 2026-11-02 on mainnet slots 464588085..464588090: 9 of 201
+  // candidates were misadmitted this way (v1 is 36-44% of current traffic).
+  if (msg.transactionConfig && typeof msg.transactionConfig === 'object') {
+    return { bucket: 'v1', detail: 'version-1 message (message.transactionConfig)' };
+  }
   if (!isLegacyVersion || hasLookups) {
     return { bucket: 'vtx', detail: 'versioned/ALT message' };
   }
@@ -156,21 +170,27 @@ const B58_MAP = (() => {
 
 function decodeBase58(str) {
   if (typeof str !== 'string' || str.length === 0) return null;
-  let bytes = [0];
-  for (const ch of str) {
-    const v = B58_MAP.get(ch);
+  // Leading '1' characters are leading zero BYTES; the digits that follow
+  // encode the remaining value big-endian. (A previous draft counted
+  // TRAILING '1's and seeded bytes=[0], which added a spurious 0x00 prefix
+  // to any string ending in '1' - e.g. a 12-byte instruction payload was
+  // read as 13 bytes and 11 of 192 real product-approved transfers were
+  // hidden from v0_fit. Verified against the bs58 package.)
+  let zeros = 0;
+  while (zeros < str.length && str[zeros] === '1') zeros++;
+  const bytes = [];
+  for (let i = zeros; i < str.length; i++) {
+    const v = B58_MAP.get(str[i]);
     if (v === undefined) return null;
     let carry = v;
-    for (let i = 0; i < bytes.length; i++) {
-      const x = bytes[i] * 58 + carry;
-      bytes[i] = x & 0xff;
+    for (let j = 0; j < bytes.length; j++) {
+      const x = bytes[j] * 58 + carry;
+      bytes[j] = x & 0xff;
       carry = x >> 8;
     }
     while (carry > 0) { bytes.push(carry & 0xff); carry >>= 8; }
   }
-  let leading = 0;
-  for (let i = str.length - 1; i >= 0 && str[i] === '1'; i--) leading++;
-  const out = Buffer.alloc(bytes.length + leading);
+  const out = Buffer.alloc(zeros + bytes.length);
   for (let i = 0; i < bytes.length; i++) out[out.length - 1 - i] = bytes[i];
   return out;
 }
@@ -254,6 +274,15 @@ function fixtureVersioned() {
   return t;
 }
 
+function fixtureV1() {
+  // Version-1 shape: otherwise exactly a fitting legacy transfer, but the
+  // message carries `transactionConfig` and no version field - the marker
+  // the RPC uses for the new format.
+  const t = fixtureV0Fit();
+  t.message.transactionConfig = { computeUnitLimit: 91, priorityFee: 46 };
+  return t;
+}
+
 function selftest() {
   const cases = [
     ['v0_fit', fixtureV0Fit()],
@@ -264,6 +293,7 @@ function selftest() {
     ['legacy_other', fixtureSplForeignAuthority()],
     ['legacy_other', fixtureSplTwoInstructions()],
     ['vtx', fixtureVersioned()],
+    ['v1', fixtureV1()],
   ];
   let failures = 0;
   for (const [want, tx] of cases) {
@@ -335,7 +365,11 @@ async function sample({ blocks = 12, back = 60 } = {}) {
       // getBlock(encoding=json) returns { meta, transaction } wrappers, not
       // bare transactions. Classifying the wrapper itself would mark every
       // transaction "malformed" (no .message) - measured on 2026-10-30.
-      const tx = entry && entry.transaction ? entry.transaction : entry;
+      // The version lives on the WRAPPER; spreading it onto the tx keeps
+      // v0/v1 out of the legacy buckets (measured 2026-11-02).
+      const tx = entry && entry.transaction
+        ? { ...entry.transaction, version: entry.version }
+        : entry;
       const { bucket, detail } = classify(tx);
       counts[bucket] = (counts[bucket] || 0) + 1;
       if (detail && bucket !== 'legacy_other') {

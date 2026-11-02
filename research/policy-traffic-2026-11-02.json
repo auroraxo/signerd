@@ -1,0 +1,50 @@
+{
+  "generatedAt": "2026-11-02T18:00:46.741Z",
+  "source": "live",
+  "rpc": "https://api.mainnet-beta.solana.com",
+  "finalizedTipAtStart": 464588130,
+  "slots": [
+    464588090,
+    464588089,
+    464588088,
+    464588087,
+    464588086,
+    464588085
+  ],
+  "totals": {
+    "transactions": 2835,
+    "paired": 2835,
+    "pairingUnverified": 0,
+    "candidates": 201,
+    "approved": 192,
+    "candidateApprovalPctOfAll": "6.772",
+    "candidateApprovalPctOfCandidates": "95.522"
+  },
+  "byVersion": {
+    "0": 710,
+    "1": 1257,
+    "legacy": 868
+  },
+  "byCandidateReason": {
+    "not_single_signer_3_keys": 2155,
+    "not_system_program": 470,
+    "none": 201,
+    "not_single_instruction": 9
+  },
+  "refusalsAmongCandidates": {
+    "version_or_alt": 7,
+    "invalid_wire": 2
+  },
+  "definitions": {
+    "candidate": "a transaction whose json view is a single legacy System transfer with 1 signer and 3 static keys - the only shape the v0 envelope can address",
+    "grant": "built FROM the transaction under test (its own signer, destination, amount) - a best-case grant, NOT a statement about any grant that would be issued",
+    "approved": "the PRODUCT policy (src/policy.js evaluate) returned allowed for those wire bytes",
+    "pairing": "the json signature bytes must occur in the base64 wire bytes of the same index; unpaired rows are counted and excluded from per-transaction verdicts"
+  },
+  "limits": [
+    "Best-case grants: this measures whether the daemon COULD sign, not whether any grant would be issued.",
+    "A bounded window of finalized mainnet blocks, not a census.",
+    "One RPC node, one moment; the window is minutes wide.",
+    "No user, no audit, no real funds."
+  ]
+}

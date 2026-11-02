@@ -38,24 +38,38 @@ A later, explicitly labeled `--simulate` mode may add RPC-backed checking for th
 - Per-transaction and per-window caps, summed across transactions by the daemon.
 - Structured refusals: `{refused: "alt", detail: …}`, so a caller can learn why instead of working around it.
 
-## What the traffic actually looks like (measured 2026-10-30)
+## What the traffic actually looks like (measured 2026-11-02)
 
-The envelope decision (v1 SPL-Token vs. a message-grant envelope) was a judgement call until it was measured against real mainnet traffic. `tools/envelope-traffic.mjs` samples finalized mainnet blocks and classifies every transaction by *shape* — whether it could fit an envelope at all. Output: `research/envelope-traffic-2026-10-30.json` (25 blocks, 13,390 transactions).
+**The earlier version of this section (measured 2026-10-30) claimed "4 in 1,000" — that number was wrong, in both directions, and the error was in the measuring tool.** The table below is the corrected measurement. It runs the *product's own* `policy.evaluate()` against real mainnet wire bytes — not a hand-written restatement of the policy — so it answers the question that matters: how much real traffic would the daemon actually be able to sign?
 
-| Shape | Count | Share |
-|---|---|---|
-| `v0_fit` — exactly what `policy.evaluate` accepts today (1 signer, 3 keys, 1 System transfer) | 55 | 0.41% |
-| `spl_v1` — 1 signer, 1 SPL Token instruction, authority is the signer | 3 | 0.02% |
-| versioned / ALT message (refused by construction) | 1,336 | 9.98% |
-| everything else (multi-ix, CPI, DEX, compute budget) | 11,996 | 89.6% |
+`tools/policy-traffic.mjs` fetches finalized mainnet blocks twice — once as JSON, once as base64 wire — pairs each transaction by signature bytes (100% pairing verified), and feeds the *wire bytes* into `src/policy.js` with the most permissive grant that transaction could plausibly carry (the actual signer, the actual destination, the actual amount). Output: `research/policy-traffic-2026-11-02.json` (+ `-rows.json`), 2,835 transactions across 6 finalized slots (464588085–464588090).
 
-**The honest reading:** the current v0 envelope covers about 4 in 1,000 transactions, and the proposed v1 SPL-Token envelope would cover about 2 in 10,000 *more* — because real token transfers are overwhelmingly wrapped in DEX programs, compute-budget instructions, or address tables, not bare single-instruction transfers. Adding an SPL-Token envelope would not make this product useful to real Solana traffic; it would add a second narrow envelope to an already narrow one.
+| Measure | Value |
+|---|---|
+| Transactions measured | 2,835 (100% JSON↔wire paired) |
+| Shape candidates (1 signer, 3 keys, 1 System instruction) | 201 |
+| **Approved by the product** | **192 — 95.5% of candidates, 6.8% of all traffic** |
+| Refused among candidates | 9, all fail-closed: 7× `version_or_alt`, 2× `invalid_wire` |
+| Traffic version mix | 1,257 v1 (44.3%), 710 v0, 868 legacy |
 
-What that points at instead is the message-grant envelope: the work that needs a scoped signature in this ecosystem is signing a *message* (a receipt, an attestation, a quote), not a transaction shape — and the one measured own site (`openreceipts`) is exactly that. This measurement does not settle the question; it removes the argument that v1 SPL-Token would.
+**The honest reading:** the current envelope covers roughly **7 in 100** transactions, not 4 in 1,000. The old 0.41% figure was an artifact of two defects in the classifier, both found and fixed by measurement (details below): a broken base58 decoder hid 11 of the 192 real approvals, and a version-blind classifier folded version-1 wire into the legacy buckets. After the fixes, the classifier and the product agree on **all 2,835 transactions** — 192 `v0_fit` exactly equals 192 product approvals, with zero disagreements on any transaction.
 
-Limits of this measurement: classification is structural (the shape fits), not a statement that any grant would be issued — amount caps, expiry, replay and window limits still apply on top; the sample is a bounded recent window of finalized blocks, not a full-history census; v0/ALT transactions are counted as out-of-envelope rather than re-indexed through loaded addresses.
+Two facts that matter more than the headline:
 
-Four defects in the measuring tool were found and fixed by measurement, each of which had produced a clean-looking but false result: `--blocks=25` was sliced to `'=25'` → `NaN`, so the sampling loop never ran and the tool reported "0 transactions" as if it were a finding; `getBlock` with `maxSupportedTransactionVersion: 0` now fails for *every* slot because mainnet serves version 1; `getBlock` returns `{transaction, meta}` wrappers, so classifying them directly marked everything malformed; and the file carried a fabricated SPL Token program id (`TokenkegQdZ1…`) while the real one is `TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA` — which is why an early run reported 0 token matches while 731 real `Tokenkeg` instructions sat in six blocks. The classifier now self-checks against hand-built fixtures (`--selftest`, 8/8) before it reports a number, and refuses to report at all on a zero-transaction sample.
+- **Version-1 transactions are 44% of current traffic** and the pinned `@solana/web3.js` 1.98.4 cannot deserialize v1 wire at all (measured: in one block, all 368 v1 transactions fail to deserialize; 459 v0/legacy succeed). The daemon refuses them as `invalid_wire` — fail-closed, but that is a ceiling on today's reach, not a rounding error.
+- **Shape fit is not the bottleneck; grant terms are.** Of 201 candidates, 192 are approved even under maximally permissive grants. The narrow envelope is *not* what limits this product's usefulness — the limit is where a scoped signature is actually needed.
+
+The v1 SPL-Token envelope remains rejected as the main path: of the 2,835 transactions measured, real bare single-instruction SPL transfers are a handful, because token transfers are wrapped in DEX programs, compute-budget instructions, or address tables. The message-grant envelope (signing a receipt, an attestation, a quote — not a transaction shape) is where the evidence points, and it is the one measured own site (`openreceipts`).
+
+### Three defects in the measuring tool, found and fixed by measurement
+
+1. **The base58 decoder was wrong.** `decodeBase58` counted *trailing* `'1'` characters instead of *leading* ones and started from `bytes=[0]`, so any base58 string ending in `'1'` gained a spurious `0x00` prefix and true leading-zero payloads lost their zero byte. Real System-transfer payloads whose base58 ends in `'1'` (about 1 in 58) were mis-sized and pushed out of `v0_fit` into `legacy_other` — the share was **undercounted**. Measured: 11 of 192 product-approved transfers were hidden by exactly this defect. Fixed and now pinned against the `bs58` package as an oracle, including 200 random round-trips (`test/envelope-traffic-classifier.test.mjs`).
+2. **The classifier was version-blind.** A version-1 message has no `message.version` and no `addressTableLookups`, so it passed the legacy check and was scored against the v0 envelope — v1 wire the daemon cannot even parse was counted as `v0_fit` (2 live cases), while the remaining v1 traffic folded silently into `legacy_other`, the bucket documented as "CPI, DEX, compute budget". Fixed: v1 is now detected from its json marker (`message.transactionConfig`, present on v1 and absent on legacy and v0, verified live) and gets its own named `v1` bucket.
+3. **The versioned wire was scored as legacy.** The getBlock wrapper's `version` field was dropped when the `{transaction, meta}` wrapper was unwrapped, so version-0 transactions were scored `v0_fit` even though the product refuses all versioned wire as `version_or_alt`. Fixed: the wrapper's version is now carried onto the transaction, and version 0 is treated as versioned wire (`vtx`), never legacy.
+
+Each fix has a control in `test/envelope-traffic-classifier.test.mjs` (5 tests: three defect controls, a 200-payload oracle round-trip, and a false-positive guard that keeps a genuine legacy transaction classified as `v0_fit`). All three defect controls are red on the pre-fix tree and green after.
+
+Four further defects in the measuring tool were found and fixed earlier (2026-10-30), each of which had produced a clean-looking but false result: `--blocks=25` was sliced to `'=25'` → `NaN`, so the sampling loop never ran and the tool reported "0 transactions" as if it were a finding; `getBlock` with `maxSupportedTransactionVersion: 0` now fails for *every* slot because mainnet serves version 1; `getBlock` returns `{transaction, meta}` wrappers, so classifying them directly marked everything malformed; and the file carried a fabricated SPL Token program id (`TokenkegQdZ1…`) while the real one is `TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA` — which is why an early run reported 0 token matches while 731 real `Tokenkeg` instructions sat in six blocks. The classifier now self-checks against hand-built fixtures (`--selftest`, 9/9) before it reports a number, and refuses to report at all on a zero-transaction sample.
 
 ### The message-grant envelope (built and measured 2026-10-31)
 
