@@ -1,0 +1,308 @@
+{
+ "generatedAt": "2026-11-02T21:44:33.654Z",
+ "rpc": "https://api.mainnet-beta.solana.com",
+ "method": "getBlock json+base64, maxSupportedTransactionVersion 1; pairing verified: the json signature bytes must physically occur in the wire bytes of the same index",
+ "sourceSlots": [
+  464650879
+ ],
+ "sampling": {
+  "v1InSlot": 213,
+  "underCap": 128,
+  "overCap": 85,
+  "shapeEligible": 3,
+  "sampled": 14
+ },
+ "policyMaxWireBytes": 1232,
+ "limits": [
+  "One finalized block of version-1 traffic: a sample, not the ecosystem.",
+  "Rows above the policy size cap (1232 bytes) are kept only as an explicit size control; they must be refused as invalid_wire regardless of the library, so they cannot masquerade as a parse result."
+ ],
+ "rows": [
+  {
+   "slot": 464650879,
+   "index": 31,
+   "version": "1",
+   "signature": "59nX5zPZ36PhhZMQfjsA2Khqz6TcwvBkV5XjnVJ1HALZBh1mjyq9LkG65jxgA4NZN8feo1QdjqDH4fMQXqwppYtM",
+   "wireLen": 228,
+   "overPolicyCap": false,
+   "staticKeys": 3,
+   "lookups": 0,
+   "instructions": 1,
+   "singleSig": true,
+   "shape": true,
+   "wireBase64": "gQEAAQwAAADTPOse5YnVuL2KX3WHGB7vvJFBBU0TnZmSlfaY/jgMqQEDQMhfjKm6ws5Qc/X5gY4TBMO13/gplaz5YOJh3yzoo9RJ95g0s6rle9H70+7eyDyuRZGoG1SjqIsMOswMNC8KuAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAlgAAAACAAAACAgwAAAECAAAAoIYBAAAAAADPpMf6UeK1S/MAlBbyXlXG3/zj+if/C8BdXcYYpCvGu9zKd0LfI/q7tSgp0FDb7axQohGSHkb6GkfomTLU6xwG",
+   "json": {
+    "accountKeys": [
+     "5MtJcsQ4bHsUajSsYZ8CKFWo1CXx1gYdZoQcq9rhRJaP",
+     "5yjjgHRL8q4uuWXsg3CAvBJdLQ3NUDwJK17EjHHeCorX",
+     "11111111111111111111111111111111"
+    ],
+    "header": {
+     "numReadonlySignedAccounts": 0,
+     "numReadonlyUnsignedAccounts": 1,
+     "numRequiredSignatures": 1
+    },
+    "instructions": [
+     {
+      "accounts": [
+       0,
+       1
+      ],
+      "data": "3Bxs4ThwQbE4vyj5",
+      "programIdIndex": 2,
+      "stackHeight": 1
+     }
+    ],
+    "recentBlockhash": "FDauFJrd5GhN7gFsFkibgTHtebnUuwzBpFptn245yT76",
+    "transactionConfig": {
+     "computeUnitLimit": 150,
+     "heapSize": null,
+     "loadedAccountsDataSizeLimit": 32768,
+     "priorityFee": null
+    }
+   }
+  },
+  {
+   "slot": 464650879,
+   "index": 170,
+   "version": "1",
+   "signature": "2tTQUBcrMf9AocTbAGCkPkoANZimrCC97hZvrKokPrDP4vkifK7SCMDigeLYSv2YpmfbZK4LBCtipMkCTm21VEFB",
+   "wireLen": 228,
+   "overPolicyCap": false,
+   "staticKeys": 3,
+   "lookups": 0,
+   "instructions": 1,
+   "singleSig": true,
+   "shape": true,
+   "wireBase64": "gQEAAQwAAAAvrKpsyXrXblzyYBvs1dGF8dSGHvEUUvQXnOLDyAKFCwEDf1hD/gFYWUiy1nLg1eLyjJ0INhhE1S71EQa87F5XTVa/lxtZEItbhaBPsJPx4htOP9TEyPSH3Qm5V1J2nw3YwwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAlgAAAAAEAAACAgwAAAECAAAAp5YAAAAAAABeY9qhD84iuF/5G8w5MaaQgzHcXFxZvSaCoClLkKJNgB6YUe1TPq9j6sZk+GoImbLJIerqsmrRG7INl1eyqOUK",
+   "json": {
+    "accountKeys": [
+     "9a6qjHKGAEcFf8L43tZszqXuCDG3F2gYmhSyPFNUpbkh",
+     "DttWaMuVvTiduZRnguLF7jNxTgiMBZ1hyAumKUiL2KRL",
+     "11111111111111111111111111111111"
+    ],
+    "header": {
+     "numReadonlySignedAccounts": 0,
+     "numReadonlyUnsignedAccounts": 1,
+     "numRequiredSignatures": 1
+    },
+    "instructions": [
+     {
+      "accounts": [
+       0,
+       1
+      ],
+      "data": "3Bxs4UtTGsvJXQXR",
+      "programIdIndex": 2,
+      "stackHeight": 1
+     }
+    ],
+    "recentBlockhash": "4D6sMk5EUvndKmigiVyZHCMxFkG1ASyhP5QUjhRLW4JE",
+    "transactionConfig": {
+     "computeUnitLimit": 150,
+     "heapSize": null,
+     "loadedAccountsDataSizeLimit": 1024,
+     "priorityFee": null
+    }
+   }
+  },
+  {
+   "slot": 464650879,
+   "index": 368,
+   "version": "1",
+   "signature": "25HsQjkCuDgTzjSh9W1LJ64L5k5pUs3ZzTBaJE5hwW3aMvbxPujYctnbNzztF53ZyKChWTj2jBww9PMZRnnnGe6b",
+   "wireLen": 228,
+   "overPolicyCap": false,
+   "staticKeys": 3,
+   "lookups": 0,
+   "instructions": 1,
+   "singleSig": true,
+   "shape": true,
+   "wireBase64": "gQEAAQwAAADO6PMLSPrOMeXQ1HWXRED2XhxlFW5M8WjYQxZrM0oGagEDl5rB5q+qMnzi2SjK0T4/UdGOprQJqnZcxgovUNcfUXW/lxtZEItbhaBPsJPx4htOP9TEyPSH3Qm5V1J2nw3YwwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAlgAAAACAAAACAgwAAAECAAAACHUPAAAAAAA1t556oO/Ya0zDWB3cSnxsOLY5YoqGiUVp2nxQ7SWsPnRFKlhxH5MUurA6dqtQq4CvTFj5nCGy0gdcLNezfr4A",
+   "json": {
+    "accountKeys": [
+     "BCoRyb1LVb5R3Fz8Gn25ByuPQQ9EhEUgWjsB6h4Vmnct",
+     "DttWaMuVvTiduZRnguLF7jNxTgiMBZ1hyAumKUiL2KRL",
+     "11111111111111111111111111111111"
+    ],
+    "header": {
+     "numReadonlySignedAccounts": 0,
+     "numReadonlyUnsignedAccounts": 1,
+     "numRequiredSignatures": 1
+    },
+    "instructions": [
+     {
+      "accounts": [
+       0,
+       1
+      ],
+      "data": "3Bxs42GhvH5szrqu",
+      "programIdIndex": 2,
+      "stackHeight": 1
+     }
+    ],
+    "recentBlockhash": "Evh1RmEdCbaaYPb2GQut7Kzrr7qSkpfsBP6nUsmuFMaq",
+    "transactionConfig": {
+     "computeUnitLimit": 150,
+     "heapSize": null,
+     "loadedAccountsDataSizeLimit": 32768,
+     "priorityFee": null
+    }
+   }
+  },
+  {
+   "slot": 464650879,
+   "index": 0,
+   "version": "1",
+   "signature": "3ZGDajFqLhPWzTbNd3Jq7ZY85mx9rCtcQ8aPWGWmo8gCtbTWVacfvJizHEQ2Pizm75t1PxLhUB7wcstk1scBFGth",
+   "wireLen": 429,
+   "overPolicyCap": false,
+   "staticKeys": 7,
+   "lookups": 0,
+   "instructions": 2,
+   "singleSig": true,
+   "shape": false,
+   "wireBase64": "gQEABA8AAADxQYPI9RHHWhYshwAv/F/BS7kW4yQkqyY7Jdr+3moFpgIHDQQy4ipPfDn3XTBx5zQxW7jPYOraWNnQXVAjsr4neAAgJhAewgMolkoyq6sTbFQFuR86447k9ky2veh5uGg40oyc2VxXqdieBaM4+NMlahwMGRpX3sYQnx8vWcgfBZPoAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAC5SLOUX/bz66wr/jzykdL4kzjDFFSI6ocugxurgkgMuc5w1vtWjkPr/JZKkBVsO+lWOwgXBnyraU68g+/ds36G6FcmwLK1vPr2Zot8G4Np+wHJmF/MFn8LQpm/HX0ewqUAAAAAAAAAAO4CAAAAAAAEBQU4AAMCDAAFBgAEApmiwMm8WB7gshIAABgAAABp3xoNUl8GAAAAAAAAAAAAAAAAAAAAAAAIAABtAwDw////////WwYwAAECAAAA6AMAAAAAAAB/2xfOvpt/Gfw5eAM43e0oxWOfcJoc/pcSTA03bK8L84I3LsFhGOg2Fh82s8zjG12M2u4c+6mstnXx5GDh7ggC"
+  },
+  {
+   "slot": 464650879,
+   "index": 13,
+   "version": "1",
+   "signature": "3FDJpq1CJfpZnLxbGsEj3Az6DFrbTDU1R1b72Nqd9xaWPwqnq85FGgJeBXeFxD9iZf6tMhkwLygfsuXnNywATKRk",
+   "wireLen": 328,
+   "overPolicyCap": false,
+   "staticKeys": 4,
+   "lookups": 0,
+   "instructions": 2,
+   "singleSig": true,
+   "shape": false,
+   "wireBase64": "gQEAAQ8AAABTGmsl68oirUoVpmOCDmwriVnqaAv8YAuJgMiEcCjv6gIE1uHdYSOgHIfEFaT+/////1sWwSJ8TzNrw4nWmDcSyYpnqSuGAaXe6clNBmTkI4f8kiOs3J//AwibHXJ374kCwuMoWIKNGoslET9VjGax1jaiVMUGCIMjflZNhDAB5BX1CWgZ9koC91ckeh4nM2hjmI1sqBPaMRwn+VmVJ2uQUehcAQAAAAAAADAAAADRAwAAAwIhAAMCIQAAAvqBBgUAAAAASqMGBQAAAAB9ArIb8VAPADKaOJ6hAQAA/wABLzh7BQAAAAC5VnsFAAAAAH0CshtAQg8AMpo4nqEBAAD/cEpBAaKF+JGgIAWjhcqt7OIIcP8iRkAwQOBvtN9Ssh43Xn4cjQd5co0faZuQ9Uj/skqSF3W2EvxPFm8gmKETAw=="
+  },
+  {
+   "slot": 464650879,
+   "index": 23,
+   "version": "1",
+   "signature": "2WGDpHmpSZafxhujGryVyWQeEn8U5dy2qrgwrq3yqYMGdtdMVmrjcNfCBdDJEVyLrPbXE8bf5AbfBMveT5uZEjGs",
+   "wireLen": 429,
+   "overPolicyCap": false,
+   "staticKeys": 7,
+   "lookups": 0,
+   "instructions": 2,
+   "singleSig": true,
+   "shape": false,
+   "wireBase64": "gQEABA8AAADxQYPI9RHHWhYshwAv/F/BS7kW4yQkqyY7Jdr+3moFpgIHDQmZLx1kPDQHnbmG2NdFt3WT68xPQdrggBMlW1j/stEb9nEUbLiQrVQw6zNbu4Pxe/ygJTeE5q17JPHKJSZYg3hSHLF5zruFibVWotXslNJJhoL9+bsq9a1k5JHMQVPaAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAChLkxs1rhyB53sa/IqWsa0+06Ahu3GbL/5YILazFYq2s5w1vtWjkPr/JZKkBVsO+lWOwgXBnyraU68g+/ds36G6FcmwLK1vPr2Zot8G4Np+wHJmF/MFn8LQpm/HX0ewqUAAAAAAAAAAO4CAAAAAAAEBQU4AAMCDAAFBgAEAZmiwMm8WB7gT08AABkAAAC33xoNUl8GAAAAAAAAAAAAAAAAAAAAAAAIAABtAwDw////////qwowAAICAAAA6AMAAAAAAABLQHZ0Cw+xGdlGv3s4IxUdk5zXCxZTzts/wSvHZatmxLGPfdZu+yQNVGKZODFpN8lxCEeCaksJANN6NhUBohcI"
+  },
+  {
+   "slot": 464650879,
+   "index": 42,
+   "version": "1",
+   "signature": "3Por2mndbvVMhTqY6J7rsocmk1d2AYhCeo2HcCv1BTo7D2tub12PGuwfifXaoWgRp21LhWoGCDA8HxpZtz9x44qL",
+   "wireLen": 839,
+   "overPolicyCap": false,
+   "staticKeys": 18,
+   "lookups": 0,
+   "instructions": 7,
+   "singleSig": true,
+   "shape": false,
+   "wireBase64": "gQEACw8AAAAj0C6Sg03icTxTqAeYaQKUMl2yciXYy4H0WskAz+jAGwcSjmihKLAaR+zUH7OXPQNGFzgHve0aVVhR3fdevk+kfwciYKIDCt+c43y14EK80s4xdMjctuZRl3DHMySaYVmX8il5945xViAZ066PW5KhoPB4S5iPOK7ojyrVJlFAV/uEQTOnAmGaEtvyCiOr9QsTGM5/AzFsPiqxI9RtkMjCiqFJjni0Figipe+mi1+5UM+WFN4DKk59/y/ryLjVO2yCOGsEAKA0zQgl9/5jESGS/L6029+kroamJad01oK1W90tjUiQ8k8/AxFzEoKCDMYQg2J3OWRHV1PBcR3AYp6MmN0AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAR51VvyMcBu7nTFbs5oFQf9sbLeo/SOUQKxzaJWvBOPBpuIV/6rgYT7aH9jRhjANdrEOdwa6ztVmKDwAAAAAAEG3fbh12Whk9nL4UbO63msHLSF7V9bN5E6jPWFfv8AqQbd9uHudY/eGEJdvORszdq2GvxNg7kNJ/69+SjYoYv8CS0hNWV6FZwrh9S2anDbjpdSOJ/3aq8gbO0GOjj5Wu0qduezRGQKHPxZTIvK0KCRARysfdFWv4OoM/siCOt3rXdQloYAohUlB4tsV9/TUmT/B2BUC8qO4JODrdxGlfCvjJclj04kifG7PRApFI4NgwtaE5na/xCEBI572Nvp+Fm0P/on9df2SnTAmx8pWHneSwmrNt/J3VFLMhqns4zl6PLM1TWspfFzasgi3Qdz5NkvvYpZspQDUAKVqQEcc6nloIYBAAAAAADAJwkAAAAABA8GAQAHAgwACgEBAA8GAQAIGicACgMBAAcCDAAABAAJBwoBAAQCAAAAv9AjEQAAAAAEEQADAA4HCwEABAMJDgoLCBAIDBEGBAMFAg4JAAsKDA0MCLtk+swxxK8Uv9AjEQAAAAABVOuyv3wBALAEAAAAAAEAAABsECcAAQQAAAkAAQIAAACghgEAAAAAAHez1UTJeDCRdcNcjN9gpxNgoh908bxrQXnYWE3En90I+Z1uz3zMAKzNPnT+wLKEHEI60NdnGu50OZbzG8xPSgc="
+  },
+  {
+   "slot": 464650879,
+   "index": 92,
+   "version": "1",
+   "signature": "5zFerxbmDZMbqJqa9pnkewPbTg8Z19WUZsCcFaEM7rkjMP534HfgkLNAiMJ2yJDnxrwHFXJhURa2Jjo8cU3K2qeU",
+   "wireLen": 412,
+   "overPolicyCap": false,
+   "staticKeys": 6,
+   "lookups": 0,
+   "instructions": 1,
+   "singleSig": true,
+   "shape": false,
+   "wireBase64": "gQEAAgwAAAA86KK/4v8uTgRS3c7cHMedFbrtG43DUEuQTFpY1vNu7QEG67XHqHBdMslDiwH2cOJ0omZlNl13JD2IgglrlGZ435pTBRgUTkEksYCWWc9a/VBewt9fr4Iy79PhqQmMEfgov2vLaEXcZdMMxsAthcaZ+nd70lPfirROyV5UcZ8nNVPw1JIHnPfhHIppWsRzVZ+GDfW8NYPb0PWYnIe0N7MvfOMGp9UXGMd0yShWY5hpHV62i164o5tLbVxzVVshAAAAAJ8y2pwfbBJQwJtzOSPsw2cNKGPn1GqcHPR9/bvQ1f5XfwAAAAD4AwAFBWEAAAQCAwEUJzxHLINY5BgAAAAAAHi36QtO+lsAAAAAfQKyGwIAAgAnPEcsg1jkGAAAAAAAtHcKKIcaXAAAAAB9ArIbAgACACc8RyyDWOQYAAAAAACsfVd4TUBcAAAAAH0CshsCAAIA+XDEFWSG3jZPTkluD3pEM1+aTV0f+7Yin0t8Oz7pKb2SyyzKSGoFq4RNuJiyUkVtaBvvj/PIpLSw3J0ZTDh7BQ=="
+  },
+  {
+   "slot": 464650879,
+   "index": 114,
+   "version": "1",
+   "signature": "3YRb39EKhN1kkb8hrFD476dim2b1n9hmCQfvJxXPbGDEhTbMgVb5ky6jRt4cNbiNJa2kYcgqY66pzwQVNjYZgedr",
+   "wireLen": 347,
+   "overPolicyCap": false,
+   "staticKeys": 5,
+   "lookups": 0,
+   "instructions": 1,
+   "singleSig": true,
+   "shape": false,
+   "wireBase64": "gQEAAw8AAADxQYPI9RHHWhYshwAv/F/BS7kW4yQkqyY7Jdr+3moFpgEFDQQy4ipPfDn3XTBx5zQxW7jPYOraWNnQXVAjsr4neACMnNlcV6nYngWjOPjTJWocDBkaV97GEJ8fL1nIHwWT6LlIs5Rf9vPrrCv+PPKR0viTOMMUVIjqhy6DG6uCSAy5znDW+1aOQ+v8lkqQFWw76VY7CBcGfKtpTryD792zfoboVybAsrW8+vZmi3wbg2n7AcmYX8wWfwtCmb8dfR7CpXgAAAAAAAAAWAIAAICWmAADBTgAAwQAAgGZosDJvFge4LISAAAYAAAAad8aDVJfBgAAAAAAAAAAAAAAAAAAAAAACAAAbQMA8P///////4sEMH8h/jCc7R45cnXKLbM34YMO+Md3U6h4jHzHwxgD0mMGCYgk16h22QkAM4Sgmb/RO7QujEqyRldhh2N3b0vXUAU="
+  },
+  {
+   "slot": 464650879,
+   "index": 148,
+   "version": "1",
+   "signature": "G8sT7NpEQQ15QDdFXMKWc5YKsyjQWH3x4rnyYuD9vHR8uFxqJ4HDvekNtMdHAU15XrXFooPJ5cqMXQe88zHefcV",
+   "wireLen": 964,
+   "overPolicyCap": false,
+   "staticKeys": 24,
+   "lookups": 0,
+   "instructions": 2,
+   "singleSig": true,
+   "shape": false,
+   "wireBase64": "gQEACw8AAAB5ulXb/24EJFpsyl+Ipoky6Z0yxJ1HiVCVa9riOWZfAwIY+dr4UCBxNvGph6PMJC6QUuAV3kkgAQwbCj5MceG32wogfOzaW8xsserw8W1oQEVmsY1W0kgayzFwMmVukFUceCNWA8Nrz6hLAypfQRQFPdTdGzbu+phOyjcGilIR51oXJJtILZQ8eFpNoKZfjO1qGxo3XGm7SJ2t+sd6s6473GstJIrRO6rQClMTEEGMoSB5XO0aE8Q15HuA+wYn7ka5TjqKoi6ry904zqnt4ipdn2wNDzreKrPLav3Tz769FspAUa8CTaD7U/PTgOnqNESnqvggUXTZnxsegMiuJn45DAeMsCVDXFadnnBjZDHtQ/WyTP7FJIe5JWzrSyJvzrskrpiREdc0kVdXPuikuQVK12uuk4/95fMBFr1QlWGZ/hsstQCJzjp9s1wxByyNj1MsVXb5FdLkNEFNn/JnX09dswO5Ohei5+xrX/oP2WQbT2J38qElXQtQ5TlE7qJ2MRIjOLqqESMHXC5GilgyW4g32HX9FwFu9M8db2ghEzZW18G03QCUz25wifA6gyXRCWBDRRcYIA/CMvFgpKTl5bs0+r0AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAADqGXmnuD1SAyrz2Y1fk3C8Y1Y1Fwep0ifs3I9l5PHKmAVbg9pNmWs9E2xVovxdbqlGJy5f10v87ZV0rtv1tGLBvmrSk8ZWNwKnJTD+3LAeZWEPtpIXjok8QxpOZ+BmUD6zxNusB/BxOiD0jyLWESrWaN/Zq3VfF6aw7U+BZ01xk1OxSVEfd05NbitnUGb12F8uvOd5iSgNvO5AlgvNC5qD9YgO47vSdNC+R/oY/nY7ub2t9B/5bOWAa0BgQMu77nwrxw0MhiMo6Y1FaeWqM2kfeYPpS/OIfsj79OUKwUP+ZBpuIV/6rgYT7aH9jRhjANdrEOdwa6ztVmKDwAAAAAAEG3fbh12Whk9nL4UbO63msHLSF7V9bN5E6jPWFfv8AqQbd9uHudY/eGEJdvORszdq2GvxNg7kNJ/69+SjYoYv8lzIAAAAAAAC0lAEAAAAABBIdFgANAwwABAALDRIPDhMVFxYMBggABAkHEAENEQ8SAwUCEhIA/5Mbis1PAAAfuH2BAAAAAAEBNDI8AAoUAgAAAKnaAgAAAAAADQ1s0c9UNY3yv9kTc3CKTxCGpFS1vokAIvJVF/1wuOYeIZmvypfrEZb51zfVhT1UkHR2refgdKL6QMZkChONCg=="
+  },
+  {
+   "slot": 464650879,
+   "index": 157,
+   "version": "1",
+   "signature": "48Jf7s3sfeX8FbpKhc52R9u1eZAneDY6jXkYK4ti5TTrGvyJNu6HWKfn8RRp63ykPRnvzko3My8wFcAHXFAbbTkQ",
+   "wireLen": 349,
+   "overPolicyCap": false,
+   "staticKeys": 5,
+   "lookups": 0,
+   "instructions": 2,
+   "singleSig": true,
+   "shape": false,
+   "wireBase64": "gQEAAh8AAAD4Zg+nWwtqlFd5GE0iw1BMw6rw5mJ14Yv0X3u6R0po6QIFaKLdQ+LwfDvX9PJ4Uj+1MDLhFU1YcLoOdlBRwcItgluSppZj5NDn9GscEWhUlrK/WPRupdzeyMpXtWgNfbJnAvLId4i8QeWdSDx+4CpdKNRPhROaPThYWMqAJt1Bg+QCAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAL+PyS1N6zFFoI7gtrujeXkUbdUmaDICmvIVufFQXMmtoAAAAAAAAAOAEAAACpAgAAgAAABAInAAMCDAAAAjcAL82B6DgAAAB/ArIbAAAAAAIOAMPsfQdedka+AgDD7B21RnZGvgABAgAAABAnAAAAAAAAnFmdr/FDFMANfKkMAoBrawyuERezDvSTuF3x72DIw6N7jES3GVD/0MRFmJcKEfUlVvWLx9awM94dtUNDNG1ADQ=="
+  },
+  {
+   "slot": 464650879,
+   "index": 163,
+   "version": "1",
+   "signature": "4scJjLKpugu2K2iG3opvTzWsDaCg5aZMBptHcgYAUx1cCnT6RH8t6P8JLh4noRPRbpuritLgjEuhppHRGarDTXf1",
+   "wireLen": 257,
+   "overPolicyCap": false,
+   "staticKeys": 3,
+   "lookups": 0,
+   "instructions": 1,
+   "singleSig": true,
+   "shape": false,
+   "wireBase64": "gQEAAQ8AAADAV4TuAqDCzlDsTKtdkllzjo/SlbuP2KlPDnC+386BtgED1uHdYSOgHIfEFaT+/////1sWwSJ8TzNrw4nWmDcSyYoNoHkOo+XHiDBsw8mdu/8dPwAPoPqw63TzARR1SamLOgloGfZKAvdXJHoeJzNoY5iNbKgT2jEcJ/lZlSdrkFHoRAEAAAAAAAAYAAAAcQMAAAICIQAAAV58HkUAAAAABtwiRQAAAAB+ArIbQEIPANSaOJ6hAQAA/8GxrCgYcD9xbyglPgtzNZaKYi2uZtJLQtCNUCWcKv8kQiIoGqJIiik+hv4Cl9yAlHC/fU89gG95CGjAstzNswQ="
+  },
+  {
+   "slot": 464650879,
+   "index": 177,
+   "version": "1",
+   "signature": "LWCm9HbDRvw4KGqFVTGPop8NZnAyUanwBEUBTfii7YqqPwzQGKS4q5enzmfs4bqTx7RRHFCVWmg7oNFX8P9PKEV",
+   "wireLen": 292,
+   "overPolicyCap": false,
+   "staticKeys": 5,
+   "lookups": 0,
+   "instructions": 1,
+   "singleSig": true,
+   "shape": false,
+   "wireBase64": "gQEAAwwAAACA3zW3xQXSU1x998wTE5Ofd3FE8CbdSl5qbhXLNbkQpQEFVEtYNfUbcSlY60P/iJU7OIWp733kJx2olUgDanwezB68K1cGXvHdZlQwvmBrpllsApUwG63vi1r8QQFBUPQSdAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAI+JNTWLbqNL59w8mWh0CS1KwyClXtPbEBPUmuPxGGiF26rXptF5r9vqjC2N7Whqd8I8qUOz+ey1I032qMhfxpYAAAAAIAAAAgIMAAABAgAAAIwSAAAAAAAAENGu4iBtZKkheeknYXAKXBIv++/evzgYLBXHARuyiqNNLyIuiCnOXdq3Ql6VYqjszq44B0HCeg1cMfl1kCfiBg=="
+  },
+  {
+   "slot": 464650879,
+   "index": 1,
+   "version": "1",
+   "signature": "3M3faP1z66anzCUfojxMz7qMXBwDpAP9fNX44tEwYR4sERafUrpd8niu7bBzNTHDKLkmmD8MDJu6WTUfPCLKmSNY",
+   "wireLen": 1825,
+   "overPolicyCap": true,
+   "staticKeys": 47,
+   "lookups": 0,
+   "instructions": 5,
+   "singleSig": true,
+   "shape": false,
+   "wireBase64": "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"
+  }
+ ]
+}

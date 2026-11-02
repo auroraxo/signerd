@@ -86,6 +86,24 @@ function evaluate(raw, grant, now = new Date()) {
   if (!Number.isFinite(nowMs)) return refused('invalid_clock');
   if (nowMs >= expiry) return refused('expired');
 
+  // Version-1 wire begins with the 0x81 prefix. Measured 2026-11-02 on two
+  // independent samples of finalized mainnet blocks (4,465 transactions,
+  // 100% JSON<->wire paired, tools/wire-prefix.mjs, output
+  // research/first-byte-distribution-2026-11-02.json): byte 0 is 0x81 in
+  // 2005/2005 v1 transactions, while legacy and v0 wire begins with the
+  // compact-u16 signature count (0x01..0x05 in 2460/2460) - and inside this
+  // 1232-byte cap at most 17 signatures fit, so that count can never reach
+  // 0x80. Byte 0 >= 0x80 under the cap therefore cannot be legacy or v0: it
+  // is versioned message wire or corrupt bytes, and both must refuse.
+  //
+  // Classified BEFORE any parsing on purpose: the pinned web3.js 1.98.4
+  // cannot deserialize v1 wire at all and would return the generic
+  // invalid_wire — the same reason a caller gets for three corrupt bytes —
+  // while web3.js 3.1.1 parses it cleanly. The reason a caller sees must be a
+  // property of the wire, not of whichever library is installed. The size
+  // check above runs first, so an over-cap buffer is still invalid_wire.
+  if (wire[0] >= 0x80) return refused('version_or_alt');
+
   let transaction;
   try {
     transaction = VersionedTransaction.deserialize(wire);

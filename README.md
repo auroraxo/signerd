@@ -49,14 +49,15 @@ A later, explicitly labeled `--simulate` mode may add RPC-backed checking for th
 | Transactions measured | 2,835 (100% JSON↔wire paired) |
 | Shape candidates (1 signer, 3 keys, 1 System instruction) | 201 |
 | **Approved by the product** | **192 — 95.5% of candidates, 6.8% of all traffic** |
-| Refused among candidates | 9, all fail-closed: 7× `version_or_alt`, 2× `invalid_wire` |
+| Refused among candidates | 9, all fail-closed: 7× `version_or_alt`, 2× `invalid_wire` (the 2 `invalid_wire` were v1 rows; since the classification fix below they are refused `version_or_alt` — replay derives from stored verdicts of that commit) |
 | Traffic version mix | 1,257 v1 (44.3%), 710 v0, 868 legacy |
 
 **The honest reading:** the current envelope covers roughly **7 in 100** transactions, not 4 in 1,000. The old 0.41% figure was an artifact of two defects in the classifier, both found and fixed by measurement (details below): a broken base58 decoder hid 11 of the 192 real approvals, and a version-blind classifier folded version-1 wire into the legacy buckets. After the fixes, the classifier and the product agree on **all 2,835 transactions** — 192 `v0_fit` exactly equals 192 product approvals, with zero disagreements on any transaction.
 
 Two facts that matter more than the headline:
 
-- **Version-1 transactions are 44% of current traffic** and the pinned `@solana/web3.js` 1.98.4 cannot deserialize v1 wire at all (measured: in one block, all 368 v1 transactions fail to deserialize; 459 v0/legacy succeed). The daemon refuses them as `invalid_wire` — fail-closed, but that is a ceiling on today's reach, not a rounding error.
+- **Version-1 transactions are 44% of current traffic** and the pinned `@solana/web3.js` 1.98.4 cannot deserialize v1 wire at all (measured: in one block, all 368 v1 transactions fail to deserialize; 459 v0/legacy succeed). The daemon refuses them **as `version_or_alt`** — fail-closed, but that is a ceiling on today's reach, not a rounding error. (Before 2026-11-02 they were refused as `invalid_wire`, the same reason a caller gets for three corrupt bytes; the named reason was recovered without touching the parser, see "Version-1 classification" below.)
+- **The reach question was measured, not argued: upgrading `@solana/web3.js` does not widen reach on v1 wire.** `tools/v1-reach.mjs` (output `research/v1-reach-2026-11-02.json`, pinned in `test/v1-reach-tool.test.js`) feeds 14 signature-verified live v1 transactions into the product's own `evaluate()` under three libraries: 1.98.4 deserializes 0/14, 1.99.0 parses 14/14 but cannot re-serialize, 3.1.1 round-trips 14/14 — and all three produce the **same verdicts** (`version_or_alt` under the cap, `invalid_wire` over it, 0 approvals). The version rule, not the parser, decides reach, so the migration (66/186 tests fail under 3.1.1, a major-version API rewrite) buys zero approvals.
 - **Shape fit is not the bottleneck; grant terms are.** Of 201 candidates, 192 are approved even under maximally permissive grants. The narrow envelope is *not* what limits this product's usefulness — the limit is where a scoped signature is actually needed.
 
 The v1 SPL-Token envelope remains rejected as the main path: of the 2,835 transactions measured, real bare single-instruction SPL transfers are a handful, because token transfers are wrapped in DEX programs, compute-budget instructions, or address tables. The message-grant envelope (signing a receipt, an attestation, a quote — not a transaction shape) is where the evidence points, and it is the one measured own site (`openreceipts`).
@@ -70,6 +71,53 @@ The v1 SPL-Token envelope remains rejected as the main path: of the 2,835 transa
 Each fix has a control in `test/envelope-traffic-classifier.test.mjs` (5 tests: three defect controls, a 200-payload oracle round-trip, and a false-positive guard that keeps a genuine legacy transaction classified as `v0_fit`). All three defect controls are red on the pre-fix tree and green after.
 
 Four further defects in the measuring tool were found and fixed earlier (2026-10-30), each of which had produced a clean-looking but false result: `--blocks=25` was sliced to `'=25'` → `NaN`, so the sampling loop never ran and the tool reported "0 transactions" as if it were a finding; `getBlock` with `maxSupportedTransactionVersion: 0` now fails for *every* slot because mainnet serves version 1; `getBlock` returns `{transaction, meta}` wrappers, so classifying them directly marked everything malformed; and the file carried a fabricated SPL Token program id (`TokenkegQdZ1…`) while the real one is `TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA` — which is why an early run reported 0 token matches while 731 real `Tokenkeg` instructions sat in six blocks. The classifier now self-checks against hand-built fixtures (`--selftest`, 9/9) before it reports a number, and refuses to report at all on a zero-transaction sample.
+
+### Version-1 classification (measured and fixed 2026-11-02)
+
+Version 1 is ~44% of live traffic, and the pinned `@solana/web3.js` 1.98.4 cannot
+deserialize v1 wire. The daemon therefore refused v1 as `invalid_wire` — the
+**same reason a caller gets for three corrupt bytes** — and the answer changed
+with the installed library: under 3.1.1 the same wire was refused
+`version_or_alt`. A caller could not tell "your message format is not
+implemented" from "your payload is corrupt", and the reason depended on a
+dependency version.
+
+The fix is a measured classification rule, not a guess. `tools/wire-prefix.mjs`
+fetched two independent samples of finalized mainnet blocks (4 blocks each,
+**4,465 transactions total, 100% JSON↔wire paired**, output
+`research/first-byte-distribution-2026-11-02.json`) and measured the wire
+prefix against each transaction's own version label:
+
+| Wire | Byte 0 | Sample 1 (3,147 tx) | Sample 2 (1,318 tx) |
+|---|---|---|---|
+| version 1 | `0x81` | 1,434 / 1,434 | 571 / 571 |
+| legacy | signature count (`0x01`–`0x05`) | 617 / 617 | 294 / 294 |
+| version 0 | signature count (`0x01`–`0x04`) | 1,096 / 1,096 | 453 / 453 |
+
+Legacy and v0 wire begins with the compact-u16 signature count, and inside the
+policy's 1232-byte cap at most **17** signatures fit — so that count can never
+reach `0x80`. Byte 0 ≥ `0x80` under the cap therefore cannot be legacy or v0:
+it is versioned message wire or corrupt bytes, and both must refuse.
+
+So `src/policy.js` classifies versioned wire **before any parsing** and answers
+`version_or_alt` for it. The verdict is now a property of the wire, not of the
+installed library — all three probed libraries produce identical verdicts. The
+size cap still outranks it (over-cap stays `invalid_wire`), and legacy
+transfers, v0 transactions, three corrupt bytes and JSON bodies all behave
+exactly as before.
+
+Proof: `test/v1-wire-refusal.test.js` (7 tests — red on the pre-fix tree where
+every under-cap v1 row answered `invalid_wire`, green after; the guard cases
+are green on **both** trees) and `test/v1-reach-tool.test.js` (9 tests pinning the
+measurement, including exit code 3 for an empty fixture, broken pairing and an
+unusable candidate probe). The committed fixture
+`test/fixtures/v1-wire-2026-11-02.json` holds 14 signature-verified live v1
+rows, 3 of them shape-eligible — a v1 transaction whose own accounts would
+satisfy the envelope, so the **only** reason it is refused is the version rule.
+
+**What this does not do:** it does not make the daemon approve v1 wire. It
+cannot and must not — the envelope is legacy-only by design. It makes the
+refusal *legible*, which is the product's whole promise.
 
 ### The message-grant envelope (built and measured 2026-10-31)
 

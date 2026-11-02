@@ -1,0 +1,70 @@
+{
+  "generatedAt": "2026-11-02T22:43:42.285Z",
+  "rpc": "https://api.mainnet-beta.solana.com",
+  "tip": 464667376,
+  "slots": [
+    464667375,
+    464667374,
+    464667373,
+    464667372
+  ],
+  "total": 1318,
+  "unpaired": 0,
+  "policyMaxWireBytes": 1232,
+  "byVersion": {
+    "0": {
+      "count": 453,
+      "firstBytes": {
+        "01": 426,
+        "02": 18,
+        "04": 8,
+        "03": 1
+      },
+      "minLen": 217,
+      "maxLen": 1201
+    },
+    "1": {
+      "count": 571,
+      "firstBytes": {
+        "81": 571
+      },
+      "minLen": 186,
+      "maxLen": 3822
+    },
+    "legacy": {
+      "count": 294,
+      "firstBytes": {
+        "01": 270,
+        "02": 17,
+        "03": 4,
+        "04": 2,
+        "05": 1
+      },
+      "minLen": 205,
+      "maxLen": 1229
+    }
+  },
+  "separation": {
+    "v1FirstBytes": [
+      "81"
+    ],
+    "nonV1FirstBytes": [
+      "01",
+      "02",
+      "03",
+      "04",
+      "05"
+    ],
+    "minV1FirstByte": 129,
+    "maxNonV1FirstByte": 5,
+    "separated": true,
+    "maxSignaturesUnderCap": 17,
+    "signatureBytes": 64
+  },
+  "limits": [
+    "One sample of finalized mainnet blocks at one moment in time; a sample, not the ecosystem.",
+    "The version label is the RPC json view of each transaction, not a parse of the wire.",
+    "Pairing is verified by the signature physically occurring in the wire bytes.",
+    "The signature-count bound is derived from the policy cap, but the cap is on the WIRE length: a transaction over the cap is refused before the version rule applies."
+  ]
+}

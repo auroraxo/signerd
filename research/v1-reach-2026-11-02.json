@@ -1,0 +1,84 @@
+{
+  "generatedAt": "2026-11-02T22:39:37.396Z",
+  "source": "fixture",
+  "fixture": "test/fixtures/v1-wire-2026-11-02.json",
+  "question": "does an @solana/web3.js upgrade widen signerd reach on version-1 wire?",
+  "totals": {
+    "rows": 14,
+    "shapeEligible": 3,
+    "underCap": 13,
+    "overCap": 1,
+    "unverified": 0
+  },
+  "probes": [
+    {
+      "label": "pinned",
+      "pkgVersion": "1.98.4",
+      "reRunnable": true,
+      "deserializes": 0,
+      "roundTripsByteExact": 0,
+      "productVerdicts": {
+        "version_or_alt": 13,
+        "invalid_wire": 1
+      },
+      "productApprovals": 0,
+      "productVerdictsUnderCap": {
+        "version_or_alt": 13
+      },
+      "productVerdictsOverCap": {
+        "invalid_wire": 1
+      },
+      "errors": {
+        "deserialize: Reached end of buffer unexpectedly": 14
+      }
+    },
+    {
+      "label": "last-1x",
+      "pkgVersion": "1.99.0",
+      "reRunnable": false,
+      "deserializes": 14,
+      "roundTripsByteExact": 0,
+      "productVerdicts": {
+        "version_or_alt": 13,
+        "invalid_wire": 1
+      },
+      "productApprovals": 0,
+      "productVerdictsUnderCap": {
+        "version_or_alt": 13
+      },
+      "productVerdictsOverCap": {
+        "invalid_wire": 1
+      },
+      "errors": {
+        "serialize: Serialization of version 1 transaction messages is not supported": 14
+      },
+      "dir": "/tmp/w199"
+    },
+    {
+      "label": "v3",
+      "pkgVersion": "3.1.1",
+      "reRunnable": false,
+      "deserializes": 14,
+      "roundTripsByteExact": 14,
+      "productVerdicts": {
+        "version_or_alt": 13,
+        "invalid_wire": 1
+      },
+      "productApprovals": 0,
+      "productVerdictsUnderCap": {
+        "version_or_alt": 13
+      },
+      "productVerdictsOverCap": {
+        "invalid_wire": 1
+      },
+      "errors": {},
+      "dir": "/tmp/v13"
+    }
+  ],
+  "limits": [
+    "One committed fixture of signature-verified version-1 wire; a sample, not the ecosystem.",
+    "The grant is built from the transaction under test (best case): it asks whether the daemon would sign if allowed, never whether a grant would be issued.",
+    "Reach is decided by the policy version rule (legacy only), not by the parser: a parser that reads v1 still refuses it.",
+    "Candidate probes need the named package installed locally and are marked reRunnable:false."
+  ]
+}
