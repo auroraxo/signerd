@@ -22,7 +22,25 @@ import path from 'node:path';
 const run = promisify(execFile);
 const TOOL = path.join(import.meta.dirname, '..', 'tools', 'measure-adoption.mjs');
 
-test('adoption probe refuses a verdict on a nonexistent repo (exit 3)', async () => {
+// The probe shells out to `gh api`. Both controls need a live, authenticated
+// GitHub API; without a token (e.g. the CI `test` job) the probe cannot run
+// at all, and asserting on its failure there would measure the missing
+// token, not the instrument. Same convention as the consumer-e2e tests:
+// skip with a named reason when the dependency is absent.
+async function ghAuthed() {
+  try {
+    await run('gh', ['auth', 'status'], { timeout: 15000 });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+test('adoption probe refuses a verdict on a nonexistent repo (exit 3)', async (t) => {
+  if (!(await ghAuthed())) {
+    t.skip('gh not authenticated; adoption probe needs live GitHub API');
+    return;
+  }
   const dir = await mkdtemp(path.join(tmpdir(), 'signerd-adopt-'));
   try {
     await assert.rejects(
@@ -38,7 +56,11 @@ test('adoption probe refuses a verdict on a nonexistent repo (exit 3)', async ()
   }
 });
 
-test('adoption probe on signerd emits a verdict and complete report', async () => {
+test('adoption probe on signerd emits a verdict and complete report', async (t) => {
+  if (!(await ghAuthed())) {
+    t.skip('gh not authenticated; adoption probe needs live GitHub API');
+    return;
+  }
   const dir = await mkdtemp(path.join(tmpdir(), 'signerd-adopt-'));
   try {
     const out = path.join(dir, 'adoption.json');
