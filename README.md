@@ -167,7 +167,15 @@ transaction path has had six rounds.
 ## Shape
 
 ```bash
-# one-time setup: an encrypted keystore and a grant file
+# one-time setup: an encrypted keystore and a grant file.
+# The passphrase file is a SECRET: create it owner-only. On a default desktop
+# umask (0002) a plain `printf ... > pass` lands at 0664 and is refused by
+# design — a group-readable passphrase could be read by anyone on the machine.
+# Keystore and state directories are created by signerd itself, owner-only.
+umask 077
+mkdir -p ~/.config/signerd            # 0700 via umask
+printf 'your passphrase\n' > ~/.config/signerd/pass
+chmod 600 ~/.config/signerd/pass
 signerd keygen --keystore ~/.config/signerd/ops.key --passphrase-file ~/.config/signerd/pass
 
 # OR adopt a key you already hold — the migration path. Reads a solana-keygen

@@ -75,7 +75,34 @@ function writeKeystore({ file, passphrase, secretKey, overwrite = false }) {
     cipher: { name: 'aes-256-gcm', iv: iv.toString('base64'), tag: cipher.getAuthTag().toString('base64') },
     secret: ciphertext.toString('base64'),
   };
-  fs.mkdirSync(path.dirname(path.resolve(file)), { recursive: true });
+  // The keystore's directory may be created HERE, and it must not inherit the
+  // process umask: mkdirSync's default mode is 0777 & ~umask, which under the
+  // common desktop umask 0002 yields 0775 - a GROUP-WRITABLE directory that
+  // this very file refuses at load time (`keystore_dir_mode`). signerd was
+  // manufacturing a state it then rejected: keygen created 0775 and `run`
+  // refused it. A group-writable directory holding a keystore is a swap-out
+  // attack surface (the attacker substitutes their own key), so a directory
+  // we create is owner-only, exactly like the daemon's socket directory
+  // (src/daemon.js). A directory that ALREADY exists belongs to the operator:
+  // it is never silently rewritten here; the load-time rules judge it.
+  const dir = path.dirname(path.resolve(file));
+  let dirExists = true;
+  try {
+    fs.statSync(dir);
+  } catch (err) {
+    if (err.code !== 'ENOENT') throw fail('keystore_dir_unreadable', err.code);
+    dirExists = false;
+  }
+  if (!dirExists) {
+    fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+    // mkdirSync's mode is masked by the umask, so set it explicitly.
+    try { fs.chmodSync(dir, 0o700); } catch { /* load-time rules verify */ }
+  }
+  // A directory that ALREADY exists is the operator's, and is judged by the
+  // load-time rules (keystore_dir_mode / keystore_dir_owner) - not rewritten
+  // here. Writing a keystore into a directory we did not create stays
+  // possible on purpose: the loader is the judge of that state, and the
+  // review #6 tests pin exactly that separation.
   fs.writeFileSync(file, JSON.stringify(doc, null, 2) + '\n', { mode: 0o600 });
   fs.chmodSync(file, 0o600); // writeFileSync's mode applies on create only
   key.fill(0);
@@ -195,7 +222,8 @@ function loadKeystore({ file, passphrase }) {
   const dirStat = fs.statSync(dirPath);
   const dirMode = dirStat.mode & 0o7777;
   if ((dirMode & 0o022) !== 0 && (dirMode & 0o1000) === 0) {
-    throw fail('keystore_dir_mode', dirMode.toString(8));
+    throw fail('keystore_dir_mode',
+      `${dirMode.toString(8)} — a stranger could swap the keystore; fix: chmod 700 ${dirPath}`);
   }
   if (typeof process.getuid === 'function' &&
       dirStat.uid !== process.getuid() && dirStat.uid !== 0) {

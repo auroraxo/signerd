@@ -7,10 +7,19 @@
   "bin": {
     "signerd": "bin/signerd.js"
   },
+  "files": [
+    "bin",
+    "src",
+    "tools/leasecheck.c",
+    "examples",
+    "LICENSE",
+    "README.md"
+  ],
   "scripts": {
     "build": "cc -O2 -o tools/leasecheck tools/leasecheck.c",
     "pretest": "npm run build",
     "test": "node --test",
+    "test:install-smoke": "node scripts/install-smoke.js",
     "test:crash": "node scripts/crash-consistency.js 25",
     "test:crash:sealed": "node scripts/crash-consistency.js 25 sealed"
   },

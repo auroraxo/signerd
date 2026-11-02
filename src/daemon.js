@@ -401,6 +401,31 @@ class Daemon {
   async start() {
     if (this.started) throw fail('daemon_started');
     this.stopPromise = null;
+    // The journal's directory is the daemon's state directory: the lock file
+    // and the journal itself live there. It did not exist before this
+    // feature, so `run` failed with a raw `ledger_lock_failed: ENOENT` when
+    // the operator followed the README and pointed --ledger at a directory
+    // that signerd had never created. The socket directory below is created
+    // the same way (owner-only, never umask-inherited): a state directory
+    // holding the journal and its lock must not be writable by anybody else,
+    // or a stranger could replace the journal between two runs.
+    const ledgerDir = path.dirname(path.resolve(this.ledgerFile));
+    try {
+      const ledgerDirStat = fs.statSync(ledgerDir);
+      if (!ledgerDirStat.isDirectory()) throw fail('ledger_dir_invalid');
+      const ledgerDirMode = ledgerDirStat.mode & 0o7777;
+      if ((ledgerDirMode & 0o022) !== 0 && (ledgerDirMode & 0o1000) === 0) {
+        throw fail('ledger_dir_mode', ledgerDirMode.toString(8));
+      }
+      if (typeof process.getuid === 'function' &&
+          ledgerDirStat.uid !== process.getuid() && ledgerDirStat.uid !== 0) {
+        throw fail('ledger_dir_owner', String(ledgerDirStat.uid));
+      }
+    } catch (err) {
+      if (err.code !== 'ENOENT') throw err;
+      fs.mkdirSync(ledgerDir, { recursive: true, mode: 0o700 });
+      try { fs.chmodSync(ledgerDir, 0o700); } catch { /* verified below */ }
+    }
     // Hold the journal before anything else can talk to us: two daemons on
     // one journal would bypass the replay set and double the window budget.
     this.#acquireJournalLock();

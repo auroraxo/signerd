@@ -90,7 +90,15 @@ function readPassphrase(args, flag = 'passphrase-file') {
   }
   const mode = lstat.mode & 0o777;
   if ((mode & 0o077) !== 0) {
-    process.stderr.write(`${flag} must not be group/other accessible (mode ${mode.toString(8)})\n`);
+    // Name the repair, not just the verdict. The passphrase file is the one
+    // secret an operator creates by hand (the README says: write it), and
+    // under the common desktop umask 0002 `printf > pass` yields 0664 - so
+    // this refusal was the first thing a stranger hit, with no way to guess
+    // the fix. The rule stays fail-closed; the message now carries the
+    // command that repairs it.
+    process.stderr.write(
+      `${flag} must not be group/other accessible (mode ${mode.toString(8)})\n` +
+      `  fix: chmod 600 ${file}   # the passphrase file is a secret; keep it owner-only\n`);
     process.exit(2);
   }
   if (typeof process.getuid === 'function' &&
@@ -101,7 +109,9 @@ function readPassphrase(args, flag = 'passphrase-file') {
   const dirStat = fs.statSync(path.dirname(path.resolve(file)));
   const dirMode = dirStat.mode & 0o7777;
   if ((dirMode & 0o022) !== 0 && (dirMode & 0o1000) === 0) {
-    process.stderr.write(`${flag} must not live in a group/other writable directory (mode ${dirMode.toString(8)})\n`);
+    process.stderr.write(
+      `${flag} must not live in a group/other writable directory (mode ${dirMode.toString(8)})\n` +
+      `  fix: chmod 700 ${path.dirname(path.resolve(file))}   # a stranger could replace the file there\n`);
     process.exit(2);
   }
   if (typeof process.getuid === 'function' &&
