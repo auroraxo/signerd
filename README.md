@@ -427,6 +427,21 @@ committed its initial findings *before* reading any prior review report:
 
 Ladder: 7 red on the pre-fix tree (5770b59), 13 green, 15 new regression tests; full suite 206/206 with 0 skipped. Honest note: the reviewer is independent of reviews #5–#8 but the same model family — independent, not foreign.
 
+## Stranger-install / quickstart defects (2026-11-02) — 4 found and fixed, the refusals held
+
+The qualification suite has always run from a checkout (`npm ci`, pretest builds `tools/leasecheck`, the daemon is started from `../bin`). A stranger installing the package gets a different tree, so the first hour was measured end to end instead of assumed: `scripts/install-smoke.js` (`npm run test:install-smoke`) packs, installs into a fresh directory, then runs keygen -> grant -> daemon -> `sign-message` verified **outside** the product (Node OpenSSL ed25519 against the daemon keypair) and a refusal ladder where every step asserts a NEGATIVE first, so a green run cannot come from a skipped step. It runs in CI next to the suite.
+
+Running the documented quickstart verbatim under this machine's default umask **0002** (the Ubuntu/Debian desktop default) found four defects — measured, not argued:
+
+1. **The loop (worst): signerd created the state it then refused.** `keygen` made the keystore's parent directory with a bare `mkdirSync`, which inherits the umask -> 0775 -> the very next `run` refused that directory with `keystore_dir_mode: 775`. A stranger who did everything right hit a wall built by the tool itself. **Fix:** a directory the write path *creates* is made 0700 explicitly (mkdir mode + chmod, the same pattern the daemon's socket directory already used); a directory that already exists is the operator's and stays under the load-time rules — the review #6 contract (loader is the judge) is unchanged, now pinned by `test/quickstart-stranger.test.js`.
+2. **The passphrase file (by design, but a dead end):** `printf > pass` yields 0664 under umask 0002, and `readPassphrase()` correctly refuses a group-readable passphrase — the refusal message only named the verdict, not the repair. **Fix:** the refusal stays fail-closed and now prints `fix: chmod 600 <path>` (and `chmod 700 <dir>` for the directory case). The rule itself is untouched: `test/quickstart-stranger.test.js` pins that a genuinely loose file is still refused (this is the one test GREEN on the pre-fix tree — the false-positive guard).
+3. **The ledger directory: a raw errno where a setup step belonged.** The README points `--ledger` at `~/.local/share/signerd/...`, a directory nothing ever created -> `ledger_lock_failed: ENOENT` (also `seal-journal`/`migrate` would refuse at the lock). **Fix:** `start()` creates the ledger's parent directory 0700 with the same dir-mode/owner refusals when it pre-exists loose (`ledger_dir_mode` / `ledger_dir_owner`), mirroring the socket directory.
+4. **The quickstart did not create its own inputs.** The README's Shape block now creates the passphrase file owner-only (umask 077 + chmod) and says why. Measured verbatim afterwards under umask 0002: keygen exit 0, keystore dir 0700, state dir 0700, daemon up, refusal ladder intact.
+
+**Ladder:** `test/quickstart-stranger.test.js` (5 tests) is 4 RED / 1 GREEN on the pre-fix tree and 5/5 GREEN after; the pre-fix-GREEN one is the loose-passphrase refusal (the guard proving the fix did not weaken the rule). Full suite 212 -> **217/217**, crash harness green both modes, install-smoke 12/12 checks.
+
+**Limits:** no signature bytes, grant semantics or ledger format changed; an operator who pre-created a loose state directory still gets the (now self-explaining) refusal rather than a silent chmod; the install-smoke covers Linux x64/npm only (no macOS/Windows run); still user zero — no outside user has installed it.
+
 ## Next qualification
 
 0. A **third** independent adversarial review of the signing path after the review-#2 fixes land (`src/signer.js`, `src/daemon.js`, `src/keystore.js`, `src/grantfile.js`, `src/ledger.js`), before pointing it at a key with funds: two reviews have run (2026-10-27 hardening diff, 2026-10-29 signing path) and all 12 findings are fixed and regression-tested, but neither was a professional audit and the fixes themselves have not been independently reviewed.
