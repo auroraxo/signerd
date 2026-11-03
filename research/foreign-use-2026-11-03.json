@@ -1,0 +1,194 @@
+{
+  "measuredAt": "2026-11-03T19:03:57.609Z",
+  "repo": "auroraxo/signerd",
+  "controls": {
+    "code": 419,
+    "issues": 997,
+    "commits": 113
+  },
+  "surfaces": {
+    "code-slug": {
+      "id": "code-slug",
+      "kind": "code",
+      "literal": "auroraxo/signerd",
+      "why": "the repo slug, anywhere in a file",
+      "control": "github.com/solana-foundation/solana-web3.js",
+      "controlMatches": 419,
+      "state": "measured",
+      "hits": [
+        {
+          "repo": "sprintberlin/openclaw-citizen",
+          "path": "visionaer/ideen.md",
+          "author": null
+        }
+      ]
+    },
+    "code-slug-url": {
+      "id": "code-slug-url",
+      "kind": "code",
+      "literal": "github.com/auroraxo/signerd",
+      "why": "the slug as a full github.com URL",
+      "control": "github.com/solana-foundation/solana-web3.js",
+      "controlMatches": 419,
+      "state": "measured",
+      "hits": [
+        {
+          "repo": "sprintberlin/openclaw-citizen",
+          "path": "visionaer/ideen.md",
+          "author": null
+        }
+      ]
+    },
+    "code-slug-escaped": {
+      "id": "code-slug-escaped",
+      "kind": "code",
+      "literal": "auroraxo%2Fsignerd",
+      "why": "the slug in URL-escaped form (npm/pip dependency strings)",
+      "control": "github.com/solana-foundation/solana-web3.js",
+      "controlMatches": 419,
+      "state": "measured",
+      "hits": []
+    },
+    "issues-slug": {
+      "id": "issues-slug",
+      "kind": "issues",
+      "literal": "auroraxo/signerd",
+      "why": "issues and PRs that name the repo (a stranger asking for it counts)",
+      "control": "github.com/solana-foundation/solana-web3.js",
+      "controlMatches": 997,
+      "state": "measured",
+      "hits": [
+        {
+          "repo": "solana-foundation/awesome-solana-ai",
+          "path": "#280",
+          "author": "auroraxo",
+          "number": 280,
+          "title": "Add signerd to Developer Tools",
+          "body": "## What's being added\n\n**signerd** (https://github.com/auroraxo/signerd) — a scoped signing daemon for Solana that applies the ssh-agent pattern to Solana keys. AI agents hold time- and spend-bounded grants instead of private keys; the daemon checks each transaction against the grant offline before signing and refuses anything it cannot decide from the transaction bytes with a machine-readable reason.\n\n## Why it fits the guidelines\n\n- **Related to AI and Solana development**: designed so an agent can be told \"you may send up to 0.5 SOL for 24 hours\" without receiving the key — a prompt-injected agent hits a structured refusal instead of a silent gap. The README's primary example is agent key custody (contrasted with `solana-agent-kit`'s raw private key setup path).\n- **Actively maintained**: first v0.1.0 released 2026-11-01, daily commits, CI green (210 tests pass, 0 fail, 0 skipped — verified locally on `main` at 5425f37).\n- **Documentation available**: full README with install path, grant-file examples, and a measured safety-boundary section (offline-verifiable scope only; lookup-table/CPI transactions are refused by design).\n- **Working code**: `cargo install --git ... --tag v0.1.0`, no token, MIT licensed.\n- Placed next to IntentProof in Developer Tools as the closest neighbor (both are local pre-signing policy for AI-agent transactions; signerd additionally holds the key).\n\n## Honest limits (stated in the repo itself)\n\n- No professional security audit, no outside users yet — the README says so explicitly and asks for no real funds to use it yet.\n- v1 transaction envelope remains a plan; only the legacy System-transfer scope is enforceable offline today.\n\nNot a token project, no paid promotion."
+        }
+      ]
+    },
+    "commits-slug": {
+      "id": "commits-slug",
+      "kind": "commits",
+      "literal": "auroraxo/signerd",
+      "why": "commit messages that name the repo (a stranger depending on it commits the URL)",
+      "control": "github.com/solana-foundation/solana-web3.js",
+      "controlMatches": 113,
+      "state": "measured",
+      "hits": []
+    }
+  },
+  "coverage": {
+    "status": "measured",
+    "probes": [
+      {
+        "id": "probe-own",
+        "status": "measured",
+        "repo": "auroraxo/openreceipts",
+        "path": "README.md",
+        "literalPresentInFile": true,
+        "visibleToCodeSearch": false
+      },
+      {
+        "id": "probe-small-foreign",
+        "status": "measured",
+        "repo": "beam2goat/hwmlb",
+        "stars": 0,
+        "visibleToCodeSearch": false
+      }
+    ],
+    "indexability": {
+      "status": "measured",
+      "sampleSize": 7,
+      "visible": 2,
+      "rate": 0.2857142857142857,
+      "rows": [
+        {
+          "repo": "MUKHTIARSHAH/portfolio",
+          "visibleToCodeSearch": true
+        },
+        {
+          "repo": "travissavard/lenovo-keyboard-idle",
+          "visibleToCodeSearch": true
+        },
+        {
+          "repo": "beam2goat/hwmlb",
+          "visibleToCodeSearch": false
+        },
+        {
+          "repo": "auroraxo/openreceipts",
+          "visibleToCodeSearch": false
+        },
+        {
+          "repo": "auroraxo/sememe",
+          "visibleToCodeSearch": false
+        },
+        {
+          "repo": "auroraxo/reeflog",
+          "visibleToCodeSearch": false
+        },
+        {
+          "repo": "auroraxo/signerd",
+          "visibleToCodeSearch": false
+        }
+      ]
+    },
+    "scope": [
+      "probe-own (auroraxo/openreceipts): NOT visible to code search - absence claims do not cover repos like this one",
+      "probe-small-foreign (beam2goat/hwmlb): NOT visible to code search - absence claims do not cover repos like this one",
+      "code-search indexability of the sampled fresh public 0-star repos: 2/7 visible (29%) - the code surfaces can only ever see the indexed subset"
+    ]
+  },
+  "candidates": [
+    {
+      "repo": "sprintberlin/openclaw-citizen",
+      "hits": 2
+    },
+    {
+      "repo": "solana-foundation/awesome-solana-ai",
+      "hits": 1
+    }
+  ],
+  "verifiedForeign": [],
+  "verifiedOwn": [
+    {
+      "repo": "sprintberlin/openclaw-citizen",
+      "permission": "write",
+      "permissionDetermined": true,
+      "permissionRead": "ok",
+      "repoOwn": true,
+      "author": null,
+      "authorIsMe": false,
+      "attribution": "own-repo",
+      "surface": "code-slug",
+      "path": "visionaer/ideen.md",
+      "evidence": "code-slug"
+    },
+    {
+      "repo": "solana-foundation/awesome-solana-ai",
+      "permission": "none",
+      "permissionDetermined": true,
+      "permissionRead": "not a collaborator",
+      "repoOwn": false,
+      "author": "auroraxo",
+      "authorIsMe": true,
+      "attribution": "own-authored",
+      "surface": "issues-slug",
+      "path": "#280",
+      "evidence": "issues-slug"
+    }
+  ],
+  "unknownAttribution": [],
+  "verdict": {
+    "class": "own-use-only",
+    "signals": [
+      "sprintberlin/openclaw-citizen visionaer/ideen.md",
+      "solana-foundation/awesome-solana-ai #280"
+    ],
+    "meaning": "every verified reference is my own activity (my repos, or authored by me) - own use, which proves nothing about outsiders"
+  },
+  "dataSourcesFailed": 0,
+  "failures": [],
+  "complete": true
+}
