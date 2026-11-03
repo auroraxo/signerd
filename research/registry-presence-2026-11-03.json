@@ -1,0 +1,142 @@
+{
+  "generatedAt": "2026-11-03T22:45:12.730Z",
+  "what": "does any package registry carry a package that references signerd (exact name or description mention)?",
+  "instrument": "tools/measure-registry-presence.mjs",
+  "targets": [
+    "signerd"
+  ],
+  "clientDefectReproduction": {
+    "endpoint": "crates.io/api/v1/crates?q=signerd",
+    "withoutUserAgent": {
+      "status": 403,
+      "class": "unmeasured-client-defect"
+    },
+    "withUserAgent": {
+      "status": 200,
+      "class": "measured"
+    },
+    "conclusion": "the previously recorded \"crates.io 403\" was a missing-User-Agent client defect, not a registry state"
+  },
+  "controls": [
+    {
+      "kind": "exact",
+      "registry": "crates.io",
+      "name": "serde",
+      "endpoint": "crates.io/api/v1/crates/serde",
+      "status": 200,
+      "status_class": "measured",
+      "exists": true,
+      "owners": [],
+      "description": "A generic serialization/deserialization framework",
+      "hits": [
+        {
+          "name": "serde",
+          "class": "exact-name",
+          "own": false
+        }
+      ],
+      "expectExists": true
+    },
+    {
+      "kind": "exact",
+      "registry": "npm",
+      "name": "express",
+      "endpoint": "registry.npmjs.org/express",
+      "status": 200,
+      "status_class": "measured",
+      "exists": true,
+      "maintainers": [
+        "wesleytodd",
+        "jonchurch",
+        "ctcpip",
+        "ulisesgascon",
+        "sheplu"
+      ],
+      "description": "Fast, unopinionated, minimalist web framework",
+      "hits": [
+        {
+          "name": "express",
+          "class": "exact-name",
+          "own": false
+        }
+      ],
+      "expectExists": true
+    }
+  ],
+  "surfaces": [
+    {
+      "kind": "exact",
+      "registry": "crates.io",
+      "name": "signerd",
+      "endpoint": "crates.io/api/v1/crates/signerd",
+      "status": 404,
+      "status_class": "measured",
+      "exists": false,
+      "owners": [],
+      "description": "",
+      "hits": []
+    },
+    {
+      "kind": "search",
+      "registry": "crates.io",
+      "name": "crates.io search q=signerd",
+      "endpoint": "crates.io/api/v1/crates?q=...",
+      "status": 200,
+      "status_class": "measured",
+      "hits": []
+    },
+    {
+      "kind": "exact",
+      "registry": "npm",
+      "name": "signerd",
+      "endpoint": "registry.npmjs.org/signerd",
+      "status": 404,
+      "status_class": "measured",
+      "exists": false,
+      "maintainers": [],
+      "description": "",
+      "hits": []
+    },
+    {
+      "kind": "search",
+      "registry": "npm",
+      "name": "npm search text=signerd",
+      "endpoint": "registry.npmjs.org/-/v1/search",
+      "status": 200,
+      "status_class": "measured",
+      "hits": [
+        {
+          "name": "@zanii/signerd",
+          "description": "Keep an agent's private key out of the agent's process. A local daemon unseals the key, signs receipts, owns the timestamp and the chain head; agents record thr",
+          "class": "name-mention",
+          "own": false,
+          "referenceClass": "name-collision"
+        }
+      ]
+    }
+  ],
+  "verdict": "registry-absence",
+  "verdictBasis": "only hits with referenceClass=foreign-reference count; name collisions and incidental mentions do not",
+  "nameCollisions": [
+    {
+      "name": "@zanii/signerd",
+      "registry": "npm",
+      "class": "name-mention"
+    }
+  ],
+  "coverage": {
+    "measured": "exact-name lookups + name/description search on crates.io and npm",
+    "notMeasured": [
+      "blog posts",
+      "Discord",
+      "git vendors under a different name",
+      "pyPI",
+      "other registries"
+    ]
+  },
+  "limits": [
+    "a package reference is not a verified install",
+    "search matches name + description only; a crate DEPENDING on signerd without naming it in either is invisible",
+    "verdict withheld (exit 3) whenever any surface or control is unmeasured"
+  ]
+}
