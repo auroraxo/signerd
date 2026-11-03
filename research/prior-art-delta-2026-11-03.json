@@ -1,0 +1,145 @@
+{
+  "generatedAt": "2026-11-03T23:44:59.724Z",
+  "what": "does the same-named prior art @zanii/signerd occupy this product's domain (Solana transaction signing), or only its name and premise?",
+  "instrument": "tools/measure-prior-art-delta.mjs",
+  "priorArt": {
+    "measured": true,
+    "name": "@zanii/signerd",
+    "created": "2026-10-19T01:34:28.702Z",
+    "latest": "0.2.0",
+    "versionCount": 6,
+    "license": "Apache-2.0",
+    "repositoryField": null,
+    "description": "Keep an agent's private key out of the agent's process. A local daemon unseals the key, signs receipts, owns the timestamp and the chain head; agents record through a socket with DaemonAgent.",
+    "tarballSha256": "33aff78b2392ec1a14dc238af92df239062ef4ab240c51317e276162314c6988",
+    "filesScanned": [
+      "package/src/cli.ts",
+      "package/src/deploy.ts",
+      "package/src/index.ts",
+      "package/README.md"
+    ],
+    "implementationFilesScanned": 3,
+    "domainCounts": {
+      "1232": 0,
+      "solana": 0,
+      "blockhash": 0,
+      "transaction": 0,
+      "lamports": 0,
+      "systemprogram": 0
+    },
+    "networkImportCounts": {
+      "require('http')": 0,
+      "require('https')": 0,
+      "require(\"http\")": 0,
+      "require(\"https\")": 0,
+      "require('node:http')": 0,
+      "require('node:https')": 0,
+      "from 'node:http'": 0,
+      "from 'node:https'": 0,
+      "node:http": 0,
+      "node:https": 0,
+      "fetch(": 0,
+      "http.request(": 0,
+      "https.request(": 0
+    },
+    "serverUrl": {
+      "required": true,
+      "optionalOnly": false,
+      "mentions": 8
+    },
+    "premise": {
+      "needle": "keep the agent's private key out of the agent's process",
+      "found": true
+    },
+    "downloads": {
+      "lastWeek": 269,
+      "lastMonth": 314,
+      "windowWeek": [
+        "2026-10-27",
+        "2026-11-02"
+      ],
+      "windowMonth": [
+        "2026-10-04",
+        "2026-11-02"
+      ]
+    }
+  },
+  "own": {
+    "measured": true,
+    "filesScanned": 17,
+    "implementationFilesScanned": 17,
+    "firstCommit": "2026-10-26T10:23:58+01:00",
+    "domainCounts": {
+      "1232": 3,
+      "solana": 11,
+      "blockhash": 6,
+      "transaction": 51,
+      "lamports": 56,
+      "systemprogram": 5
+    },
+    "networkImportCounts": {
+      "require('http')": 0,
+      "require('https')": 0,
+      "require(\"http\")": 0,
+      "require(\"https\")": 0,
+      "require('node:http')": 0,
+      "require('node:https')": 0,
+      "from 'node:http'": 0,
+      "from 'node:https'": 0,
+      "node:http": 0,
+      "node:https": 0,
+      "fetch(": 0,
+      "http.request(": 0,
+      "https.request(": 0
+    },
+    "premise": {
+      "needle": "the ssh-agent pattern, applied to solana keys",
+      "found": true
+    }
+  },
+  "timeline": {
+    "priorArtFirstPublish": "2026-10-19T01:34:28.702Z",
+    "ownFirstCommit": "2026-10-26T10:23:58+01:00",
+    "priorArtDaysAhead": 7
+  },
+  "summary": {
+    "priorArtDomainTotal": 0,
+    "ownDomainTotal": 132,
+    "ownNetworkImportTotal": 0,
+    "priorArtNetworkImportTotal": 0
+  },
+  "controls": {
+    "priorArtMeasured": true,
+    "priorArtFilesScanned": 4,
+    "ownScannerBlind": false,
+    "verdictVoiding": [
+      "prior-art surface unmeasured",
+      "no prior-art files scanned",
+      "own domain scan empty (blind scanner)"
+    ]
+  },
+  "verdict": "prior-art-distinct-domain",
+  "verdictBasis": "same 6-term list on both published surfaces; prior-art-domainTotal>0 falsifies distinct; blindness is no-verdict, never distinct",
+  "coverage": {
+    "measured": [
+      "npm metadata + tarball (sha256)",
+      "their published src/README",
+      "our src+bin",
+      "git first commit",
+      "npm downloads"
+    ],
+    "notMeasured": [
+      "their git history (no repository field in npm metadata)",
+      "blog/docs outside the package",
+      "minified/renamed code",
+      "runtime behaviour of their daemon",
+      "pyPI/crates presence (separate probe)"
+    ]
+  },
+  "limits": [
+    "lexical term counting: prose mentioning Solana counts as touching (overlap means touching, not competing)",
+    "network coupling measured structurally (required option + import terms), not by running their code",
+    "downloads include automated installs; not distinct human users",
+    "a verdict compares PUBLISHED artifacts at one point in time; both sides can change"
+  ]
+}
