@@ -1,0 +1,102 @@
+{
+  "generatedAt": "2026-11-04T16:41:19.790Z",
+  "what": "is the bare name `signerd` publishable on npm / crates.io / pypi right now?",
+  "instrument": "tools/measure-publish-readiness.mjs",
+  "targets": [
+    "signerd"
+  ],
+  "controls": [
+    {
+      "kind": "exact",
+      "registry": "npm",
+      "name": "express",
+      "endpoint": "registry.npmjs.org/express",
+      "status": 200,
+      "status_class": "measured",
+      "availability": "taken-collision",
+      "maintainers": [
+        "wesleytodd",
+        "jonchurch",
+        "ctcpip",
+        "ulisesgascon",
+        "sheplu"
+      ],
+      "expectExists": true
+    },
+    {
+      "kind": "exact",
+      "registry": "crates.io",
+      "name": "serde",
+      "endpoint": "crates.io/api/v1/crates/serde",
+      "status": 200,
+      "status_class": "measured",
+      "availability": "taken-collision",
+      "expectExists": true
+    },
+    {
+      "kind": "exact",
+      "registry": "pypi",
+      "name": "requests",
+      "endpoint": "pypi.org/pypi/requests/json",
+      "status": 200,
+      "status_class": "measured",
+      "availability": "taken-collision",
+      "projectUrl": "https://pypi.org/project/requests/",
+      "expectExists": true
+    }
+  ],
+  "surfaces": [
+    {
+      "registry": "npm",
+      "kind": "exact",
+      "name": "signerd",
+      "endpoint": "registry.npmjs.org/signerd",
+      "status": 404,
+      "status_class": "measured",
+      "availability": "free",
+      "maintainers": []
+    },
+    {
+      "registry": "crates.io",
+      "kind": "exact",
+      "name": "signerd",
+      "endpoint": "crates.io/api/v1/crates/signerd",
+      "status": 404,
+      "status_class": "measured",
+      "availability": "free"
+    },
+    {
+      "registry": "pypi",
+      "kind": "exact",
+      "name": "signerd",
+      "endpoint": "pypi.org/pypi/signerd/json",
+      "status": 404,
+      "status_class": "measured",
+      "availability": "free",
+      "projectUrl": ""
+    },
+    {
+      "kind": "simple-secondary",
+      "registry": "pypi",
+      "name": "signerd",
+      "endpoint": "pypi.org/simple/signerd/",
+      "status": 404,
+      "note": "302 on a free name = PyPI reserving against future collisions; verdict input stays the JSON endpoint"
+    }
+  ],
+  "verdict": "publish-name-free",
+  "verdictBasis": "verdict only from exact surfaces with measured controls; a 200 with foreign maintainers is taken-collision, never free",
+  "coverage": {
+    "measured": "exact-name availability on npm, crates.io, pypi (+ simple-index evidence row)",
+    "notMeasured": [
+      "actual publish rights",
+      "name-squatting races",
+      "GitHub org/package name spaces"
+    ]
+  },
+  "limits": [
+    "availability is a snapshot; nothing reserves the name",
+    "a 200 PyPI project page can exist while installs are impossible (yanked/removed); publishability still requires the name",
+    "npm/crates.io publish requires credentials NOT PRESENT on this machine (measured: npm whoami ENEEDAUTH, no .npmrc, secret store empty) - this probe measures the name, not the ability to publish"
+  ]
+}
