@@ -22,8 +22,10 @@ Usage:
             random placeholder blockhash is used: fine to exercise the
             daemon, it will NOT confirm on chain — pass a fresh
             getLatestBlockhash value for a real transfer.
-  signerd import --keystore <file> --from <secret-file>
-            encrypt an EXISTING plaintext key (id.json / base58 / raw 64 bytes)
+  signerd import --keystore <file> --from <secret-file> [--overwrite]
+            encrypt an EXISTING plaintext key (id.json / base58 / raw 64 bytes);
+            refuses an existing keystore unless --overwrite replaces it
+            (the old key is gone afterwards)
   signerd run --keystore <file> --passphrase-file <file>
             --grants <file> --ledger <file> --socket <file>
             [--grant-seal-passphrase-file <file>]
@@ -158,8 +160,28 @@ async function main() {
     const file = requireArg(args, 'keystore');
     const from = requireArg(args, 'from');
     const passphrase = readPassphrase(args);
-    const out = importKeystore({ file, passphrase, from, overwrite: args.overwrite === true });
-    process.stdout.write(JSON.stringify(out) + '\n');
+    try {
+      const out = importKeystore({ file, passphrase, from, overwrite: args.overwrite === true });
+      process.stdout.write(JSON.stringify(out) + '\n');
+    } catch (err) {
+      // Measured 2026-11-05 (the README block runs keygen and import into the
+      // SAME --keystore path): the stranger's first contact with the migration
+      // path was a self-referential verdict with no repair -
+      // "keystore_exists: keystore_exists" - while the flag that actually
+      // repairs it (--overwrite) was accepted by the CLI and documented
+      // NOWHERE. Name the repair, same rule as the passphrase, grant-file and
+      // tx-file refusals. The rule stays fail-closed: nothing is overwritten
+      // without --overwrite, and a refused overwrite leaves the file intact
+      // (validation-before-write, pinned in test/import-repair-surface.test.js).
+      if (err && err.code === 'keystore_exists') {
+        process.stderr.write(
+          `keystore_exists: ${file} already holds a key\n` +
+          `  fix: signerd import --keystore <other-file> --from ${from} ...   # adopt into a DIFFERENT keystore, or\n` +
+          `  fix: add --overwrite   # replace ${file} with the imported key (the old key is gone)\n`);
+        process.exit(1);
+      }
+      throw err;
+    }
     return;
   }
 

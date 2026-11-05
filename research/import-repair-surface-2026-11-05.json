@@ -1,0 +1,52 @@
+{
+  "date": "2026-11-05",
+  "instrument": "test/import-repair-surface.test.js (+5 tests)",
+  "finding": "the migration path (signerd import, the README adoption route for an existing solana-keygen id.json) refused a second import into the same --keystore path with the self-referential verdict \"keystore_exists: keystore_exists\" — no repair named. The repairing flag (--overwrite) was accepted by the CLI and documented NOWHERE (not in README, not in usage). The README Shape block runs keygen into the SAME path, so a linear reader hits this on their first adoption.",
+  "repoRule": "name the repair, not just the verdict (already applied to passphrase-file, grant-file, tx-file, keystore-dir refusals — measured absent here)",
+  "fix": [
+    "bin/signerd.js: the keystore_exists refusal on import names both repairs (a different --keystore path, or --overwrite with the consequence stated)",
+    "bin/signerd.js USAGE: import line documents [--overwrite] and its consequence",
+    "README.md: the Shape block notes either/or (keygen XOR import for a first key) and documents --overwrite after the import line"
+  ],
+  "ladder": {
+    "preFixTree": "6fc5006",
+    "preFix": "T1 refusal-names-repair RED, T2 overwrite-documented RED; guards T3/T4/T5 green",
+    "postFix": "5/5",
+    "mutations": [
+      {
+        "m": "M1 refusal loses the --overwrite mention (names only the alternative path)",
+        "caught": "T1 red"
+      },
+      {
+        "m": "M2 refusal dropped entirely (silent overwrite — the dangerous direction)",
+        "caught": "T1 red"
+      },
+      {
+        "m": "M3 usage text drops --overwrite",
+        "caught": "T2 red"
+      },
+      {
+        "m": "M4 README drops the --overwrite note",
+        "caught": "T2 red"
+      }
+    ],
+    "restore": "byte-identical (cmp against pre-mutation copies)"
+  },
+  "liveJourney": {
+    "verbatim": "import -> import (same path) -> fresh-path import, README order under umask 077",
+    "before": "second import: \"keystore_exists: keystore_exists\" exit 1",
+    "after": "second import: keystore_exists + fix lines naming both repairs, exit 1; fresh path: ok",
+    "adoptionChain": "import -> grant-add --keystore -> run -> build-tx -> sign on the IMPORTED key: real 215B signature, seq 1, pubkey = imported id.json key (no swap)"
+  },
+  "safetyMeasured": [
+    "validation-before-write: an invalid --from WITH --overwrite refuses (secret_key_invalid) and the existing keystore keeps its exact pubkey (read back before/after)",
+    "guard T4: without --overwrite an existing keystore is refused and unchanged",
+    "guard T5: refused overwrite leaves the keystore byte-identical"
+  ],
+  "suite": "354 -> 359/359 (0 fail), install-smoke 12/12 PASSED (0.2.2), crash + crash:sealed exit 0, release-surface unchanged (4 immutable v0.1.0 tag facts), wire-validity pass unchanged, wire-submission wire-accepted-by-real-runtime (all 4 checks ok on local validator)",
+  "limits": [
+    "the refusal prose is measured against the CLI stderr surface only",
+    "--overwrite semantics unchanged: it replaces without backup, stated in the message",
+    "no outside user; own-host measurement; npm publish remains credentials-blocked"
+  ]
+}

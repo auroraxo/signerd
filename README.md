@@ -266,8 +266,12 @@ signerd grant-add --grants ~/.config/signerd/grants.json --name ops-24h \
 
 # OR adopt a key you already hold — the migration path. Reads a solana-keygen
 # id.json, a base58 secret, or 64 raw bytes; encrypts it; leaves the source alone.
+# Refuses an existing keystore (the keygen line above writes the SAME file):
+# run EITHER keygen OR import for a first key.
 signerd import --keystore ~/.config/signerd/ops.key --from ~/.config/solana/id.json \
              --passphrase-file ~/.config/signerd/pass
+# To replace a keystore on purpose, add --overwrite (the old key is gone
+# afterwards); a refused overwrite (invalid --from) leaves the file untouched.
 
 signerd run --keystore ~/.config/signerd/ops.key --passphrase-file ~/.config/signerd/pass \
             --grants ~/.config/signerd/grants.json \
