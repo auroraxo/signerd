@@ -68,6 +68,8 @@ function manifestGates(manifest, readme) {
   if (typeof readme !== 'string' || !readme.includes(ANCHOR)) gates.push('readme-no-quickstart');
   if (typeof readme === 'string' && readme.includes('cargo install')) gates.push('readme-advertises-cargo-install');
   if (typeof readme !== 'string' || !readme.includes('npm install github:auroraxo/signerd#')) gates.push('readme-no-install-command');
+  if (typeof readme === 'string' && /Signerd\.connect/.test(readme)) gates.push('readme-advertises-nonexistent-api');
+  if (typeof readme !== 'string' || !readme.includes('signViaDaemon')) gates.push('readme-no-real-client-api');
   return gates;
 }
 function showTag(tag, file) {
@@ -99,26 +101,37 @@ test('T1 the released artifacts satisfy the contract (RED while the tag is stale
 });
 
 test('T2 control: a clean manifest + quickstart README passes on every tree', () => {
-  const readme = `# x\n\`\`\`bash\n${ANCHOR}\n\`\`\`\n\n\`\`\`bash\nnpm install github:auroraxo/signerd#v9.9.9\n\`\`\``;
+  const readme = `# x\n\`\`\`bash\n${ANCHOR}\n\`\`\`\n\n\`\`\`bash\nnpm install github:auroraxo/signerd#v9.9.9\n\`\`\`\n\n\`\`\`js\nawait signViaDaemon({});\n\`\`\``;
   assert.deepStrictEqual(manifestGates({ version: '9.9.9' }, readme), []);
 });
 
 test('T3 control: the dangerous direction is caught (private manifest)', () => {
-  const readme = `x ${ANCHOR} x npm install github:auroraxo/signerd#v9.9.9`;
+  const readme = `x ${ANCHOR} x npm install github:auroraxo/signerd#v9.9.9 x signViaDaemon`;
   assert.deepStrictEqual(manifestGates({ version: '9.9.9', private: true }, readme), ['private-true']);
 });
 
 test('T4 control: the dangerous direction is caught (README without quickstart)', () => {
-  const readme = 'a README with no quickstart block npm install github:auroraxo/signerd#v9.9.9';
+  const readme = 'a README with no quickstart block npm install github:auroraxo/signerd#v9.9.9 signViaDaemon';
   assert.deepStrictEqual(manifestGates({ version: '9.9.9' }, readme), ['readme-no-quickstart']);
 });
 
 test('T5 control: a cargo install claim is caught (the PR #280 defect)', () => {
-  const readme = `x ${ANCHOR} x npm install github:auroraxo/signerd#v9.9.9 cargo install --git https://github.com/auroraxo/signerd`;
+  const readme = `x ${ANCHOR} x npm install github:auroraxo/signerd#v9.9.9 signViaDaemon cargo install --git https://github.com/auroraxo/signerd`;
   assert.deepStrictEqual(manifestGates({ version: '9.9.9' }, readme), ['readme-advertises-cargo-install']);
 });
 
 test('T6 control: a README without an install command is caught', () => {
-  const readme = `x ${ANCHOR} x`;
+  const readme = `x ${ANCHOR} x signViaDaemon`;
   assert.deepStrictEqual(manifestGates({ version: '9.9.9' }, readme), ['readme-no-install-command']);
+});
+
+test('T7 control: a nonexistent client API claim is caught (the Signerd.connect defect)', () => {
+  const readme = `x ${ANCHOR} x npm install github:auroraxo/signerd#v9.9.9 x signViaDaemon
+await Signerd.connect({ grant: 'x' });`;
+  assert.deepStrictEqual(manifestGates({ version: '9.9.9' }, readme), ['readme-advertises-nonexistent-api']);
+});
+
+test('T8 control: a README without the real client API is caught', () => {
+  const readme = `x ${ANCHOR} x npm install github:auroraxo/signerd#v9.9.9`;
+  assert.deepStrictEqual(manifestGates({ version: '9.9.9' }, readme), ['readme-no-real-client-api']);
 });

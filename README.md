@@ -278,10 +278,28 @@ signerd run ... --grant-seal-passphrase-file ~/.config/signerd/seal.pass \
 signerd sign --socket ~/.local/share/signerd/signerd.sock --grant ops-24h --tx tx.bin
 ```
 
-```ts
-const signer = await Signerd.connect({ grant: "ops-24h" });
-const signature = await signer.sign(transaction);  // or: { refused: "alt" }
+```js
+// The client API that exists today (measured 2026-11-05 against the
+// installed package, research/install-path-v0.2.0-2026-11-05.json):
+// signViaDaemon returns the daemon's answer verbatim — a refusal is data,
+// not an exception.
+const { buildTransferWire, signViaDaemon } = require('signerd/src/client.js');
+
+const wire = buildTransferWire({
+  fromPubkey,     // the fee payer's PUBLIC key — no secret crosses this line
+  toPubkey,
+  lamports: 42,
+  blockhash,
+});
+const answer = await signViaDaemon({ socketPath, grant: 'ops-24h', wire });
+if (answer.ok) {
+  const signedWire = Buffer.from(answer.signed, 'base64');   // 215 bytes, seq 1
+} else {
+  console.log(answer.error);   // e.g. 'alt', 'version_or_alt', 'window_cap'
+}
 ```
+
+The earlier version of this section showed a `Signerd.connect(...)` / `signer.sign(...)` API. **That API does not exist** — the package exports `Daemon` and `request` from `signerd/src/daemon.js` and the four helpers above from `signerd/src/client.js`; there is no `Signerd` export anywhere in the tree (measured 2026-11-05: `require('signerd/src/daemon.js')` yields `['Daemon','request']`). A typed SDK is a plan, not a shipped surface, and the snippet above is the one that runs.
 
 `examples/user-zero-client.js` is the same thing in executable form: it builds an unsigned
 legacy transfer from a fee payer's **public** key, sends it, and writes back the signed wire.
