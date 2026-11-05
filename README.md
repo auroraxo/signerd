@@ -254,6 +254,14 @@ printf 'your passphrase\n' > ~/.config/signerd/pass
 chmod 600 ~/.config/signerd/pass
 signerd keygen --keystore ~/.config/signerd/ops.key --passphrase-file ~/.config/signerd/pass
 
+# Create the grant file the daemon expects (owner-only 0600; refuses to clobber).
+# This is the step that makes the quickstart run verbatim without guessing the schema:
+signerd grant-add --grants ~/.config/signerd/grants.json --name ops-24h \
+            --signer <the-public-key-keygen-printed> \
+            --destination So11111111111111111111111111111111111111112 \
+            --max-lamports 500000000 --window-max-lamports 500000000 \
+            --window-seconds 3600 --expires 2030-01-01T00:00:00Z
+
 # OR adopt a key you already hold — the migration path. Reads a solana-keygen
 # id.json, a base58 secret, or 64 raw bytes; encrypts it; leaves the source alone.
 signerd import --keystore ~/.config/signerd/ops.key --from ~/.config/solana/id.json \

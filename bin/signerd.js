@@ -8,6 +8,10 @@ const USAGE = `signerd — scoped signing daemon for Solana (early prototype)
 
 Usage:
   signerd keygen --keystore <file>            create an encrypted keystore
+  signerd grant-add --grants <file> --name <grant> --signer <pubkey> --destination <pubkey>
+            --max-lamports <u64> --window-max-lamports <u64> --window-seconds <secs> --expires <iso>
+            create the grant file run expects (0600); refuses to clobber
+            an existing or sealed file
   signerd import --keystore <file> --from <secret-file>
             encrypt an EXISTING plaintext key (id.json / base58 / raw 64 bytes)
   signerd run --keystore <file> --passphrase-file <file>
@@ -16,6 +20,10 @@ Usage:
             [--journal-seal-passphrase-file <file>]
   signerd sign --socket <file> --grant <name> --tx <wire-file> [--out <file>]
   signerd sign-message --socket <file> --grant <name> --body <json-file> [--out <file>]
+            [--add-grant --keystore <file>]  create the message grant for <name>
+            from the body (issuer/type/subject) pinning the PUBLIC key recorded
+            in <keystore>, if the grant file lacks it, then sign; the grant
+            file (--grants, default: next to the keystore) is created if missing
             ask the daemon to sign an openreceipts/v1 receipt BODY (the
             message-grant envelope): the daemon canonicalizes, checks the
             grant and writes {receipt..., pubkey, sig} with the DAEMON's key
@@ -172,7 +180,23 @@ async function main() {
     const { request } = require('../src/daemon');
     const socketPath = requireArg(args, 'socket');
     const grant = requireArg(args, 'grant');
-    const wire = fs.readFileSync(requireArg(args, 'tx'));
+    const txPath = requireArg(args, 'tx');
+    let wire;
+    try {
+      wire = fs.readFileSync(txPath);
+    } catch (err) {
+      if (err && err.code === 'ENOENT') {
+        // Measured 2026-11-05: the quickstart's `sign --tx tx.bin` step died
+        // on a bare errno — tx.bin is never created by the documented steps.
+        // Name the repair, same rule as the passphrase and grant-file refusals.
+        process.stderr.write(
+          `tx_missing: no transaction file at ${txPath}\n` +
+          `  fix: build the unsigned wire first — README 'Client API'` +
+          ` (buildTransferWire) or examples/user-zero-client.js\n`);
+        process.exit(2);
+      }
+      throw err;
+    }
     const response = await request({ socketPath, grant, wire });
     if (response.ok && typeof args.out === 'string') {
       fs.writeFileSync(args.out, Buffer.from(response.signed, 'base64'), { mode: 0o600 });
@@ -180,6 +204,24 @@ async function main() {
     }
     process.stdout.write(JSON.stringify(response) + '\n');
     process.exit(response.ok ? 0 : 1);
+  }
+
+  if (command === 'grant-add') {
+    const { writeGrantFile, buildTxGrant } = require('../src/grantadd');
+    const grants = requireArg(args, 'grants');
+    const name = requireArg(args, 'name');
+    const grant = buildTxGrant({
+      name,
+      signer: requireArg(args, 'signer'),
+      destination: requireArg(args, 'destination'),
+      maxLamports: requireArg(args, 'max-lamports'),
+      windowMaxLamports: requireArg(args, 'window-max-lamports'),
+      windowSeconds: requireArg(args, 'window-seconds'),
+      expiresAt: requireArg(args, 'expires'),
+    });
+    const out = writeGrantFile({ file: grants, name, grant });
+    process.stdout.write(JSON.stringify({ ok: true, ...out }) + '\n');
+    return;
   }
 
   if (command === 'sign-message') {
@@ -198,6 +240,57 @@ async function main() {
     } catch {
       process.stderr.write('body_invalid: not JSON\n');
       process.exit(2);
+    }
+    // --add-grant: bootstrap the message grant this command needs, straight
+    // from the body (issuer/type/subject) and the daemon key. Runs BEFORE the
+    // socket round trip, so the documented message quickstart works without
+    // knowing the grant schema. A grant that already exists under this name
+    // is LEFT ALONE (the daemon judges it at request time); a sealed file is
+    // never rewritten.
+    if (args['add-grant'] === true) {
+      const { readKeystorePublicKey } = require('../src/keystore');
+      const { addGrantToFile, buildMessageGrant } = require('../src/grantadd');
+      const bs58 = require('bs58');
+      // The PUBLIC key is cleartext keystore metadata (the format's own
+      // contract), so no passphrase is needed to bootstrap a grant that pins
+      // it — and no secret is ever read here.
+      const keystorePath = requireArg(args, 'keystore');
+      const pubkeyB64 = Buffer.from(bs58.decode(readKeystorePublicKey({ file: keystorePath }))).toString('base64');
+      const bodyObj = JSON.parse(bodyText);
+      const claimKeys = bodyObj.claims !== null && typeof bodyObj.claims === 'object' &&
+        !Array.isArray(bodyObj.claims) && Object.getOwnPropertyNames(bodyObj.claims).length > 0
+        ? Object.getOwnPropertyNames(bodyObj.claims).sort().join(',')
+        : undefined;
+      const messageGrant = buildMessageGrant({
+        name: grant,
+        issuer: bodyObj.issuer,
+        type: bodyObj.type,
+        subject: bodyObj.subject,
+        pubkey: pubkeyB64,
+        // 700: the README's own example cap — a cap the operator can observe
+        // engaging, not the envelope's hard ceiling; widen it in the file.
+        maxBytes: '700',
+        expiresAt: new Date(Date.now() + 24 * 3600_000).toISOString().replace(/\.\d{3}Z$/, 'Z'),
+        windowMaxMessages: '5',
+        windowSeconds: '3600',
+        claimKeys,
+      });
+      const grantsPath = typeof args.grants === 'string'
+        ? args.grants
+        : path.join(path.dirname(path.resolve(keystorePath)), 'grants.json');
+      // Report on stderr: stdout stays a single-JSON response channel.
+      // An EXISTING grant under this name is left alone (addGrantToFile
+      // refuses to overwrite; a sealed file is refused, never rewritten).
+      try {
+        const added = addGrantToFile({ file: grantsPath, name: grant, grant: messageGrant });
+        process.stderr.write(JSON.stringify({ ok: true, grantFile: added.file, grant: added.grant, bootstrapped: true }) + '\n');
+      } catch (err) {
+        if (err && err.code === 'grant_exists') {
+          process.stderr.write(JSON.stringify({ ok: true, grantFile: grantsPath, grant, bootstrapped: false }) + '\n');
+        } else {
+          throw err;
+        }
+      }
     }
     const response = await request({ socketPath, grant, body: bodyText });
     if (response.ok && typeof args.out === 'string') {
@@ -308,6 +401,18 @@ async function main() {
 }
 
 main().catch((err) => {
+  // Name the repair, not just the verdict (same rule as the passphrase
+  // refusal): the quickstart's `run` was the first contact with the product
+  // for a stranger whose grant file did not exist yet — measured 2026-11-05
+  // as a bare `grant_file_unreadable: ENOENT` with no way to guess the fix.
+  if (err && err.code === 'grant_file_unreadable') {
+    process.stderr.write(
+      `${err.code}: ${err.message}\n` +
+      `  fix: signerd grant-add --grants <file> --name <grant> --signer <pubkey> --destination <pubkey>\n` +
+      `          --max-lamports <u64> --window-max-lamports <u64> --window-seconds <secs> --expires <iso>` +
+      `   # create the grant file run expects\n`);
+    process.exit(1);
+  }
   process.stderr.write(`${err.code || 'error'}: ${err.message}\n`);
   process.exit(1);
 });

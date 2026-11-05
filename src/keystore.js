@@ -263,4 +263,34 @@ function loadKeystore({ file, passphrase }) {
   }
 }
 
-module.exports = { createKeystore, loadKeystore, writeKeystore, importKeystore, parseSecretFile };
+/**
+ * Read the cleartext public key recorded in the keystore document.
+ *
+ * The public key is NOT a secret: the keystore format (VERSION 1) writes
+ * `publicKey` unencrypted alongside the KDF/cipher parameters so a loader
+ * can verify identity without decrypting. This helper reads ONLY that field —
+ * it takes no passphrase, touches no cipher, and produces no secret buffer.
+ * It fails fail-closed if the file is invalid or missing the field.
+ */
+function readKeystorePublicKey({ file }) {
+  const resolved = path.resolve(file);
+  let raw;
+  try {
+    raw = fs.readFileSync(resolved, 'utf8');
+  } catch (err) {
+    throw fail('keystore_unreadable', err.code);
+  }
+  let doc;
+  try {
+    doc = JSON.parse(raw);
+  } catch {
+    throw fail('keystore_invalid');
+  }
+  if (doc === null || typeof doc !== 'object' || doc.v !== 1 ||
+      typeof doc.publicKey !== 'string' || doc.publicKey.length === 0) {
+    throw fail('keystore_invalid');
+  }
+  return doc.publicKey;
+}
+
+module.exports = { createKeystore, loadKeystore, writeKeystore, importKeystore, parseSecretFile, readKeystorePublicKey };
