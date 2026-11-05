@@ -1,0 +1,109 @@
+{
+  "tool": "measure-wire-validity",
+  "rpc": "https://api.mainnet-beta.solana.com",
+  "at": "2026-11-05T15:09:42.341Z",
+  "fromPubkey": "AwvCuZfrWNa4ceZQENBA2R5UwMUszwQTbsQbxjch5DMg",
+  "signedWireBytes": 215,
+  "seq": 1,
+  "openSSLVerifies": true,
+  "placeholderSim": {
+    "accounts": null,
+    "err": "BlockhashNotFound",
+    "fee": null,
+    "innerInstructions": null,
+    "loadedAccountsDataSize": 0,
+    "loadedAddresses": {
+      "readonly": [],
+      "writable": []
+    },
+    "logs": [],
+    "postBalances": [
+      0,
+      1862800344394,
+      1
+    ],
+    "postTokenBalances": [],
+    "preBalances": [
+      0,
+      1862800344394,
+      1
+    ],
+    "preTokenBalances": [],
+    "replacementBlockhash": null,
+    "returnData": null,
+    "unitsConsumed": 0
+  },
+  "freshBlockhash": "GjZjUzaynALCKNZ2tsUbRQtPziXA5h8cHMX1D8eGs7DU",
+  "freshSim": {
+    "accounts": null,
+    "err": "AccountNotFound",
+    "fee": null,
+    "innerInstructions": null,
+    "loadedAccountsDataSize": 0,
+    "loadedAddresses": {
+      "readonly": [],
+      "writable": []
+    },
+    "logs": [],
+    "postBalances": [
+      0,
+      1862800344394,
+      1
+    ],
+    "postTokenBalances": [],
+    "preBalances": [
+      0,
+      1862800344394,
+      1
+    ],
+    "preTokenBalances": [],
+    "replacementBlockhash": null,
+    "returnData": null,
+    "unitsConsumed": 0
+  },
+  "corruptedSim": {
+    "accounts": null,
+    "err": "SignatureFailure",
+    "fee": null,
+    "innerInstructions": null,
+    "loadedAccountsDataSize": 0,
+    "loadedAddresses": {
+      "readonly": [],
+      "writable": []
+    },
+    "logs": [],
+    "postBalances": null,
+    "postTokenBalances": null,
+    "preBalances": null,
+    "preTokenBalances": null,
+    "replacementBlockhash": null,
+    "returnData": null,
+    "unitsConsumed": 0
+  },
+  "verdict": "wire-valid-modulo-balance",
+  "defects": [],
+  "checks": [
+    {
+      "ok": true,
+      "observed": "blockhash-not-found",
+      "rule": "placeholder-blockhash-only-defect"
+    },
+    {
+      "ok": true,
+      "observed": "account-not-found",
+      "rule": "fresh-blockhash-valid-except-unfunded-fee-payer",
+      "note": "only the UNFUNDED fee payer failed, pre-execution (mainnet: AccountNotFound)"
+    },
+    {
+      "ok": true,
+      "observed": "signature-invalid",
+      "rule": "corrupted-signature-must-be-detected"
+    }
+  ],
+  "limits": [
+    "simulation, not submission: nothing was sent to the mempool/chain and no lamports moved",
+    "own-host measurement, public RPC; rate limits => no-verdict, never a pass",
+    "the funded fee-payer case itself is NOT exercised — by construction the fixture key holds 0 lamports",
+    "no outside user, no audit; this measures the wire, not custody"
+  ]
+}
