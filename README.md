@@ -287,12 +287,26 @@ signerd run ... --grant-seal-passphrase-file ~/.config/signerd/seal.pass \
 # a client: no key material, only a grant name and the transaction bytes.
 # build-tx reads only the keystore's PUBLIC key (no passphrase) and writes
 # the unsigned file the next line reads. Its default blockhash is a random
-# placeholder: perfect to exercise the daemon, it will NOT confirm on chain
-# — for a real transfer pass --blockhash <fresh getLatestBlockhash>.
+# placeholder: perfect to exercise the daemon, it will NOT confirm on chain.
+#
+# FOR A REAL TRANSFER — a fresh blockhash, obtained by a step that actually
+# runs (the package ships @solana/web3.js, so this works right after
+# install; measured 2026-11-05: 1.98.4 returns the hash DIRECTLY, so it is
+# r.blockhash, not r.value.blockhash as in web3.js 2.x docs):
+BLOCKHASH=$(node -e "new (require('@solana/web3.js').Connection)('https://api.mainnet-beta.solana.com').getLatestBlockhash('finalized').then(r=>console.log(r.blockhash))")
 signerd build-tx --keystore ~/.config/signerd/ops.key \
             --to So11111111111111111111111111111111111111112 \
-            --lamports 42 --out tx.bin
+            --lamports 42 --out tx.bin --blockhash "$BLOCKHASH"
 signerd sign --socket ~/.local/share/signerd/signerd.sock --grant ops-24h --tx tx.bin
+# Note (measured, not asserted): the signing path itself never touches the
+# network — that fetch runs in YOUR shell, and signerd stays offline. The
+# signed wire is then valid to mainnet itself except for one thing this
+# quickstart cannot give you: the fee payer must hold SOL. Measured with
+# `node tools/measure-wire-validity.mjs` (simulation only, nothing
+# submitted): an unfunded fee payer comes back AccountNotFound, a
+# placeholder blockhash BlockhashNotFound, and a flipped signature byte
+# SignatureFailure — the instrument's three controls (research/
+# wire-validity-2026-11-05.json).
 ```
 
 ```js

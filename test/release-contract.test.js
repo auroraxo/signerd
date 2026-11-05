@@ -62,7 +62,7 @@ function latestReleaseTag(tags) {
   }
   return best;
 }
-function manifestGates(manifest, readme) {
+function manifestGates(manifest, readme, opts = {}) {
   const gates = [];
   if (manifest.private === true) gates.push('private-true');
   if (typeof readme !== 'string' || !readme.includes(ANCHOR)) gates.push('readme-no-quickstart');
@@ -73,6 +73,20 @@ function manifestGates(manifest, readme) {
   // ("await Signerd.connect(") counts as advertising a nonexistent API.
   if (typeof readme === 'string' && /await\s+Signerd\.connect\s*\(/.test(readme)) gates.push('readme-advertises-nonexistent-api');
   if (typeof readme !== 'string' || !readme.includes('signViaDaemon')) gates.push('readme-no-real-client-api');
+// G4: the README tells a stranger to "pass --blockhash <fresh
+  // getLatestBlockhash>" — but until today no documented step produced one.
+  // The rule: the README must contain the runnable step, not a prose
+  // reference to a value nobody documents how to obtain.
+  //
+  // opts.tagReadme: checked on the WORKING tree only. The released tag
+  // v0.2.2 was cut before this rule existed and tags are immutable — the
+  // same limit sememe records for v0.4.0. The step reaches a tag with the
+  // next scheduled release (Tag 8, 2026-11-05T21:00Z); G4's tag check is
+  // then enabled (see card note). Checking it now would assert an
+  // immutable fact the tag cannot satisfy — a red the tag can never fix.
+  if (!opts.tagReadme && (typeof readme !== 'string' || !readme.includes("getLatestBlockhash('finalized')"))) {
+    gates.push('readme-blockhash-step-not-runnable');
+  }
   return gates;
 }
 function showTag(tag, file) {
@@ -89,7 +103,7 @@ const latest = latestReleaseTag(tags);
 
 test('T1 the released artifacts satisfy the contract (RED while the tag is stale)', { skip: !latest && 'no release tag exists in this checkout' }, () => {
   const repoManifest = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
-  const repoGates = manifestGates(repoManifest, fs.readFileSync(path.join(ROOT, 'README.md'), 'utf8'));
+  const repoGates = manifestGates(repoManifest, fs.readFileSync(path.join(ROOT, 'README.md'), 'utf8'), { tagReadme: false });
   assert.deepStrictEqual(repoGates, [], `the working tree must satisfy G1: ${repoGates.join(', ')}`);
 
   // G3: package.json version and the release tag must name the same thing,
@@ -99,48 +113,61 @@ test('T1 the released artifacts satisfy the contract (RED while the tag is stale
 
   const tagManifest = JSON.parse(showTag(latest, 'package.json'));
   const tagReadme = showTag(latest, 'README.md');
-  const g2 = manifestGates(tagManifest, tagReadme);
+  const g2 = manifestGates(tagManifest, tagReadme, { tagReadme: true });
   assert.deepStrictEqual(g2, [], `release tag ${latest} is stale-by-content: ${g2.join(', ')}`);
 });
 
+const BLOCKHASH_STEP = "getLatestBlockhash('finalized')";
+
 test('T2 control: a clean manifest + quickstart README passes on every tree', () => {
-  const readme = `# x\n\`\`\`bash\n${ANCHOR}\n\`\`\`\n\n\`\`\`bash\nnpm install github:auroraxo/signerd#v9.9.9\n\`\`\`\n\n\`\`\`js\nawait signViaDaemon({});\n\`\`\``;
+  const readme = `# x\n\`\`\`bash\n${ANCHOR}\n\`\`\`\n\n\`\`\`bash\nnpm install github:auroraxo/signerd#v9.9.9\n\`\`\`\n\n\`\`\`js\nawait signViaDaemon({});\n\`\`\`\n\n${BLOCKHASH_STEP}`;
   assert.deepStrictEqual(manifestGates({ version: '9.9.9' }, readme), []);
 });
 
 test('T3 control: the dangerous direction is caught (private manifest)', () => {
-  const readme = `x ${ANCHOR} x npm install github:auroraxo/signerd#v9.9.9 x signViaDaemon`;
+  const readme = `x ${ANCHOR} x npm install github:auroraxo/signerd#v9.9.9 x signViaDaemon x ${BLOCKHASH_STEP}`;
   assert.deepStrictEqual(manifestGates({ version: '9.9.9', private: true }, readme), ['private-true']);
 });
 
 test('T4 control: the dangerous direction is caught (README without quickstart)', () => {
-  const readme = 'a README with no quickstart block npm install github:auroraxo/signerd#v9.9.9 signViaDaemon';
+  const readme = 'a README with no quickstart block npm install github:auroraxo/signerd#v9.9.9 signViaDaemon x ' + BLOCKHASH_STEP;
   assert.deepStrictEqual(manifestGates({ version: '9.9.9' }, readme), ['readme-no-quickstart']);
 });
 
 test('T5 control: a cargo install claim is caught (the PR #280 defect)', () => {
-  const readme = `x ${ANCHOR} x npm install github:auroraxo/signerd#v9.9.9 signViaDaemon cargo install --git https://github.com/auroraxo/signerd`;
+  const readme = `x ${ANCHOR} x npm install github:auroraxo/signerd#v9.9.9 x signViaDaemon x cargo install --git https://github.com/auroraxo/signerd x ${BLOCKHASH_STEP}`;
   assert.deepStrictEqual(manifestGates({ version: '9.9.9' }, readme), ['readme-advertises-cargo-install']);
 });
 
 test('T6 control: a README without an install command is caught', () => {
-  const readme = `x ${ANCHOR} x signViaDaemon`;
+  const readme = `x ${ANCHOR} x signViaDaemon x ${BLOCKHASH_STEP}`;
   assert.deepStrictEqual(manifestGates({ version: '9.9.9' }, readme), ['readme-no-install-command']);
 });
 
 test('T7 control: a nonexistent client API claim is caught (the Signerd.connect defect)', () => {
-  const readme = `x ${ANCHOR} x npm install github:auroraxo/signerd#v9.9.9 x signViaDaemon
+  const readme = `x ${ANCHOR} x npm install github:auroraxo/signerd#v9.9.9 x signViaDaemon x ${BLOCKHASH_STEP}
 const signer = await Signerd.connect({ grant: 'x' });`;
   assert.deepStrictEqual(manifestGates({ version: '9.9.9' }, readme), ['readme-advertises-nonexistent-api']);
 });
 
 test('T7b control: a documented MENTION of the old API is not an advertisement', () => {
-  const readme = `x ${ANCHOR} x npm install github:auroraxo/signerd#v9.9.9 x signViaDaemon
+  const readme = `x ${ANCHOR} x npm install github:auroraxo/signerd#v9.9.9 x signViaDaemon x ${BLOCKHASH_STEP}
 The earlier version showed a \`Signerd.connect(...)\` API; that API does not exist.`;
   assert.deepStrictEqual(manifestGates({ version: '9.9.9' }, readme), []);
 });
 
 test('T8 control: a README without the real client API is caught', () => {
-  const readme = `x ${ANCHOR} x npm install github:auroraxo/signerd#v9.9.9`;
+  const readme = `x ${ANCHOR} x npm install github:auroraxo/signerd#v9.9.9 x ${BLOCKHASH_STEP}`;
   assert.deepStrictEqual(manifestGates({ version: '9.9.9' }, readme), ['readme-no-real-client-api']);
+});
+
+// G4 (2026-11-05): the README said "for a real transfer pass --blockhash
+// <fresh getLatestBlockhash>" — a value no documented step produced. The
+// third dead end of the quickstart, and the only one still open after
+// grant-add (daa83aa) and build-tx (4760efa).
+test('T9 control: a README without the runnable blockhash step is caught', () => {
+  const readme = `x ${ANCHOR} x npm install github:auroraxo/signerd#v9.9.9 x signViaDaemon
+For a real transfer pass --blockhash <fresh getLatestBlockhash>.`;
+  assert.deepStrictEqual(manifestGates({ version: '9.9.9' }, readme),
+    ['readme-blockhash-step-not-runnable']);
 });
