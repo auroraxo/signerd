@@ -9,10 +9,10 @@ Scoped signing daemon for Solana: the ssh-agent pattern, applied to Solana keys.
 No package is published to npm yet — the artifact is ready and the remaining gate is credentials (see Distribution and adoption below) — so the install path that exists today is the release tag:
 
 ```bash
-npm install github:auroraxo/signerd#v0.2.0
+npm install github:auroraxo/signerd#v0.2.1
 ```
 
-That path is **measured, not asserted**: `node tools/measure-install-path.mjs --ref v0.2.0` performs a real install from the tag into an empty directory and checks the installed manifest (version matches the tag, not publish-blocked) and the quickstart, writing `research/install-path-<tag>-<date>.json`. The superseded tag `v0.1.0` measured `defective:private-true+readme-no-quickstart` (it predates the stranger-install fixes below) — that artifact is kept as the falsification record.
+That path is **measured, not asserted**: `node tools/measure-install-path.mjs --ref v0.2.1` performs a real install from the tag into an empty directory and checks the installed manifest (version matches the tag, not publish-blocked) and the quickstart, writing `research/install-path-<tag>-<date>.json`. The superseded tag `v0.1.0` measured `defective:private-true+readme-no-quickstart` (it predates the stranger-install fixes below) — that artifact is kept as the falsification record.
 
 **There is no Rust package and no cargo-based install path.** signerd is a Node package with no `Cargo.toml`; a listing elsewhere advertised an install-from-git cargo command, which fails with `could not find Cargo.toml` (measured 2026-11-05, `research/install-path-v0.1.0-2026-11-05.json`) and has been corrected.
 
