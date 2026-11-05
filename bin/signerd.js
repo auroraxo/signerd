@@ -14,6 +14,14 @@ Usage:
             create the grant file run expects (0600); refuses to clobber
             an existing or sealed file; with --keystore the signer is read
             from the keystore's PUBLIC key (no passphrase needed)
+  signerd build-tx --keystore <file> --to <pubkey> --lamports <u64> --out <file>
+            [--blockhash <b58-32>]
+            build the UNSIGNED transaction file the documented 'sign --tx'
+            step reads. Uses only the keystore's PUBLIC key (no passphrase,
+            no secret); the file is written 0600. Without --blockhash a
+            random placeholder blockhash is used: fine to exercise the
+            daemon, it will NOT confirm on chain — pass a fresh
+            getLatestBlockhash value for a real transfer.
   signerd import --keystore <file> --from <secret-file>
             encrypt an EXISTING plaintext key (id.json / base58 / raw 64 bytes)
   signerd run --keystore <file> --passphrase-file <file>
@@ -178,6 +186,35 @@ async function main() {
     return;
   }
 
+  if (command === 'build-tx') {
+    const { BuildTxError, buildTxFile } = require('../src/buildtx');
+    try {
+      const out = buildTxFile({
+        keystorePath: args.keystore,
+        to: args.to,
+        lamports: args.lamports,
+        out: args.out,
+        blockhash: typeof args.blockhash === 'string' ? args.blockhash : undefined,
+      });
+      process.stdout.write(JSON.stringify(out) + '\n');
+      return;
+    } catch (err) {
+      if (err instanceof BuildTxError) {
+        // Refusals name the repair (the passphrase/grant-file/tx-file rule).
+        const fix = err.code === 'missing_argument'
+          ? '  fix: see `signerd` usage — build-tx --keystore <file> --to <pubkey> --lamports <u64> --out <file>'
+          : err.code === 'invalid_lamports'
+            ? '  fix: pass a plain non-negative integer, e.g. --lamports 42'
+            : err.code === 'keystore_unreadable'
+              ? '  fix: point --keystore at a keystore created by `signerd keygen`'
+              : `  fix: ${err.message}`;
+        process.stderr.write(`${err.code}: ${err.message}\n${fix}\n`);
+        process.exit(2);
+      }
+      throw err;
+    }
+  }
+
   if (command === 'sign') {
     const { request } = require('../src/daemon');
     const socketPath = requireArg(args, 'socket');
@@ -193,8 +230,8 @@ async function main() {
         // Name the repair, same rule as the passphrase and grant-file refusals.
         process.stderr.write(
           `tx_missing: no transaction file at ${txPath}\n` +
-          `  fix: build the unsigned wire first — README 'Client API'` +
-          ` (buildTransferWire) or examples/user-zero-client.js\n`);
+          `  fix: signerd build-tx --keystore <file> --to <pubkey> ` +
+          `--lamports <n> --out ${txPath}  (public key only, no passphrase)\n`);
         process.exit(2);
       }
       throw err;

@@ -284,7 +284,14 @@ signerd seal-journal --ledger ~/.local/share/signerd/journal.jsonl \
 signerd run ... --grant-seal-passphrase-file ~/.config/signerd/seal.pass \
             --journal-seal-passphrase-file ~/.config/signerd/seal.pass
 
-# a client: no key material, only a grant name and the transaction bytes
+# a client: no key material, only a grant name and the transaction bytes.
+# build-tx reads only the keystore's PUBLIC key (no passphrase) and writes
+# the unsigned file the next line reads. Its default blockhash is a random
+# placeholder: perfect to exercise the daemon, it will NOT confirm on chain
+# — for a real transfer pass --blockhash <fresh getLatestBlockhash>.
+signerd build-tx --keystore ~/.config/signerd/ops.key \
+            --to So11111111111111111111111111111111111111112 \
+            --lamports 42 --out tx.bin
 signerd sign --socket ~/.local/share/signerd/signerd.sock --grant ops-24h --tx tx.bin
 ```
 
