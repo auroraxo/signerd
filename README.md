@@ -307,6 +307,21 @@ signerd sign --socket ~/.local/share/signerd/signerd.sock --grant ops-24h --tx t
 # placeholder blockhash BlockhashNotFound, and a flipped signature byte
 # SignatureFailure — the instrument's three controls (research/
 # wire-validity-2026-11-05.json).
+#
+# Simulation is not acceptance: `node tools/measure-wire-submission.mjs`
+# (2026-11-05) SUBMITS that signed wire — funded fee payer, fresh blockhash,
+# product daemon signature — to a real Solana runtime on a LOCAL
+# solana-test-validator (agave 4.3.2; mainnet never contacted; the
+# instrument refuses any non-loopback endpoint with exit 3). Measured: the
+# runtime ACCEPTS the wire, it lands confirmed with err=null, and the ledger
+# delta is exactly -(42 + 5000 lamport fee) on the payer, +42 on the
+# destination; the three controls are each REJECTED for their own class
+# (placeholder -> blockhash, flipped signature -> signature, unfunded payer
+# -> balance). Artifact research/wire-submission-2026-11-05.json. Limits,
+# stated with the result: a local validator is the same runtime code, not
+# the same chain — no mainnet state, fee market or congestion; mainnet
+# acceptance was not measured because funding a mainnet fee payer moves
+# real lamports.
 ```
 
 ```js

@@ -1,0 +1,86 @@
+{
+  "tool": "measure-wire-submission",
+  "rpc": "http://127.0.0.1:8999",
+  "at": "2026-11-05T14:58:59.879Z",
+  "transferLamports": 42,
+  "expectedFeeLamports": 5000,
+  "localGuard": {
+    "local": true,
+    "host": "127.0.0.1"
+  },
+  "runtimeVersion": {
+    "feature-set": 3383571666,
+    "solana-core": "4.3.2"
+  },
+  "fromPubkey": "4vvGAKnSRJsZJzJPbigb4x36DgQMLJVdxDN4K6iG7EsN",
+  "fundedFeePayerLamports": 2000000000,
+  "signedWireBytes": 215,
+  "openSSLVerifies": true,
+  "placeholder": {
+    "accepted": false,
+    "refusedMessage": "Transaction simulation failed: Blockhash not found",
+    "refusedErr": "BlockhashNotFound",
+    "refusedCode": -32002
+  },
+  "fundedAttempts": 1,
+  "blockhashUsed": "EZMcxqMAYUGMw5gz5JrMJyh7SE7aGN597qFiXdnPHMwt",
+  "funded": {
+    "accepted": true,
+    "signature": "qvt5bS7GrwH83PRxErY84VCG8qfPhMSdZbQyxT6gQze7V6FVY7atJchfDQ34nDGxU861jrMyb4RJM64FVAK8oD1",
+    "slot": 1893,
+    "confirmationStatus": "confirmed",
+    "payerDelta": -5042,
+    "destDelta": 42,
+    "payerBefore": 2000000000,
+    "payerAfter": 1999994958,
+    "destBefore": 4000000084,
+    "destAfter": 4000000126
+  },
+  "corrupted": {
+    "accepted": false,
+    "refusedMessage": "Transaction simulation failed: Transaction did not pass signature verification",
+    "refusedErr": "SignatureFailure",
+    "refusedCode": -32002
+  },
+  "unfunded": {
+    "accepted": false,
+    "refusedMessage": "Transaction simulation failed: Attempt to debit an account but found no record of a prior credit.",
+    "refusedErr": "AccountNotFound",
+    "refusedCode": -32002
+  },
+  "verdict": "wire-accepted-by-real-runtime",
+  "defects": [],
+  "checks": [
+    {
+      "ok": true,
+      "observed": "blockhash",
+      "rule": "placeholder-wire-must-be-rejected-for-blockhash",
+      "note": "the runtime rejected the placeholder wire for its blockhash"
+    },
+    {
+      "ok": true,
+      "observed": "signature",
+      "rule": "corrupted-signature-must-be-rejected-and-detected",
+      "note": "the runtime rejected the corrupted wire as a signature failure"
+    },
+    {
+      "ok": true,
+      "observed": "balance",
+      "rule": "unfunded-fee-payer-must-be-rejected-for-balance",
+      "note": "the runtime rejected the unfunded fee payer for its balance"
+    },
+    {
+      "ok": true,
+      "observed": "payerDelta=-5042,destDelta=42",
+      "rule": "funded-wire-must-be-accepted-and-move-exactly-the-documented-amounts",
+      "note": "the runtime accepted the wire and moved exactly 42 lamports plus the 5000 lamport fee"
+    }
+  ],
+  "limits": [
+    "the runtime is a LOCAL solana-test-validator (agave 4.3.2, feature-set 3383571666) on a fresh local ledger — mainnet was never contacted and no real lamports moved",
+    "the destination is the documented So111...1112 address, funded on the local ledger; on mainnet it is the wrapped-SOL mint",
+    "a local validator is the same runtime code as mainnet, but it is not mainnet: no mainnet state, no mainnet fee market, no mainnet congestion",
+    "the fee payer is funded from the validator genesis faucet, not from a real exchange account",
+    "own-host measurement; no outside user, no audit; this measures the wire, not custody"
+  ]
+}
