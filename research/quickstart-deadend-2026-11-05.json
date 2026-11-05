@@ -1,0 +1,35 @@
+{
+  "measuredAt": "2026-11-05T08:44:00Z+0200",
+  "method": "documented quickstart run verbatim: npm install github:auroraxo/signerd#v0.2.0 into an empty prefix, then the README Shape block under umask 0002 in a fresh HOME",
+  "preFixTree": "b4a755d (== tag v0.2.0)",
+  "steps": [
+    { "step": "npm install github:auroraxo/signerd#v0.2.0", "exit": 0, "note": "documented install works" },
+    { "step": "signerd keygen (README line)", "exit": 0, "note": "publicKey printed" },
+    { "step": "signerd run --grants ~/.config/signerd/grants.json (README line, file never created by any documented step)", "exit": 1, "refusal": "grant_file_unreadable: ENOENT", "defect": "dead-end: no grant-writing command exists; README never shows the transaction-grant schema" },
+    { "step": "signerd sign --socket ... --grant ops-24h --tx tx.bin", "exit": 1, "refusal": "ENOENT: no such file or directory, open 'tx.bin'", "defect": "bare errno: tx.bin is never created by the documented steps either" }
+  ],
+  "whyTheOldSuiteMissedIt": "test/quickstart-stranger.test.js E2E writes the grant file itself (message schema inline) - the harness performed the step the documentation never documents",
+  "fix": {
+    "commit": "daa83aa",
+    "new": [
+      "signerd grant-add: creates the v1 grant file (0600, dir 0700 when created), validated by src/grantfile.js validateGrant; refuses to clobber an existing or sealed file",
+      "signerd sign-message --add-grant --keystore <file>: bootstraps the message grant from the body (issuer/type/subject) + the PUBLIC keystore field (no secret read, no passphrase)",
+      "run on a missing grant file and sign on a missing tx file now name the repair command",
+      "README Shape block documents grant-add as the setup step"
+    ],
+    "unchanged": "loader mode/owner rules (R3-1), daemon request bytes, ledger format, signature path"
+  },
+  "ladder": {
+    "newTests": "test/quickstart-grantfile.test.js (5)",
+    "preFixB4a755d": "0/5 pass",
+    "postFixDaa83aa": "5/5 pass",
+    "guard": "loose grant file (0664) still refused with grant_file_mode on both trees; grant-add writes 0600 under umask 0002"
+  },
+  "suite": { "before": 328, "after": "333/333 pass, 0 fail", "installSmoke": "12/12 PASSED (0.2.0)", "crash": "exit 0 both modes" },
+  "ci": { "run": 41994245069, "conclusion": "success", "commit": "daa83aa" },
+  "limits": [
+    "no signature, grant, ledger or daemon-request bytes changed",
+    "a genuinely loose grant file is still refused; grant-add never rewrites an existing or sealed file",
+    "Linux x64/npm; measured on the maintainer host; still user zero (no outside user has run this)"
+  ]
+}
