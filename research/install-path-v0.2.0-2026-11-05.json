@@ -1,5 +1,5 @@
 {
-  "measuredAt": "2026-11-05T01:10:16.643Z",
+  "measuredAt": "2026-11-05T01:12:05.935Z",
   "repo": "https://github.com/auroraxo/signerd",
   "ref": "v0.2.0",
   "surfaces": {
@@ -11,7 +11,7 @@
     "cargo": {
       "exitCode": 101,
       "cargoTomlMissing": true,
-      "errorTail": "Updating git repository `https://github.com/auroraxo/signerd` | error: could not find `Cargo.toml` in `/home/aurora/.cargo/git/checkouts/signerd-869fc42253b2bde5/d199f98`"
+      "errorTail": "Updating git repository `https://github.com/auroraxo/signerd` | error: could not find `Cargo.toml` in `/home/aurora/.cargo/git/checkouts/signerd-869fc42253b2bde5/14f8e1c`"
     },
     "npm": {
       "exitCode": 0,
