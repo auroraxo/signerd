@@ -141,14 +141,21 @@ test('grant-add is the missing documented step: the quickstart chain now runs ve
   const publicKey = JSON.parse(keygen.stdout.trim().split('\n').pop()).publicKey;
 
   // The missing step, verbatim-shape: create the grant file the run step
-  // points at, owner-only, under the default umask.
+  // points at, owner-only, under the default umask — using --keystore so no
+  // paste step exists at all (the README block runs as written).
   const destination = 'So11111111111111111111111111111111111111112';
   const grants = path.join(cfg, 'grants.json');
   const add = runWithUmask([CLI, 'grant-add', '--grants', grants,
-    '--name', 'ops-24h', '--signer', publicKey, '--destination', destination,
+    '--name', 'ops-24h', '--keystore', path.join(cfg, 'ops.key'),
+    '--destination', destination,
     '--max-lamports', '500000000', '--window-max-lamports', '500000000',
     '--window-seconds', '3600', '--expires', '2030-01-01T00:00:00Z'], '0002');
   assert.strictEqual(add.status, 0, `grant-add failed: ${add.stdout}${add.stderr}`);
+  // The derived signer must be the keystore's own public key (the daemon
+  // would refuse grant_signer_mismatch otherwise — this pins the derivation).
+  const addedDoc = JSON.parse(fs.readFileSync(grants, 'utf8'));
+  assert.strictEqual(addedDoc.grants['ops-24h'].signer, publicKey,
+    'grant-add --keystore must derive the signer from the keystore public key');
 
   // owner-only file even under umask 0002 (the keygen-loop rule, again here)
   const grantsMode = fs.statSync(grants).mode & 0o777;

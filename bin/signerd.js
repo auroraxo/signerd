@@ -8,10 +8,12 @@ const USAGE = `signerd — scoped signing daemon for Solana (early prototype)
 
 Usage:
   signerd keygen --keystore <file>            create an encrypted keystore
-  signerd grant-add --grants <file> --name <grant> --signer <pubkey> --destination <pubkey>
+  signerd grant-add --grants <file> --name <grant>
+            (--signer <pubkey> | --keystore <file>) --destination <pubkey>
             --max-lamports <u64> --window-max-lamports <u64> --window-seconds <secs> --expires <iso>
             create the grant file run expects (0600); refuses to clobber
-            an existing or sealed file
+            an existing or sealed file; with --keystore the signer is read
+            from the keystore's PUBLIC key (no passphrase needed)
   signerd import --keystore <file> --from <secret-file>
             encrypt an EXISTING plaintext key (id.json / base58 / raw 64 bytes)
   signerd run --keystore <file> --passphrase-file <file>
@@ -208,11 +210,26 @@ async function main() {
 
   if (command === 'grant-add') {
     const { writeGrantFile, buildTxGrant } = require('../src/grantadd');
+    const { readKeystorePublicKey } = require('../src/keystore');
     const grants = requireArg(args, 'grants');
     const name = requireArg(args, 'name');
+    // The signer is either stated explicitly or derived from the keystore's
+    // PUBLIC key (cleartext metadata, no passphrase, no secret read). The
+    // derivation is the quickstart path: the daemon refuses
+    // grant_signer_mismatch, so deriving from the same keystore the daemon
+    // runs makes the documented setup fail-proof without a paste step.
+    if (typeof args.signer !== 'string' && typeof args.keystore !== 'string') {
+      process.stderr.write(
+        'grant-add needs --signer <pubkey> or --keystore <file> ' +
+        '(the signer is read from the keystore\'s public key)\n');
+      process.exit(2);
+    }
+    const signer = typeof args.signer === 'string'
+      ? args.signer
+      : readKeystorePublicKey({ file: requireArg(args, 'keystore') });
     const grant = buildTxGrant({
       name,
-      signer: requireArg(args, 'signer'),
+      signer,
       destination: requireArg(args, 'destination'),
       maxLamports: requireArg(args, 'max-lamports'),
       windowMaxLamports: requireArg(args, 'window-max-lamports'),
@@ -408,7 +425,7 @@ main().catch((err) => {
   if (err && err.code === 'grant_file_unreadable') {
     process.stderr.write(
       `${err.code}: ${err.message}\n` +
-      `  fix: signerd grant-add --grants <file> --name <grant> --signer <pubkey> --destination <pubkey>\n` +
+      `  fix: signerd grant-add --grants <file> --name <grant> --keystore <file> --destination <pubkey>\n` +
       `          --max-lamports <u64> --window-max-lamports <u64> --window-seconds <secs> --expires <iso>` +
       `   # create the grant file run expects\n`);
     process.exit(1);
