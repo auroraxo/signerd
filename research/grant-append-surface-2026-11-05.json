@@ -1,0 +1,85 @@
+{
+  "measurement": "grant-append-surface",
+  "date": "2026-11-05",
+  "repo": "https://github.com/auroraxo/signerd",
+  "commit_before": "8d75a76",
+  "host": "own machine (linux), no foreign user",
+  "defects_found": [
+    {
+      "id": "D1",
+      "class": "quickstart-dead-end",
+      "surface": "signerd grant-add",
+      "verbatim": "grant_file_exists: grant_file_exists: /home/aurora/.config/signerd/grants.json",
+      "why_a_dead_end": "grant-add wrote EXACTLY one grant into a file and refused every run against an existing file; the loader loads a whole MAP of grants ({version:1, grants:{<name>:{...}}}) but no CLI command could create a second scope - a hand-written JSON file was the only way, and the README documents exactly one grant.",
+      "repair_before": "none named (the verdict named no repair at all)",
+      "repair_after": "--append adds the grant to the existing file (atomic rename); the refusal names --append and the alternative --grants path"
+    },
+    {
+      "id": "D2",
+      "class": "symlink-followed-on-write",
+      "surface": "signerd grant-add",
+      "verbatim": "{\"ok\":true,\"file\":\"/tmp/symprobe2/cfg/grants.json\",\"grant\":\"x\"} -> the bytes landed in /tmp/symprobe2/elsewhere.json, OUTSIDE the named directory",
+      "why_a_defect": "the loader refuses a symlink at the grant path (O_NOFOLLOW -> grant_file_invalid), so grant-add CREATED the state the product refuses to read, at a path the operator never named",
+      "repair_before": "none: the write followed the link",
+      "repair_after": "a symlink at the grant path is refused (grant_file_symlink) with the repair named; the loader stays the judge"
+    }
+  ],
+  "fix": {
+    "cli": "signerd grant-add [--append] [--seal-passphrase-file <file>]",
+    "module": "src/grantadd.js extendGrantFile()",
+    "write": "temp file in the same directory (O_EXCL, 0600) + fsync + fchmod + rename (atomic; the target's INODE changes)",
+    "judge": "the product's own loader (src/grantfile.js loadGrantFile) must accept the file in full before anything is written: directory mode+owner, kernel read lease, file owner+mode, schema, every existing grant, and the seal when a seal passphrase is given",
+    "refusals": [
+      "grant_exists (the name is already there) -> names another --name",
+      "grant_file_sealed (a sealed file is never rewritten) -> names seal-grants",
+      "grant_file_unsealed (a passphrase for an unsealed file) -> names seal-grants or drop the flag",
+      "grant_file_symlink -> names the real path",
+      "grant_file_mode / grant_file_dir_mode -> names the chmod",
+      "grant_file_seal_mismatch (wrong passphrase) -> the loader's reason",
+      "grant_file_invalid (an invalid EXISTING grant) -> the loader's reason"
+    ]
+  },
+  "tests": {
+    "file": "test/grant-append-surface.test.js",
+    "count": 12,
+    "ladder": {
+      "pre_fix_tree_8d75a76": "4 of 12 RED (T1-T4), 8 GREEN - the guards pass on the pre-fix tree",
+      "post_fix": "12/12 GREEN",
+      "note": "G7 was initially too weak (a regex that also accepted the generic verdict) and was caught by the mutation ladder; it was tightened to require the named reason, and the mutation then went RED as it should"
+    },
+    "mutations_caught": [
+      {"id": "M1", "mutation": "loader bypassed (a group/other-writable file would be extended)", "result": "3 tests RED"},
+      {"id": "M2", "mutation": "silent overwrite without --append", "result": "5 tests RED"},
+      {"id": "M3", "mutation": "a sealed file is overwritten", "result": "2 tests RED"},
+      {"id": "M4", "mutation": "grant validation bypassed", "result": "1 test RED"},
+      {"id": "M7", "mutation": "in-place truncate instead of rename (the inode stays)", "result": "1 test RED"},
+      {"id": "M8", "mutation": "the name's existence is not checked", "result": "1 test RED"},
+      {"id": "M9", "mutation": "the refusal stops naming the repair", "result": "1 test RED"},
+      {"id": "M6", "mutation": "the symlink check removed", "result": "1 test RED (after the test was tightened)"}
+    ],
+    "not_pinned": [
+      {"id": "M10", "what": "a temp file left behind when the ATOMIC WRITE ITSELF fails", "why": "no test drives a write failure (a full disk, a read-only directory); the cleanup code is there but unpinned - stated, not claimed"},
+      {"id": "M11", "what": "the exact byte cost of the atomic write vs an in-place write", "why": "not measured"}
+    ]
+  },
+  "live_measurement": {
+    "setup": "fresh HOME, umask 077, keygen -> grant-add -> daemon -> build-tx -> sign",
+    "steps": [
+      {"step": "grant 1 (ops-24h)", "result": "ok"},
+      {"step": "grant 2 without --append", "result": "REFUSED with the repair named: 'fix: add --append' and 'fix: point --grants at another file'"},
+      {"step": "grant 2 with --append", "result": "ok, appended:true, grants:['ops-24h','ops-payroll'], file mode 0600"},
+      {"step": "daemon starts on the 2-grant file", "result": "socket up"},
+      {"step": "sign under the FIRST scope", "result": "ok, 215 bytes, seq 1"},
+      {"step": "3rd scope appended WHILE THE DAEMON RUNS", "result": "ok (the read lease F_RDLCK does not conflict with a rename)"},
+      {"step": "sign under the NEW scope, no daemon restart", "result": "ok, 215 bytes - the grant file is re-read on every request"},
+      {"step": "sign above the new scope's cap", "result": "REFUSED: {\"ok\":false,\"error\":\"amount\"}"}
+    ]
+  },
+  "limits": [
+    "own host, own key; no foreign user, no audit, 0 stars/forks",
+    "the appended grant is live on the daemon's NEXT request - there is no push and no notification",
+    "no command removes a grant (edit by hand, or replace the file)",
+    "a SEALED file cannot be extended at all; the named repair (edit + re-seal) was exercised for real and the re-sealed file loads in the daemon's sealed mode",
+    "the symlink refusal was measured for the grant path only; other write paths were not re-audited in this run"
+  ]
+}

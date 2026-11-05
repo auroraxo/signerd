@@ -11,8 +11,12 @@ Usage:
   signerd grant-add --grants <file> --name <grant>
             (--signer <pubkey> | --keystore <file>) --destination <pubkey>
             --max-lamports <u64> --window-max-lamports <u64> --window-seconds <secs> --expires <iso>
+            [--append] [--seal-passphrase-file <file>]
             create the grant file run expects (0600); refuses to clobber
-            an existing or sealed file; with --keystore the signer is read
+            an existing or sealed file; --append adds the grant to an
+            existing file instead (one scope per grant, map stays valid,
+            atomic write; a SEALED file is never rewritten - re-seal after
+            a hand edit); with --keystore the signer is read
             from the keystore's PUBLIC key (no passphrase needed)
   signerd build-tx --keystore <file> --to <pubkey> --lamports <u64> --out <file>
             [--blockhash <b58-32>]
@@ -295,9 +299,109 @@ async function main() {
       windowSeconds: requireArg(args, 'window-seconds'),
       expiresAt: requireArg(args, 'expires'),
     });
-    const out = writeGrantFile({ file: grants, name, grant });
-    process.stdout.write(JSON.stringify({ ok: true, ...out }) + '\n');
-    return;
+    // --append: add the grant to an EXISTING grant file instead of refusing
+    // an existing file. Measured 2026-11-05 (live, the documented setup
+    // order): a second `grant-add` against the first file died with the
+    // self-referential verdict `grant_file_exists: <path>` - no repair
+    // named, and NO way to create a second scope at all (the loader loads a
+    // map of grants; the CLI could only create a one-grant file). The
+    // repair this names must be one the CLI actually offers.
+    if (args.append === true) {
+      const { extendGrantFile } = require('../src/grantadd');
+      try {
+        const sealPassphrase = typeof args['seal-passphrase-file'] === 'string'
+          ? readPassphrase(args, 'seal-passphrase-file') : undefined;
+        const out = extendGrantFile({
+          file: grants,
+          name,
+          grant,
+          sealPassphrase,
+        });
+        process.stdout.write(JSON.stringify({ ok: true, ...out }) + '\n');
+        return;
+      } catch (err) {
+        // Name the repair, not just the verdict (the passphrase/keystore/
+        // import rule), and only repairs this CLI actually offers.
+        if (err && err.code === 'grant_file_exists') {
+          // TOCTOU: the file appeared between the lstat and the create.
+          process.stderr.write(
+            `grant_file_exists: ${grants} already exists\n` +
+            `  fix: add --append   # add ${name} to the existing file (one scope per grant)\n` +
+            `  fix: point --grants at another file   # a NEW file holds exactly this grant\n`);
+          process.exit(1);
+        }
+        if (err && err.code === 'grant_exists') {
+          process.stderr.write(
+            `grant_exists: ${name} is already in ${grants}\n` +
+            `  fix: choose another --name   # each grant is one scope; edit the file by hand to change one\n`);
+          process.exit(1);
+        }
+        if (err && err.code === 'grant_file_sealed') {
+          process.stderr.write(
+            `grant_file_sealed: ${grants} carries an HMAC seal\n` +
+            `  fix: edit the file by hand, then re-seal:\n` +
+            `       signerd seal-grants --grants ${grants} --seal-passphrase-file <file>\n`);
+          process.exit(1);
+        }
+        if (err && err.code === 'grant_file_unsealed') {
+          process.stderr.write(
+            `grant_file_unsealed: ${grants} carries no seal, but --seal-passphrase-file was given\n` +
+            `  fix: leave out --seal-passphrase-file to append unsealed, or\n` +
+            `  fix: signerd seal-grants --grants ${grants} --seal-passphrase-file <file>\n`);
+          process.exit(1);
+        }
+        if (err && err.code === 'grant_file_symlink') {
+          process.stderr.write(
+            `grant_file_symlink: ${grants} is a symlink\n` +
+            `  fix: point --grants at the real file, or remove the link   # a symlink is never followed here\n`);
+          process.exit(1);
+        }
+        if (err && err.code === 'grant_file_mode') {
+          process.stderr.write(
+            `${err.code}: ${err.message}\n` +
+            `  fix: chmod 600 ${grants}   # a grant file another user can write must not be extended\n`);
+          process.exit(1);
+        }
+        if (err && err.code === 'grant_file_dir_mode') {
+          process.stderr.write(
+            `${err.code}: ${err.message}\n` +
+            `  fix: chmod 700 ${path.dirname(path.resolve(grants))}   # a stranger could swap the file there\n`);
+          process.exit(1);
+        }
+        if (err && err.code === 'grant_file_write_failed') {
+          process.stderr.write(
+            `${err.code}: ${err.detail || 'the atomic write failed'}\n` +
+            `  fix: check the directory is writable and has space; the existing file is UNCHANGED\n`);
+          process.exit(1);
+        }
+        throw err;
+      }
+    }
+    try {
+      const out = writeGrantFile({ file: grants, name, grant });
+      process.stdout.write(JSON.stringify({ ok: true, ...out }) + '\n');
+      return;
+    } catch (err) {
+      // THE MEASURED DEFECT (2026-11-05): the verdict `grant_file_exists:
+      // <path>` named no repair. A second scope was impossible from the CLI:
+      // the loader loads a MAP of grants, grant-add could only ever write a
+      // one-grant file, and the README documents exactly one grant. The
+      // repair is --append - a command this CLI actually offers.
+      if (err && err.code === 'grant_file_exists') {
+        process.stderr.write(
+          `grant_file_exists: ${grants} already exists\n` +
+          `  fix: add --append   # add ${name} to the existing file (one scope per grant)\n` +
+          `  fix: point --grants at another file   # a NEW file holds exactly this grant\n`);
+        process.exit(1);
+      }
+      if (err && err.code === 'grant_file_symlink') {
+        process.stderr.write(
+          `grant_file_symlink: ${grants} is a symlink\n` +
+          `  fix: point --grants at the real file, or remove the link   # a symlink is never followed here\n`);
+        process.exit(1);
+      }
+      throw err;
+    }
   }
 
   if (command === 'sign-message') {

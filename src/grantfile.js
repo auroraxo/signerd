@@ -215,5 +215,5 @@ function loadGrantFile(file, options = {}) {
   return { grants, names: Object.keys(grants).sort() };
 }
 
-module.exports = { loadGrantFile, validateGrant };
+module.exports = { loadGrantFile, validateGrant, MAX_GRANTS };
 ;

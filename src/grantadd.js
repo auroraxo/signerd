@@ -30,7 +30,18 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
-const { validateGrant } = require('./grantfile');
+const { validateGrant, loadGrantFile, MAX_GRANTS } = require('./grantfile');
+const { makeSealKeyProvider, sealDocument } = require('./grantseal');
+
+/** lstat without following the final symlink; null when nothing is there. */
+function lstatOrNull(target) {
+  try {
+    return fs.lstatSync(target);
+  } catch (err) {
+    if (err.code === 'ENOENT') return null;
+    throw fail('grant_file_unreadable', err.code);
+  }
+}
 
 const NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 const BASE58 = /^[1-9A-HJ-NP-Za-km-z]+$/;
@@ -157,7 +168,15 @@ function writeGrantFile({ file, name, grant }) {
   // The product's validator is the judge of the grant shape.
   validateGrant(name, grant);
 
-  if (fs.existsSync(resolved)) {
+  // A SYMLINK at the grant path is refused outright, never followed. The
+  // loader refuses it too (O_NOFOLLOW), so writing through one would create
+  // the state the product refuses to read - and would place the grant file
+  // at a path the operator never named (measured 2026-11-05: a dangling
+  // link made grant-add write to the link target OUTSIDE the directory).
+  const link = lstatOrNull(resolved);
+  if (link !== null && link.isSymbolicLink()) throw fail('grant_file_symlink', resolved);
+
+  if (link !== null) {
     let existing = null;
     try { existing = JSON.parse(fs.readFileSync(resolved, 'utf8')); } catch { /* unreadable/garbage */ }
     if (existing && Object.getOwnPropertyDescriptor(existing, 'seal') !== undefined) {
@@ -223,6 +242,161 @@ function addGrantToFile({ file, name, grant }) {
   return { file: resolved, grant: name };
 }
 
+const MAX_GRANTS_LOCAL = MAX_GRANTS; // single source of truth: src/grantfile.js
+
+/**
+ * Add a grant to an EXISTING grant file — the CLI's `--append` path.
+ *
+ * WHY: measured 2026-11-05, `signerd grant-add` wrote exactly one grant and
+ * refused every run against an existing file (`grant_file_exists: <path>`),
+ * so a second scope was impossible from the CLI: the loader happily loads a
+ * whole map of grants, but no documented command could create one. The
+ * message bootstrap already had this capability internally
+ * (addGrantToFile); this is the same act for transaction grants, held to
+ * the loader's own rules.
+ *
+ * THE RULE THIS KEEPS: a file that would be refused at `run` time is
+ * refused here — grant-add must not write a file the product refuses to
+ * read (the keygen-loop lesson). So the write happens only after the
+ * PRODUCT's own loader (src/grantfile.js) has accepted the file in full:
+ * directory mode and ownership, kernel read lease (nobody holds it open
+ * for writing), file owner and mode, schema, every existing grant — and
+ * the seal, when a seal passphrase is given.
+ *
+ * Refuses (nothing is written, ever):
+ *   - the new grant is invalid          -> validateGrant's reason
+ *   - the name is already in the file   -> grant_exists
+ *   - the file is sealed, no passphrase  -> grant_file_sealed
+ *     (a rewrite would silently destroy the HMAC provenance);
+ *   - a passphrase for a file that carries no seal -> grant_file_unsealed
+ *     (--seal-passphrase-file must never imply "seal this file now");
+ *   - the current seal does not verify  -> the loader's grant_file_seal_*
+ *     reason (never extend content we could not authenticate);
+ *   - anything else the loader refuses (mode, owner, directory, lease,
+ *     shape, an invalid existing grant) -> the loader's reason;
+ *   - the result would exceed the loader's grant cap -> grant_file_invalid.
+ *
+ * WRITES: temp file in the same directory (O_EXCL, 0600) + fsync + rename.
+ * Two properties this buys over a truncate-in-place write:
+ *   - a crash can only leave the OLD complete document or the NEW complete
+ *     document, never a torn one the daemon would refuse on the next
+ *     request;
+ *   - the daemon's read lease (F_RDLCK) never conflicts with the write:
+ *     src/lease.js — a read lease conflicts only with openers FOR WRITING,
+ *     and renaming does not open the target file. A truncate-write would
+ *     lose the lease race and fail against a running daemon; the rename
+ *     path does not.
+ * A stranger holding an open WRITE handle to the old inode (the R4-1
+ * shape) cannot stop this write — but they also cannot reach the new
+ * content: their descriptor stays on the orphaned inode, and the read
+ * lease still refuses their file while they hold it.
+ *
+ * LIMITS: an appended grant takes effect on the daemon's NEXT request (the
+ * loader re-reads every request) — it does not restart or notify the
+ * daemon; there is no "remove a grant" command (edit by hand, or replace
+ * the file); a hand-edited sealed file must be re-sealed with
+ * `seal-grants`.
+ */
+function extendGrantFile({ file, name, grant, sealPassphrase }) {
+  validateGrant(name, grant);
+  const resolved = path.resolve(file);
+
+  // Never follow a symlink here either: the loader refuses one at load time
+  // (O_NOFOLLOW), so extending it would write content to a path the product
+  // will not read, at a path the operator never named.
+  const link = lstatOrNull(resolved);
+  if (link !== null && link.isSymbolicLink()) throw fail('grant_file_symlink', resolved);
+
+  if (link === null) {
+    // No file yet: creating it is exactly what grant-add already does.
+    if (sealPassphrase !== undefined) {
+      // --seal-passphrase-file must never silently seal a file it creates.
+      throw fail('grant_file_unsealed', resolved);
+    }
+    return writeGrantFile({ file: resolved, name, grant });
+  }
+
+  // Seal presence needs the raw document: loadGrantFile only VERIFIES a
+  // seal when a key provider is given and would otherwise ignore it — the
+  // one outcome this command must never produce is an unsealed write over
+  // a sealed file (the daemon in sealed mode would then refuse the file,
+  // or worse, a later reader would not know a seal was ever there).
+  let raw;
+  try {
+    raw = fs.readFileSync(resolved, 'utf8');
+  } catch (err) {
+    throw fail('grant_file_unreadable', err.code);
+  }
+  let doc;
+  try {
+    doc = JSON.parse(raw);
+  } catch {
+    throw fail('grant_file_invalid');
+  }
+  const sealed = doc !== null && typeof doc === 'object' &&
+    Object.getOwnPropertyDescriptor(doc, 'seal') !== undefined;
+  if (sealed && sealPassphrase === undefined) throw fail('grant_file_sealed', resolved);
+  if (!sealed && sealPassphrase !== undefined) throw fail('grant_file_unsealed', resolved);
+
+  // THE JUDGE: the product's loader, with the seal key when the operator
+  // gave one. Directory, lease, owner, mode, schema, seal, and every
+  // existing grant must all pass before anything is written.
+  const options = sealPassphrase === undefined ? {}
+    : { sealKeyFor: makeSealKeyProvider(sealPassphrase) };
+  const loaded = loadGrantFile(resolved, options);
+
+  if (Object.getOwnPropertyNames(loaded.grants).includes(name)) {
+    throw fail('grant_exists', name);
+  }
+  const existing = Object.getOwnPropertyNames(loaded.grants);
+  if (existing.length + 1 > MAX_GRANTS_LOCAL) throw fail('grant_file_invalid', 'too many grants');
+
+  const grants = {};
+  for (const key of existing) grants[key] = loaded.grants[key];
+  grants[name] = grant;
+  const out = sealPassphrase === undefined
+    ? { version: 1, grants }
+    : sealDocument({ version: 1, grants }, sealPassphrase);
+
+  writeAtomic(resolved, out);
+  return {
+    file: resolved,
+    grant: name,
+    appended: true,
+    grants: Object.keys(grants).sort(),
+    sealed: sealPassphrase !== undefined,
+  };
+}
+
+/**
+ * Write a whole grant document atomically: temp file in the SAME directory
+ * (O_EXCL so the name cannot be a planted symlink), fsync, fchmod 0600
+ * (never umask-inherited), rename. On any failure the temp file is removed
+ * and the target keeps its previous bytes.
+ */
+function writeAtomic(target, doc) {
+  const dir = path.dirname(target);
+  const tmp = path.join(dir,
+    `.${path.basename(target)}.tmp-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
+  let fd;
+  try {
+    fd = fs.openSync(tmp, fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL, 0o600);
+    fs.writeFileSync(fd, JSON.stringify(doc, null, 2) + '\n');
+    fs.fsyncSync(fd);
+    fs.fchmodSync(fd, 0o600); // mode applies at create, but never trust the umask
+    fs.closeSync(fd);
+    fd = undefined;
+    fs.renameSync(tmp, target);
+  } catch (err) {
+    if (fd !== undefined) { try { fs.closeSync(fd); } catch { /* already closed */ } }
+    try { fs.unlinkSync(tmp); } catch { /* never existed */ }
+    const e = new Error('grant_file_write_failed');
+    e.code = 'grant_file_write_failed';
+    if (err && err.code) e.detail = err.code;
+    throw e;
+  }
+}
+
 module.exports = {
   buildTxGrant,
   buildMessageGrant,
@@ -230,4 +404,5 @@ module.exports = {
   validateMessageGrantArgs,
   writeGrantFile,
   addGrantToFile,
+  extendGrantFile,
 };

@@ -263,6 +263,17 @@ signerd grant-add --grants ~/.config/signerd/grants.json --name ops-24h \
             --window-seconds 3600 --expires 2030-01-01T00:00:00Z
 # (--keystore makes the signer the keystore's public key - no paste step.
 #  The daemon refuses grant_signer_mismatch, so this cannot drift.)
+# A SECOND scope is a second grant in the SAME file, added with --append
+# (one scope per grant; atomic write, the map stays loadable; the appended
+# grant is live on the daemon's next request - the file is re-read per
+# request). Without --append an existing file is refused, and a SEALED
+# file is never rewritten: edit it by hand, then re-seal with
+# `signerd seal-grants --grants ... --seal-passphrase-file ...`.
+signerd grant-add --grants ~/.config/signerd/grants.json --name ops-payroll --append \
+            --keystore ~/.config/signerd/ops.key \
+            --destination Vote111111111111111111111111111111111111111 \
+            --max-lamports 1000000 --window-max-lamports 1000000 \
+            --window-seconds 60 --expires 2030-01-01T00:00:00Z
 
 # OR adopt a key you already hold — the migration path. Reads a solana-keygen
 # id.json, a base58 secret, or 64 raw bytes; encrypts it; leaves the source alone.
