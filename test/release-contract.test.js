@@ -68,7 +68,10 @@ function manifestGates(manifest, readme) {
   if (typeof readme !== 'string' || !readme.includes(ANCHOR)) gates.push('readme-no-quickstart');
   if (typeof readme === 'string' && readme.includes('cargo install')) gates.push('readme-advertises-cargo-install');
   if (typeof readme !== 'string' || !readme.includes('npm install github:auroraxo/signerd#')) gates.push('readme-no-install-command');
-  if (typeof readme === 'string' && /Signerd\.connect/.test(readme)) gates.push('readme-advertises-nonexistent-api');
+  // The gate targets the ADVERTISED usage, not a mention: the README keeps
+  // the old snippet as a documented correction, so only a runnable form
+  // ("await Signerd.connect(") counts as advertising a nonexistent API.
+  if (typeof readme === 'string' && /await\s+Signerd\.connect\s*\(/.test(readme)) gates.push('readme-advertises-nonexistent-api');
   if (typeof readme !== 'string' || !readme.includes('signViaDaemon')) gates.push('readme-no-real-client-api');
   return gates;
 }
@@ -127,8 +130,14 @@ test('T6 control: a README without an install command is caught', () => {
 
 test('T7 control: a nonexistent client API claim is caught (the Signerd.connect defect)', () => {
   const readme = `x ${ANCHOR} x npm install github:auroraxo/signerd#v9.9.9 x signViaDaemon
-await Signerd.connect({ grant: 'x' });`;
+const signer = await Signerd.connect({ grant: 'x' });`;
   assert.deepStrictEqual(manifestGates({ version: '9.9.9' }, readme), ['readme-advertises-nonexistent-api']);
+});
+
+test('T7b control: a documented MENTION of the old API is not an advertisement', () => {
+  const readme = `x ${ANCHOR} x npm install github:auroraxo/signerd#v9.9.9 x signViaDaemon
+The earlier version showed a \`Signerd.connect(...)\` API; that API does not exist.`;
+  assert.deepStrictEqual(manifestGates({ version: '9.9.9' }, readme), []);
 });
 
 test('T8 control: a README without the real client API is caught', () => {
