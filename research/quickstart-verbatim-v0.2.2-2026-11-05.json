@@ -1,0 +1,55 @@
+{
+  "measuredAt": "2026-11-05T09:05:00Z",
+  "what": "the documented quickstart, run verbatim from the PUBLISHED tag by a stranger",
+  "ref": "v0.2.2",
+  "refCommit": "78cdbd0a2a3dd121f7dd0eedb0988dbcdc3e2898",
+  "installCommand": "npm install github:auroraxo/signerd#v0.2.2",
+  "environment": {
+    "host": "Linux x64, Node v24.20.0, npm",
+    "umask": "077 as the README block specifies (a 0002 run is refused by design: the passphrase dir and ledger dir traps are fail-closed)",
+    "fresh": "empty HOME, no pre-existing config, no signerd on PATH before the install"
+  },
+  "steps": [
+    { "step": "npm install github:auroraxo/signerd#v0.2.2", "exit": 0 },
+    { "step": "umask 077; mkdir -p ~/.config/signerd; printf 'your passphrase\\n' > pass; chmod 600 pass", "exit": 0 },
+    { "step": "signerd keygen --keystore ~/.config/signerd/ops.key --passphrase-file ~/.config/signerd/pass", "exit": 0 },
+    { "step": "signerd grant-add --grants ~/.config/signerd/grants.json --name ops-24h --keystore ~/.config/signerd/ops.key --destination So111...112 --max-lamports 500000000 --window-max-lamports 500000000 --window-seconds 3600 --expires 2030-01-01T00:00:00Z", "exit": 0, "grantFileMode": "0600" },
+    { "step": "signerd run --keystore ... --passphrase-file ... --grants ... --ledger ~/.local/share/signerd/journal.jsonl --socket ~/.local/share/signerd/signerd.sock", "exit": 0, "socket": "appeared" },
+    { "step": "signerd build-tx --keystore ... --to So111...112 --lamports 42 --out tx.bin", "exit": 0, "bytes": 215, "placeholderBlockhash": true },
+    { "step": "signerd sign --socket ~/.local/share/signerd/signerd.sock --grant ops-24h --tx tx.bin", "exit": 0, "ok": true }
+  ],
+  "independentVerification": {
+    "oracle": "node:crypto Ed25519 over the serialized message, SPKI key assembled from the keystore's public key (NOT the product's verification path)",
+    "result": "verified",
+    "signedBytes": 215
+  },
+  "verdict": "quickstart-runs-verbatim",
+  "deadEndsClosed": [
+    {
+      "defect": "grant file never created by any documented step",
+      "symptom": "grant_file_unreadable: ENOENT",
+      "fix": "signerd grant-add (daa83aa), --keystore derives the signer (24052be)",
+      "tagWithFix": "v0.2.1"
+    },
+    {
+      "defect": "transaction file never created by any documented step",
+      "symptom": "ENOENT: no such file or directory, open 'tx.bin'",
+      "fix": "signerd build-tx, public key only, 0600 (4760efa)",
+      "tagWithFix": "v0.2.2"
+    }
+  ],
+  "harnessGapThatHidBoth": "the end-to-end tests wrote the grant file and tx.bin themselves with fs.writeFileSync — the harness performed the steps the documentation never documented, so both dead ends were invisible to a green suite",
+  "limits": [
+    "measured on the maintainer's own host (Linux x64/npm); no outside user yet (user zero)",
+    "the default blockhash of build-tx is a random placeholder: the chain exercises the daemon, the transaction does NOT confirm on chain",
+    "no audit; the daemon is not a reviewed wallet"
+  ],
+  "artifacts": {
+    "installPath": "research/install-path-v0.2.2-2026-11-05.json",
+    "installPathVerdict": "clean (manifest 0.2.2, private:false, quickstart present, no cargo artifact)",
+    "regressionTest": "test/quickstart-shape-verbatim.test.js (2 tests: the whole Shape chain through the CLI alone; RED before build-tx, GREEN after)",
+    "suite": "335/335 locally, CI success on 78cdbd0 (test + consumer-e2e)",
+    "installSmoke": "INSTALL SMOKE PASSED (0.2.1) on the build-tx tree",
+    "crash": "test:crash and test:crash:sealed exit 0"
+  }
+}
