@@ -1,0 +1,195 @@
+{
+  "label": "main-readme-x-main-cli",
+  "readme": "README.md",
+  "cli": "bin/signerd.js",
+  "measuredAt": "2026-11-06T08:27:22.834Z",
+  "rows": [
+    {
+      "command": "sign-message",
+      "flags": [
+        "body",
+        "grant",
+        "out",
+        "socket"
+      ],
+      "text": "signerd sign-message --socket ~/.local/share/signerd/signerd.sock \\",
+      "verdict": {
+        "kind": "other",
+        "reason": "ENOENT: ENOENT: no such file or directory, open 'receipt-body.json'"
+      }
+    },
+    {
+      "command": "keygen",
+      "flags": [
+        "keystore",
+        "passphrase-file"
+      ],
+      "text": "signerd keygen --keystore ~/.config/signerd/ops.key --passphrase-file ~/.config/signerd/pass",
+      "verdict": {
+        "kind": "other",
+        "reason": "ENOENT: ENOENT: no such file or directory, lstat '/tmp/signerd-documented-surface-U4Eijj/.config/signerd/pass'"
+      }
+    },
+    {
+      "command": "grant-add",
+      "flags": [
+        "destination",
+        "expires",
+        "grants",
+        "keystore",
+        "max-lamports",
+        "name",
+        "window-max-lamports",
+        "window-seconds"
+      ],
+      "text": "signerd grant-add --grants ~/.config/signerd/grants.json --name ops-24h \\",
+      "verdict": {
+        "kind": "other",
+        "reason": "keystore_unreadable: keystore_unreadable: ENOENT"
+      }
+    },
+    {
+      "command": "grant-add",
+      "flags": [
+        "append",
+        "destination",
+        "expires",
+        "grants",
+        "keystore",
+        "max-lamports",
+        "name",
+        "window-max-lamports",
+        "window-seconds"
+      ],
+      "text": "signerd grant-add --grants ~/.config/signerd/grants.json --name ops-payroll --append \\",
+      "verdict": {
+        "kind": "other",
+        "reason": "keystore_unreadable: keystore_unreadable: ENOENT"
+      }
+    },
+    {
+      "command": "grant-remove",
+      "flags": [
+        "grants",
+        "name"
+      ],
+      "text": "signerd grant-remove --grants ~/.config/signerd/grants.json --name ops-payroll",
+      "verdict": {
+        "kind": "other",
+        "reason": "grant_file_unreadable: grant_file_unreadable: ENOENT"
+      }
+    },
+    {
+      "command": "grant-remove",
+      "flags": [
+        "grants",
+        "name",
+        "seal-passphrase-file"
+      ],
+      "text": "signerd grant-remove --grants ~/.config/signerd/grants.json --name ops-payroll \\",
+      "verdict": {
+        "kind": "other",
+        "reason": "ENOENT: ENOENT: no such file or directory, lstat '/tmp/signerd-documented-surface-ALUMON/.config/signerd/seal.pass'"
+      }
+    },
+    {
+      "command": "import",
+      "flags": [
+        "from",
+        "keystore",
+        "passphrase-file"
+      ],
+      "text": "signerd import --keystore ~/.config/signerd/ops.key --from ~/.config/solana/id.json \\",
+      "verdict": {
+        "kind": "other",
+        "reason": "ENOENT: ENOENT: no such file or directory, lstat '/tmp/signerd-documented-surface-OCRwSN/.config/signerd/pass'"
+      }
+    },
+    {
+      "command": "run",
+      "flags": [
+        "grants",
+        "keystore",
+        "ledger",
+        "passphrase-file",
+        "socket"
+      ],
+      "text": "signerd run --keystore ~/.config/signerd/ops.key --passphrase-file ~/.config/signerd/pass \\",
+      "verdict": {
+        "kind": "other",
+        "reason": "ENOENT: ENOENT: no such file or directory, lstat '/tmp/signerd-documented-surface-YvNdjN/.config/signerd/pass'"
+      }
+    },
+    {
+      "command": "build-tx",
+      "flags": [
+        "blockhash",
+        "keystore",
+        "lamports",
+        "out",
+        "to"
+      ],
+      "text": "signerd build-tx --keystore ~/.config/signerd/ops.key \\",
+      "verdict": {
+        "kind": "other",
+        "reason": "keystore_unreadable: build-tx: cannot read the keystore's public key at /tmp/signerd-documented-surface-KT40l6/.config/signerd/ops.key: keystore_unreadable: ENO"
+      }
+    },
+    {
+      "command": "sign",
+      "flags": [
+        "grant",
+        "socket",
+        "tx"
+      ],
+      "text": "signerd sign --socket ~/.local/share/signerd/signerd.sock --grant ops-24h --tx tx.bin",
+      "verdict": {
+        "kind": "other",
+        "reason": "tx_missing: no transaction file at tx.bin"
+      }
+    },
+    {
+      "command": "seal-grants",
+      "flags": [
+        "grants",
+        "seal-passphrase-file"
+      ],
+      "text": "signerd seal-grants --grants ~/.config/signerd/grants.json \\",
+      "verdict": {
+        "kind": "other",
+        "reason": "ENOENT: ENOENT: no such file or directory, lstat '/tmp/signerd-documented-surface-ZcQ7W9/.config/signerd/seal.pass'"
+      }
+    },
+    {
+      "command": "seal-journal",
+      "flags": [
+        "journal",
+        "journal-seal-passphrase-file"
+      ],
+      "text": "signerd seal-journal --journal ~/.local/share/signerd/journal.jsonl \\",
+      "verdict": {
+        "kind": "other",
+        "reason": "ENOENT: ENOENT: no such file or directory, lstat '/tmp/signerd-documented-surface-OXuVWG/.config/signerd/seal.pass'"
+      }
+    },
+    {
+      "command": "run",
+      "flags": [
+        "grant-seal-passphrase-file",
+        "grants",
+        "journal-seal-passphrase-file",
+        "keystore",
+        "ledger",
+        "passphrase-file",
+        "socket"
+      ],
+      "text": "signerd run --keystore ~/.config/signerd/ops.key --passphrase-file ~/.config/signerd/pass \\",
+      "verdict": {
+        "kind": "other",
+        "reason": "ENOENT: ENOENT: no such file or directory, lstat '/tmp/signerd-documented-surface-EaPICN/.config/signerd/seal.pass'"
+      }
+    }
+  ],
+  "verdict": "clean",
+  "defects": []
+}
