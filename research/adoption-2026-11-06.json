@@ -1,0 +1,70 @@
+{
+  "measuredAt": "2026-11-06T04:22:12.198Z",
+  "repo": "auroraxo/signerd",
+  "checks": {
+    "repoMetadata": {
+      "public": true,
+      "license": "MIT",
+      "description": "Scoped signing daemon for Solana — the ssh-agent pattern for keys. The key lives once in a local daemon; processes hold grants, never secrets. v0 prototype, not a reviewed wallet.",
+      "ok": true
+    },
+    "starForkCensus": {
+      "starsTotal": 0,
+      "forksTotal": 0,
+      "nonOwnerStars": [],
+      "nonOwnerForks": [],
+      "starsApiUsable": true,
+      "ok": true
+    },
+    "issueCensus": {
+      "total": 0,
+      "external": [],
+      "ok": true
+    },
+    "traffic": {
+      "window": "last 14 days, GitHub-fixed buckets",
+      "views": {
+        "count": 5,
+        "uniques": 3
+      },
+      "clones": {
+        "count": 922,
+        "uniques": 255
+      },
+      "caveat": "clone count includes every CI checkout of this repo; not an adoption signal",
+      "ok": true
+    },
+    "referrers": {
+      "all": [
+        {
+          "referrer": "github.com",
+          "count": 4,
+          "uniques": 3
+        }
+      ],
+      "external": [],
+      "ok": true
+    }
+  },
+  "placement": {
+    "upstream": "solana-foundation/awesome-solana-ai",
+    "pr": 280,
+    "title": "Add signerd to Developer Tools",
+    "state": "open",
+    "merged": false,
+    "mergedBy": null,
+    "mergedAt": null,
+    "url": "https://github.com/solana-foundation/awesome-solana-ai/pull/280",
+    "fetchedAt": "2026-11-06T04:22:12.198Z"
+  },
+  "verdict": {
+    "class": "not-distributed-not-consumed",
+    "signals": [
+      "placement solana-foundation/awesome-solana-ai#280 state=open",
+      "zero non-owner stars, forks, issues, PRs"
+    ],
+    "meaning": "the candidate channel is open but nothing has been consumed"
+  },
+  "dataSourcesFailed": 0,
+  "complete": true
+}
