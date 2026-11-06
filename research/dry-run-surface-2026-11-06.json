@@ -1,0 +1,53 @@
+{
+  "date": "2026-11-06",
+  "tree": "main",
+  "m1_cli_dry": {
+    "status": 0,
+    "stderrHead": "",
+    "stdoutHead": "{\"ok\":true,\"dry\":true,\"allowed\":true,\"amountLamports\":\"42\",\"feeLamports\":\"5000\",\"totalLamports\":\"5042\",\"wireSha256\":\"69f958e6ff119d829e7be8b0d22d92ebff84f3129b5a1ce5564bdcff79cf5ea5\",\"messageSha256\":\"",
+    "ok": true,
+    "dryEcho": true,
+    "hasSignature": false,
+    "outFileWritten": false,
+    "journalGrew": false
+  },
+  "m2_frame_dry_true": {
+    "ok": true,
+    "error": null,
+    "hasSignature": false,
+    "dryEcho": true,
+    "responseKeys": [
+      "allowed",
+      "amountLamports",
+      "budgetConsumed",
+      "dry",
+      "feeLamports",
+      "messageSha256",
+      "ok",
+      "totalLamports",
+      "windowRemainingLamports",
+      "windowSpentLamports",
+      "wireSha256"
+    ],
+    "journalBytesBefore": 0,
+    "journalBytesAfter": 0,
+    "journalGrew": false
+  },
+  "m3_frame_dry_string": {
+    "ok": false,
+    "error": "request_invalid",
+    "hasSignature": false,
+    "dryEcho": false,
+    "journalBytesBefore": 0,
+    "journalBytesAfter": 0,
+    "journalGrew": false
+  },
+  "m4_control_real_sign": {
+    "ok": true,
+    "error": null,
+    "hasSignature": true,
+    "journalBytesBefore": 0,
+    "journalBytesAfter": 366,
+    "journalGrew": true
+  }
+}
