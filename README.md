@@ -9,8 +9,10 @@ Scoped signing daemon for Solana: the ssh-agent pattern, applied to Solana keys.
 No package is published to npm yet — the artifact is ready and the remaining gate is credentials (see Distribution and adoption below) — so the install path that exists today is the release tag:
 
 ```bash
-npm install github:auroraxo/signerd#v0.2.3
+npm install github:auroraxo/signerd#v0.2.4
 ```
+
+**What this pin ships that `v0.2.3` does not** (each measured below, each defect immutable on the v0.2.3 tag): the sealed-mode block runs verbatim — its own flags, its own order, a full `run` command instead of a `...` placeholder; unknown flags and extra arguments are refused *before* anything is read, written or started (a typo'd seal flag used to start the daemon **unsealed** on a tampered sealed grant file); and `--dry` is real — in the day-8 consumer run the identical `receipt.py` body previewed with `--dry` was signed for real immediately afterwards, proving the preview spent neither window budget nor replay identity.
 
 That path is **measured, not asserted**: `node tools/measure-install-path.mjs --ref v0.2.3` performs a real install from the tag into an empty directory and checks the installed manifest (version matches the tag, not publish-blocked) and the quickstart, writing `research/install-path-<tag>-<date>.json`. The superseded tag `v0.1.0` measured `defective:private-true+readme-no-quickstart` (it predates the stranger-install fixes below) — that artifact is kept as the falsification record.
 
