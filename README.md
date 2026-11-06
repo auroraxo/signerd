@@ -270,9 +270,11 @@ signerd grant-add --grants ~/.config/signerd/grants.json --name ops-24h \
 # A SECOND scope is a second grant in the SAME file, added with --append
 # (one scope per grant; atomic write, the map stays loadable; the appended
 # grant is live on the daemon's next request - the file is re-read per
-# request). Without --append an existing file is refused, and a SEALED
-# file is never rewritten: edit it by hand, then re-seal with
-# `signerd seal-grants --grants ... --seal-passphrase-file ...`.
+# request). Without --append an existing file is refused. A SEALED file is
+# rewritten only by the CLI, never by hand: `grant-add --append` re-seals the
+# file as part of the act (it needs the seal passphrase, see below), and
+# `grant-remove` does the same. Hand-editing a sealed file breaks its seal,
+# and the daemon then refuses the file (grant_file_seal_mismatch).
 signerd grant-add --grants ~/.config/signerd/grants.json --name ops-payroll --append \
             --keystore ~/.config/signerd/ops.key \
             --destination Vote111111111111111111111111111111111111111 \
@@ -307,16 +309,6 @@ signerd run --keystore ~/.config/signerd/ops.key --passphrase-file ~/.config/sig
             --ledger ~/.local/share/signerd/journal.jsonl \
             --socket ~/.local/share/signerd/signerd.sock
 
-# optional (opt-in, fail-closed): seal grant file and journal against content
-# written by anyone who could write them before the daemon looks. After this,
-# the daemon refuses unsealed or altered files instead of trusting mode checks.
-signerd seal-grants --grants ~/.config/signerd/grants.json \
-            --grant-seal-passphrase-file ~/.config/signerd/seal.pass
-signerd seal-journal --ledger ~/.local/share/signerd/journal.jsonl \
-            --journal-seal-passphrase-file ~/.config/signerd/seal.pass
-signerd run ... --grant-seal-passphrase-file ~/.config/signerd/seal.pass \
-            --journal-seal-passphrase-file ~/.config/signerd/seal.pass
-
 # a client: no key material, only a grant name and the transaction bytes.
 # build-tx reads only the keystore's PUBLIC key (no passphrase) and writes
 # the unsigned file the next line reads. Its default blockhash is a random
@@ -331,6 +323,41 @@ signerd build-tx --keystore ~/.config/signerd/ops.key \
             --to So11111111111111111111111111111111111111112 \
             --lamports 42 --out tx.bin --blockhash "$BLOCKHASH"
 signerd sign --socket ~/.local/share/signerd/signerd.sock --grant ops-24h --tx tx.bin
+
+# optional (opt-in, fail-closed): seal the grant file and the journal against
+# content written by anyone who could write them before the daemon looks. After
+# this, the daemon refuses unsealed or altered files instead of trusting mode
+# checks alone.
+#
+# ORDER MATTERS, and the order is the one the tools need:
+#   1. seal the GRANT file (it exists already);
+#   2. the JOURNAL is created by the daemon on its first append - the `sign`
+#      line above is that append - so `seal-journal` comes AFTER it;
+#   3. STOP the daemon (it holds the journal lock while it serves; a live
+#      lock is refused with `ledger_locked: pid <n>` - that refusal is the
+#      daemon's protection, not a bug), then run the two seal commands;
+#   4. restart the daemon in sealed mode (the command below).
+# The flags below are the tools' own: `seal-grants` reads
+# --seal-passphrase-file, `seal-journal` reads --journal for the path.
+signerd seal-grants --grants ~/.config/signerd/grants.json \
+            --seal-passphrase-file ~/.config/signerd/seal.pass
+signerd seal-journal --journal ~/.local/share/signerd/journal.jsonl \
+            --journal-seal-passphrase-file ~/.config/signerd/seal.pass
+
+# now restart the daemon in SEALED mode: the same command as above, plus the
+# two seal passphrases. A sealed daemon refuses an unsealed, altered or
+# shortened grant file or journal (grant_file_unsealed / grant_file_seal_mismatch
+# / ledger_sealed / ledger_mac_short).
+signerd run --keystore ~/.config/signerd/ops.key --passphrase-file ~/.config/signerd/pass \
+            --grants ~/.config/signerd/grants.json \
+            --ledger ~/.local/share/signerd/journal.jsonl \
+            --socket ~/.local/share/signerd/signerd.sock \
+            --grant-seal-passphrase-file ~/.config/signerd/seal.pass \
+            --journal-seal-passphrase-file ~/.config/signerd/seal.pass
+# A sealed grant file is rewritten only by the CLI: `grant-add --append` and
+# `grant-remove` re-seal it as part of the act (they need
+# --seal-passphrase-file). Hand-editing a sealed file breaks its seal and the
+# daemon then refuses the file (grant_file_seal_mismatch).
 # Note (measured, not asserted): the signing path itself never touches the
 # network — that fetch runs in YOUR shell, and signerd stays offline. The
 # signed wire is then valid to mainnet itself except for one thing this
@@ -614,6 +641,21 @@ Running the documented quickstart verbatim under this machine's default umask **
 **Ladder:** `test/quickstart-stranger.test.js` (5 tests) is 4 RED / 1 GREEN on the pre-fix tree and 5/5 GREEN after; the pre-fix-GREEN one is the loose-passphrase refusal (the guard proving the fix did not weaken the rule). Full suite 212 -> **217/217**, crash harness green both modes, install-smoke 12/12 checks.
 
 **Limits:** no signature bytes, grant semantics or ledger format changed; an operator who pre-created a loose state directory still gets the (now self-explaining) refusal rather than a silent chmod; the install-smoke covers Linux x64/npm only (no macOS/Windows run); still user zero — no outside user has installed it.
+
+## Sealed-mode surface defects (2026-11-06) — the documented sealed block could not run
+
+The sealed mode is opt-in, so almost nobody had walked it end to end, and the instruments that guard the quickstart missed it: `test/installed-tag-journey.test.js` checks that the pinned tag *dispatches* and *documents* each command **name** — never that the documented **flags** parse — and no test executed the seal block from the README. The defect cluster below was found by running the README's own seal block verbatim against a fresh setup, and each defect is pinned by `test/sealed-mode-surface.test.js` (7 tests: 4 enforcement RED on the pre-fix tree, 3 guards GREEN on both trees).
+
+1. **The tools were documented with the daemon's flags.** The block said `seal-grants --grant-seal-passphrase-file` and `seal-journal --ledger`, but the tools read `--seal-passphrase-file` and `--journal` (`readPassphrase(args, 'seal-passphrase-file')`, `requireArg(args, 'journal')`). Both lines exited 2 with `missing --seal-passphrase-file` / `missing --journal` — a documented command that cannot execute, the same class as the cargo-install line fixed on 2026-11-02. **Fix:** the README now writes the tools' own flags.
+2. **The block was in the wrong place.** It sat *before* `signerd run`, but the journal file is created by the daemon's **first append** — the `sign` line — so `seal-journal` on a fresh setup failed with `ledger_missing`, and while the daemon was still running it would also have hit `ledger_locked: pid <n>`. **Fix:** the block now sits after the client section and states its own order: seal the grant file, then (after the daemon has signed once, and after it is stopped) seal the journal, then restart in sealed mode. The closing `signerd run ...` shorthand — which is not an executable command — is now the full command with its flags, so the block can be run verbatim.
+3. **A crashed daemon bricked the offline recovery tools.** `seal-journal` and `migrate` each carried their own minimal lock claim that refused **every** existing lock with `ledger_locked: stop the daemon first`, while the daemon itself took over a provably dead owner (`#acquireJournalLock`). A daemon killed with SIGKILL leaves `<journal>.lock` behind (nobody runs the release path), so the tools refused **forever** with a message telling the operator to stop a daemon that was not running — while `signerd run` on the same journal would have started. The tools were the only processes that could not proceed, and they are exactly the processes an operator reaches for after a crash. **Fix:** the daemon's lock logic moved into `src/journal-lock.js` and the offline tools now use the **same** implementation — one rule, so the two cannot drift apart again. A live owner still refuses everything (`ledger_locked: pid <n>`, guard G1); a provably dead owner is taken over with the same guarded rename-and-prove race window the daemon's review #1 test pins.
+4. **The README told the operator to hand-edit a file the loader refuses to trust.** The old instruction said the sealed grant file was never rewritten at all and sent the operator to edit it by hand and re-seal afterwards — contradicting the CLI, which has re-sealed a sealed file on `grant-add --append --seal-passphrase-file` since commit `bf72775` (measured working 2026-11-06: append → `{"ok":true,…,"sealed":true}`, `verify-grants` ok). Hand-editing a sealed file breaks its seal, and the daemon then refuses the file (`grant_file_seal_mismatch`). **Fix:** the README now names the CLI's repair (`grant-add --append` / `grant-remove` re-seal as part of the act). The regression test scans the README for the old sentence, so this cannot come back unnoticed.
+
+**Ladder:** `test/sealed-mode-surface.test.js` is **4 RED / 3 GREEN** on the pre-fix tree (`git stash` of the fix, test kept) and **7/7 GREEN** after; the 3 pre-fix greens are the false-positive guards (a live lock still refuses, a missing journal still refuses, a group-readable passphrase file is still refused) — a fix that refuses everything is not a fix. Full suite 391 -> **398/398**, crash harness green in both modes (25 SIGKILL rounds, sealed and unsealed), install-smoke 12/12.
+
+**Instrument note (why the first version of the test measured nothing):** `process.kill(pid, 0)` reports an **unreaped zombie** as alive, and a synchronous `spawnSync('sleep')` poll loop blocks the very event loop that would reap it. A daemon killed as a backgrounded grandchild therefore looked alive forever, and the "dead owner" precondition of the takeover test could never hold. The test now spawns the daemon as a direct child and waits for the `exit` event asynchronously. The same trap would bite any later test that wants a provably dead lock owner.
+
+**Limits:** the sealed mode itself is unchanged — same HMAC seal, same key derivation, same floor anchor, same refusals; only the lock's *ownership rule* is now shared, and a live lock still refuses exactly as before. No signature bytes, grant semantics or journal format changed. Still user zero — no outside user has installed it.
 
 ## Next qualification
 

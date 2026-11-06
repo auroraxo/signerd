@@ -35,6 +35,7 @@ const {
   JOURNAL_LEASE_MAX_BYTES, GENESIS_HASH,
 } = require('./ledger');
 const { readUnderLease } = require('./lease');
+const { claimJournalLock } = require('./journal-lock');
 const seal = require('./journalseal');
 
 function fail(code, detail) {
@@ -46,28 +47,16 @@ function fail(code, detail) {
 // Claim the daemon's own journal lock (atomic link, never overwrites) for the
 // whole seal, so a daemon starting mid-rewrite is refused instead of racing
 // the rename. Mirrors migrate.js exactly.
+//
+// 2026-11-06: this used to be a bare link(2) that refused EVERY EEXIST with
+// "stop the daemon first". The daemon has a guarded takeover of a provably
+// dead owner, the tools did not - so a daemon killed with SIGKILL (which
+// leaves <journal>.lock behind) bricked seal-journal and migrate forever,
+// with a message telling the operator to stop a daemon that was not running.
+// The shared module now applies the daemon's rule: a LIVE owner refuses, a
+// provably DEAD owner is taken over.
 function lockJournal(file) {
-  const lockFile = `${file}.lock`;
-  const token = crypto.randomBytes(16).toString('hex');
-  const claim = `${lockFile}.${token}`;
-  const fd = fs.openSync(claim, 'wx', 0o600);
-  try {
-    fs.writeSync(fd, JSON.stringify({ pid: process.pid, token, startedAt: Date.now() }));
-    fs.fsyncSync(fd);
-  } finally { fs.closeSync(fd); }
-  try {
-    fs.linkSync(claim, lockFile);
-  } catch (err) {
-    throw fail('ledger_locked', err.code === 'EEXIST' ? 'stop the daemon first' : err.code);
-  } finally {
-    try { fs.unlinkSync(claim); } catch { /* best effort */ }
-  }
-  return () => {
-    try {
-      const owner = JSON.parse(fs.readFileSync(lockFile, 'utf8'));
-      if (owner && owner.token === token) fs.unlinkSync(lockFile);
-    } catch { /* gone */ }
-  };
+  return claimJournalLock(file);
 }
 
 function writeExclusive(file, bytes, mode = 0o600) {

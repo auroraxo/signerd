@@ -17,6 +17,7 @@ const {
   JOURNAL_LEASE_MAX_BYTES,
 } = require('./ledger');
 const { readUnderLease } = require('./lease');
+const { claimJournalLock } = require('./journal-lock');
 
 function fail(code, detail) {
   const err = new Error(detail === undefined ? code : `${code}: ${detail}`);
@@ -42,29 +43,9 @@ function indexWires(dir) {
 
 // Claim the daemon's own journal lock (atomic link, never overwrites) for the
 // whole migration, so a daemon starting mid-rewrite is refused instead of
-// racing the rename.
+// racing the rename. Takes over provably dead owners (see journal-lock.js).
 function lockJournal(file) {
-  const lockFile = `${file}.lock`;
-  const token = crypto.randomBytes(16).toString('hex');
-  const claim = `${lockFile}.${token}`;
-  const fd = fs.openSync(claim, 'wx', 0o600);
-  try {
-    fs.writeSync(fd, JSON.stringify({ pid: process.pid, token, startedAt: Date.now() }));
-    fs.fsyncSync(fd);
-  } finally { fs.closeSync(fd); }
-  try {
-    fs.linkSync(claim, lockFile);
-  } catch (err) {
-    throw fail('ledger_locked', err.code === 'EEXIST' ? 'stop the daemon first' : err.code);
-  } finally {
-    fs.unlinkSync(claim);
-  }
-  return () => {
-    try {
-      const owner = JSON.parse(fs.readFileSync(lockFile, 'utf8'));
-      if (owner && owner.token === token) fs.unlinkSync(lockFile);
-    } catch { /* gone */ }
-  };
+  return claimJournalLock(file);
 }
 
 function writeExclusive(file, bytes) {
