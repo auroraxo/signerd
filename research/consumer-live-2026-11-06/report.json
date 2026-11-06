@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-06T21:22:28.357Z",
+  "generatedAt": "2026-11-06T21:51:39.466Z",
   "day": "2026-11-06",
   "what": "receipt signed through a signerd daemon via receipt.py --via-signerd; issuer key held only by the daemon",
   "clientKeyMaterial": "none — OPENRECEIPTS_HOME never created",
