@@ -657,6 +657,37 @@ The sealed mode is opt-in, so almost nobody had walked it end to end, and the in
 
 **Limits:** the sealed mode itself is unchanged — same HMAC seal, same key derivation, same floor anchor, same refusals; only the lock's *ownership rule* is now shared, and a live lock still refuses exactly as before. No signature bytes, grant semantics or journal format changed. Still user zero — no outside user has installed it.
 
+## Flag-surface defects (2026-11-06) — a security flag could be silently switched off
+
+`bin/signerd.js` parsed `--flag value` into a map and then read only the flags the dispatch knew about. Everything else was dropped without a word. For a cosmetic flag that is invisible; for a security flag it is a **fail-open**, because the flags that turn sealed mode on are *optional* — `run` starts happily without them.
+
+**Measured (2026-11-06, live, pre-fix), the same grant file both times** — a file that was sealed with `seal-grants` and then tampered with (cap raised to 999999999999, so the HMAC no longer verifies), started twice, differing only in one dash of one flag (each line below is the *flag given to `signerd run`* and the daemon's answer):
+
+```
+--grant-seal-passphrase-file <pass>   -> grant_file_seal_mismatch   (daemon REFUSES)
+--grant-seal-passphrasefile  <pass>   -> {"ok":true,...}            (daemon STARTS)
+```
+
+One missing dash and the daemon started **unsealed** on a grant file whose seal no longer verifies — reporting `{"ok":true}` and giving no indication that sealed mode was off. Sealed mode exists to refuse exactly that file. Two more cases of the same class were measured: `--journal-seal-passphrasefile` behaves identically on the journal half, and `grant-add --seal-passphrase-file <file>` **without** `--append` accepted the flag and wrote an **unsealed** file (`seal` field absent, `{"ok":true}`) — the operator asked for a sealed file and got one the daemon in sealed mode would refuse, while the `--append` path already refused the same situation (`grant_file_unsealed`): one flag, two behaviours.
+
+**Why nothing caught it:** every existing instrument checked *documented* lines against the CLI (`missing --<flag>` is visible; an ignored flag is not). A flag the README does not document, but that an operator can type — and that the CLI silently swallows — had no instrument at all.
+
+**Fix (test-first).** `src/cli-flags.js` declares, per command, the flags that command's dispatch actually reads. `bin/signerd.js` refuses anything else **before** it reads, writes or starts anything:
+
+```
+unknown_flag: --grant-seal-passphrasefile
+  fix: signerd run does not take --grant-seal-passphrasefile - did you mean --grant-seal-passphrase-file?
+  fix: signerd run takes: --grants --grant-seal-passphrase-file --journal-seal-passphrase-file --keystore --ledger --passphrase-file --socket
+```
+
+The refusal names the flag, the repair (the closest flag the command does take, when there is one) and the full list; a positional argument after the command is refused the same way (`unknown_argument`), so nothing is dropped either. An **unknown command** still prints the usage banner — `tools/measure-documented-flags.mjs` reads that banner to classify one. `grant-add --seal-passphrase-file` without `--append` now refuses `grant_file_unsealed` and writes **nothing**, naming both repairs the CLI offers (create then `seal-grants`, or `--append`).
+
+**Ladder (`test/flag-surface.test.js`, 10 tests):** **7 RED / 3 GREEN** on the pre-fix tree (the fix stashed, the test kept). The 7 RED are the defect tests — including the live one above, where a typo'd seal flag started a daemon on a tampered sealed file. The 3 GREEN are the false-positive guards: with the *correct* seal flag the tampered sealed file is still refused (`grant_file_seal_mismatch`), an unknown command still prints the usage banner, and the ordinary documented commands still run — a fix that refuses everything is not a fix. After: **10/10**.
+
+**Instrument note.** The strict surface changed the CLI's *refusal shape*, and the documented-surface instrument had to learn it: `missing --<flag>` named the flag the CLI **wanted**, `unknown_flag: --<flag>` now names the flag the README **got wrong**. Same defect class — the documented line does not run — so `tools/measure-documented-flags.mjs` reports both as a flag defect (new kind `unknown-flag`), and the guard that pins the pre-fix seal block accepts either shape. Two of the review-#6 CLI tests also had to be corrected: they passed `--keystore`/`--passphrase-file` to `status`, which has never read either — flags the old CLI swallowed silently, so those tests were passing for a reason unrelated to what they assert. The instrument, not the test, was wrong; the hygiene assertions are unchanged and still pass.
+
+**Limits:** argument hygiene, not a sandbox — a flag that *is* in the list can still be given a bad value (the value validators judge that), and the allowlist only holds as long as a dispatch's flag list is kept in sync with `src/cli-flags.js` (pinned per direction: F4 checks every flag the README documents is accepted; the per-command lists are the flags each dispatch reads). Still user zero — no outside user has installed it, and nothing here changes signature bytes, grant semantics, journal format or the seal itself.
+
 ## Next qualification
 
 0. A **third** independent adversarial review of the signing path after the review-#2 fixes land (`src/signer.js`, `src/daemon.js`, `src/keystore.js`, `src/grantfile.js`, `src/ledger.js`), before pointing it at a key with funds: two reviews have run (2026-10-27 hardening diff, 2026-10-29 signing path) and all 12 findings are fixed and regression-tested, but neither was a professional audit and the fixes themselves have not been independently reviewed.

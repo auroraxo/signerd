@@ -3,6 +3,7 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
+const { checkFlags, closestFlag } = require('../src/cli-flags');
 
 const USAGE = `signerd — scoped signing daemon for Solana (early prototype)
 
@@ -158,6 +159,29 @@ async function main() {
   const args = parseArgs(process.argv.slice(2));
   const command = args._[0];
 
+  // THE FLAG SURFACE (measured 2026-11-06): a flag the operator set used to
+  // be dropped without a word. For `--grant-seal-passphrasefile` (typo: no
+  // dash) the daemon then STARTED on a sealed-and-tampered grant file
+  // (reporting {"ok":true}) where the correct flag refuses with
+  // grant_file_seal_mismatch - one missing dash turned sealed mode off.
+  // Refuse BEFORE anything is read, written or started. An unknown COMMAND
+  // keeps the usage banner below (measure-documented-flags.mjs reads it).
+  const verdict = checkFlags(command, args, args._);
+  if (!verdict.ok) {
+    if (verdict.code === 'unknown_flag') {
+      const suggestion = closestFlag(verdict.flag, verdict.supported);
+      process.stderr.write(`unknown_flag: --${verdict.flag}\n` +
+        `  fix: signerd ${command} does not take --${verdict.flag}` +
+        `${suggestion === null ? '' : ` - did you mean --${suggestion}?`}\n` +
+        `  fix: signerd ${command} takes: ${verdict.supported.map((f) => `--${f}`).join(' ')}\n`);
+      process.exit(2);
+    }
+    process.stderr.write(`unknown_argument: ${verdict.argument}\n` +
+      `  fix: signerd ${command} takes flags, not positional arguments ` +
+      `(it ignores nothing: check the flag name above its value)\n`);
+    process.exit(2);
+  }
+
   if (command === 'keygen') {
     const { createKeystore } = require('../src/keystore');
     const file = requireArg(args, 'keystore');
@@ -298,6 +322,22 @@ async function main() {
     const signer = typeof args.signer === 'string'
       ? args.signer
       : readKeystorePublicKey({ file: requireArg(args, 'keystore') });
+    // A seal passphrase that this path CANNOT honor must not be silently
+    // dropped (measured 2026-11-06): without --append the file is created
+    // fresh and UNSEALED, so `grant-add --seal-passphrase-file <file>` used
+    // to report ok:true and write a file with no `seal` field at all - the
+    // operator asked for a sealed file and got one the daemon in sealed mode
+    // would refuse (grant_file_unsealed). The --append path already refuses
+    // this same situation; one flag, one behaviour. Refuse, name the repair,
+    // write nothing.
+    if (typeof args['seal-passphrase-file'] === 'string' && args.append !== true) {
+      process.stderr.write(
+        `grant_file_unsealed: ${grants} carries no seal, but --seal-passphrase-file was given without --append\n` +
+        `  fix: leave out --seal-passphrase-file   # create the file first, then seal it:\n` +
+        `       signerd seal-grants --grants ${grants} --seal-passphrase-file ${args['seal-passphrase-file']}\n` +
+        `  fix: add --append   # --append + --seal-passphrase-file extends AND re-seals an existing sealed file\n`);
+      process.exit(1);
+    }
     const grant = buildTxGrant({
       name,
       signer,

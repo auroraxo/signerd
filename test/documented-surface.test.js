@@ -116,6 +116,19 @@ test('T3 classifyRun: the CLI asking for a flag is missing-flag, with the flag n
   assert.deepStrictEqual(v, { kind: 'missing-flag', flag: 'seal-passphrase-file' });
 });
 
+test('T3b classifyRun: the CLI refusing a flag the README gave is unknown-flag, with the flag named', () => {
+  // The strict CLI's refusal shape (measured 2026-11-06): it names the flag
+  // the README GOT WRONG instead of the flag it wanted.
+  const inv = { command: 'seal-grants', text: 'signerd seal-grants --grants g --grant-seal-passphrase-file s' };
+  const v = classifyRun(inv, {
+    stdout: '', status: 2,
+    stderr: 'unknown_flag: --grant-seal-passphrase-file\n' +
+      '  fix: signerd seal-grants does not take --grant-seal-passphrase-file\n' +
+      '  fix: signerd seal-grants takes: --grants --out --seal-passphrase-file\n',
+  });
+  assert.deepStrictEqual(v, { kind: 'unknown-flag', flag: 'grant-seal-passphrase-file' });
+});
+
 test('T4 classifyRun: the USAGE banner is unknown-command (command not shipped at all)', () => {
   const banner = 'signerd — scoped signing daemon for Solana (early prototype)';
   const v = classifyRun({ command: 'ghost', text: 'signerd ghost' }, { stdout: `${banner}\n`, stderr: '' });
@@ -149,7 +162,7 @@ test('T7 classifyRun: a broken measurement is other, not clean (MODULE_NOT_FOUND
   assert.deepStrictEqual(v, { kind: 'other', reason: 'measurement broken' });
 });
 
-test('T8 derive: clean rows -> clean; missing-flag, placeholder and unknown-command are defects', () => {
+test('T8 derive: clean rows -> clean; flag, placeholder and unknown-command defects are reported', () => {
   const row = (command, verdict) => ({ command, text: `signerd ${command}`, verdict });
   const clean = derive([row('keygen', { kind: 'ok' }), row('sign', { kind: 'other', reason: 'ENOENT' })]);
   assert.strictEqual(clean.verdict, 'clean');
@@ -157,14 +170,19 @@ test('T8 derive: clean rows -> clean; missing-flag, placeholder and unknown-comm
 
   const bad = derive([
     row('seal-grants', { kind: 'missing-flag', flag: 'seal-passphrase-file' }),
+    row('seal-journal', { kind: 'unknown-flag', flag: 'ledger' }),
     row('run', { kind: 'placeholder' }),
     row('ghost', { kind: 'unknown-command' }),
   ]);
   assert.strictEqual(bad.verdict, 'defective');
   assert.deepStrictEqual(bad.defects.map((d) => d.kind).sort(),
-    ['missing-flag', 'placeholder', 'unknown-command']);
+    ['missing-flag', 'placeholder', 'unknown-command', 'unknown-flag']);
   // Every defect must carry a human-readable why - a bare kind is not a finding.
   for (const d of bad.defects) assert.ok(d.why && d.why.length > 10, JSON.stringify(d));
+  // The unknown-flag defect names BOTH sides: the flag and the command.
+  const unknown = bad.defects.find((d) => d.kind === 'unknown-flag');
+  assert.strictEqual(unknown.flag, 'ledger');
+  assert.match(unknown.why, /seal-journal/);
 });
 
 test('T9 flagsIn and placeholderLines match the rules derive uses', () => {
@@ -197,10 +215,22 @@ test('G1 the pre-fix seal block (the lines v0.2.3 ships) is caught, all three de
     const report = measure(readme, CLI);
     assert.strictEqual(report.verdict, 'defective',
       'the instrument must catch the measured pre-fix block - a detector that reports nothing here is broken');
+    // The instrument must catch the measured pre-fix block in whichever
+    // refusal shape the CLI it addresses uses: the OLD CLI names the flag it
+    // WANTED (missing-flag), the strict CLI names the flag the README got
+    // WRONG (unknown-flag). Both are the same defect class; either shape
+    // counts as caught, and a defect of any OTHER kind fails here.
     const byKind = (kind) => report.defects.filter((d) => d.kind === kind);
-    assert.strictEqual(byKind('missing-flag').length, 2, JSON.stringify(report.defects));
-    assert.deepStrictEqual(byKind('missing-flag').map((d) => d.flag).sort(),
-      ['journal', 'seal-passphrase-file']);
+    const missing = byKind('missing-flag');
+    const unknown = byKind('unknown-flag');
+    assert.strictEqual(missing.length + unknown.length, 2, JSON.stringify(report.defects));
+    if (missing.length === 2) {
+      assert.deepStrictEqual(missing.map((d) => d.flag).sort(),
+        ['journal', 'seal-passphrase-file']);
+    } else {
+      assert.deepStrictEqual(unknown.map((d) => d.flag).sort(),
+        ['grant-seal-passphrase-file', 'ledger']);
+    }
     assert.strictEqual(byKind('placeholder').length, 1, JSON.stringify(report.defects));
     assert.strictEqual(byKind('placeholder')[0].command, 'run');
   } finally {
@@ -285,13 +315,27 @@ function pinnedTag() {
  * as v0.2.3 ships it (measured 2026-11-06, research/documented-surface-*
  * .json). Anything else fails the suite.
  */
+/**
+ * The measured pre-fix block, in BOTH refusal shapes.
+ *
+ * The tag's CLI is the OLD one (it answers `missing --<flag>`: the flag it
+ * WANTED), while main's CLI answers `unknown_flag: --<flag>` (the flag the
+ * README got WRONG). Same defect - the documented line does not run - so the
+ * measured block has two shapes and both are recognized. A shape that is
+ * NEITHER is a new defect and fails the suite (the skip must not open a
+ * gate).
+ */
 function isMeasuredSealedBlock(defects) {
   const shape = defects.map((d) => `${d.kind}:${d.command}${d.flag ? `:${d.flag}` : ''}`).sort();
-  return JSON.stringify(shape) === JSON.stringify([
-    'missing-flag:seal-grants:seal-passphrase-file',
-    'missing-flag:seal-journal:journal',
-    'placeholder:run',
-  ].sort());
+  const known = [
+    // the old CLI (the pinned tag): it names the flag it wanted
+    ['missing-flag:seal-grants:seal-passphrase-file',
+      'missing-flag:seal-journal:journal', 'placeholder:run'],
+    // the strict CLI (main): it names the flag the README got wrong
+    ['unknown-flag:seal-grants:grant-seal-passphrase-file',
+      'unknown-flag:seal-journal:ledger', 'placeholder:run'],
+  ];
+  return known.some((k) => JSON.stringify(shape) === JSON.stringify(k.sort()));
 }
 
 test('J2 the pinned tag ships a README whose documented invocations run', (t) => {

@@ -26,14 +26,24 @@
 // THE RULES (pure, offline-pinnable; the execution is the expensive part):
 //
 //   D1 every documented `signerd <command>` invocation must be accepted by
-//      the CLI it addresses - the CLI must not answer `missing --<flag>`.
-//      That answer means the README's flags and the CLI's flags disagree,
-//      or the README omits a flag the CLI needs.
+//      the CLI it addresses - the CLI must not answer `missing --<flag>`
+//      (it asked for a flag the README did not give) and must not answer
+//      `unknown_flag: --<flag>` (the README gave a flag the command does
+//      not take). Both are the same defect from the reader's side: the
+//      documented flags and the CLI's flags disagree, so the line as
+//      written does not run.
 //   D2 no documented invocation may contain a `...` placeholder: a line a
 //      reader copies must be a line that runs.
 //   D3 a documented invocation that fails for any OTHER reason (a file that
 //      is not there yet, a socket nobody serves) is NOT a defect - the
 //      README describes a SEQUENCE, and only the flags are the claim.
+//
+// MEASURED NOTE (2026-11-06): the CLI's refusal shape changed when the flag
+// surface became strict. `missing --<flag>` named the flag the CLI WANTED;
+// `unknown_flag: --<flag>` names the flag the README GOT WRONG (and, when
+// one is close enough, the flag it probably meant). The defect class is the
+// same - the documented invocation does not run - so both answers are
+// reported as a flag defect, with the flag named in the CLI's own words.
 //
 // Usage:
 //   node tools/measure-documented-flags.mjs --cli <path/to/bin/signerd.js> \
@@ -98,6 +108,8 @@ export function placeholderLines(invocations) {
  * rules care about:
  *   { kind: 'missing-flag', flag }  the CLI asked for a flag the README
  *                                    did not give (or named differently)
+ *   { kind: 'unknown-flag', flag }  the README gave a flag the command
+ *                                    does not take at all
  *   { kind: 'placeholder' }         the invocation is not executable
  *   { kind: 'unknown-command' }     the CLI does not know the command at all
  *   { kind: 'other', reason }       it ran but failed for a reason the README
@@ -113,6 +125,11 @@ export function classifyRun(invocation, result) {
   if (first === USAGE_BANNER) return { kind: 'unknown-command' };
   const missing = /^missing --([^\s]+)/m.exec(out);
   if (missing) return { kind: 'missing-flag', flag: missing[1] };
+  // The CLI's strict flag surface: the README named a flag the command does
+  // not take. Same defect class as missing-flag (the documented line does not
+  // run), reported with the flag the README got wrong.
+  const unknown = /^unknown_flag: --([^\s]+)/m.exec(out);
+  if (unknown) return { kind: 'unknown-flag', flag: unknown[1] };
   if (/(^|\s)\.\.\.(\s|$)/.test(invocation.text)) return { kind: 'placeholder' };
   if (result.status === 0) return { kind: 'ok' };
   // D3: a failure the README does not claim (its own sequence puts the file
@@ -154,6 +171,14 @@ export function derive(rows) {
         flag: v.flag,
         text: row.text,
         why: `the README does not give the flag --${v.flag} that the CLI asks for`,
+      });
+    } else if (v.kind === 'unknown-flag') {
+      defects.push({
+        kind: 'unknown-flag',
+        command: row.command,
+        flag: v.flag,
+        text: row.text,
+        why: `the README documents --${v.flag}, which ${row.command} does not take`,
       });
     } else if (v.kind === 'placeholder') {
       defects.push({

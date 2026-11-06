@@ -247,8 +247,15 @@ test('DEFECT R6-6: a symlinked passphrase path is refused (ELOOP), not followed'
     const target = writePass(dir, 'real.pass', 'seal passphrase r6');
     const link = path.join(dir, 'link.pass');
     fs.symlinkSync(target, link);
-    const out = cliStatus(['--keystore', cliFixture(dir),
-      '--passphrase-file', path.join(dir, 'ks.pass'), '--grant-seal-passphrase-file', link]);
+    // `status` reads --grants, --ledger and the two seal-passphrase flags.
+    // It never read --keystore/--passphrase-file: the CLI used to swallow
+    // them silently, and the strict flag surface (2026-11-06) now refuses
+    // them - which is why these calls carry only the flags the command
+    // actually takes.
+    cliFixture(dir);
+    const out = cliStatus(['--grants', path.join(dir, 'grants.json'),
+      '--ledger', path.join(dir, 'ledger.jsonl'),
+      '--grant-seal-passphrase-file', link]);
     assert.notEqual(out.status, 0, `symlinked passphrase must be refused, got: ${out.stderr}`);
     assert.match(out.stderr, /regular file|ENOENT|ELOOP/,
       `expected a symlink refusal, got: ${out.stderr}`);
@@ -266,8 +273,10 @@ test('DEFECT R6-6: a world-writable directory holding the passphrase is refused'
     const pass = path.join(wdir, 'seal.pass');
     fs.writeFileSync(pass, 'seal passphrase r6');
     fs.chmodSync(pass, 0o600);
-    const out = cliStatus(['--keystore', cliFixture(dir),
-      '--passphrase-file', path.join(dir, 'ks.pass'), '--grant-seal-passphrase-file', pass]);
+    cliFixture(dir);
+    const out = cliStatus(['--grants', path.join(dir, 'grants.json'),
+      '--ledger', path.join(dir, 'ledger.jsonl'),
+      '--grant-seal-passphrase-file', pass]);
     assert.notEqual(out.status, 0, `world-writable passphrase dir must be refused, got: ${out.stderr}`);
     assert.match(out.stderr, /directory/,
       `expected a directory refusal, got: ${out.stderr}`);
@@ -281,8 +290,10 @@ test('DEFECT R6-6: a group/other-accessible passphrase file is still refused', (
   try {
     const pass = writePass(dir, 'loose.pass', 'seal passphrase r6');
     fs.chmodSync(pass, 0o644);
-    const out = cliStatus(['--keystore', cliFixture(dir),
-      '--passphrase-file', path.join(dir, 'ks.pass'), '--grant-seal-passphrase-file', pass]);
+    cliFixture(dir);
+    const out = cliStatus(['--grants', path.join(dir, 'grants.json'),
+      '--ledger', path.join(dir, 'ledger.jsonl'),
+      '--grant-seal-passphrase-file', pass]);
     assert.notEqual(out.status, 0, 'mode 0644 passphrase must be refused');
     assert.match(out.stderr, /group\/other accessible/,
       `expected the mode refusal, got: ${out.stderr}`);
@@ -294,10 +305,11 @@ test('DEFECT R6-6: a group/other-accessible passphrase file is still refused', (
 test('CONTROL (holds pre-fix): a well-formed 0600 passphrase in a private directory is read', (t) => {
   const dir = tmpDir();
   try {
-    const keystore = cliFixture(dir);
+    cliFixture(dir);
     const pass = writePass(dir, 'seal.pass', 'seal passphrase r6');
-    const out = cliStatus(['--keystore', keystore,
-      '--passphrase-file', path.join(dir, 'ks.pass'), '--grant-seal-passphrase-file', pass]);
+    const out = cliStatus(['--grants', path.join(dir, 'grants.json'),
+      '--ledger', path.join(dir, 'ledger.jsonl'),
+      '--grant-seal-passphrase-file', pass]);
     // seal-grants on an UNSEALED doc is grant_file_unsealed, not a hygiene
     // error: the point is that readPassphrase ACCEPTED the file.
     assert.doesNotMatch(out.stderr, /group\/other|regular file|directory/,
