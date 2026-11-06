@@ -78,13 +78,9 @@ function manifestGates(manifest, readme, opts = {}) {
   // The rule: the README must contain the runnable step, not a prose
   // reference to a value nobody documents how to obtain.
   //
-  // opts.tagReadme: checked on the WORKING tree only. The released tag
-  // v0.2.2 was cut before this rule existed and tags are immutable — the
-  // same limit sememe records for v0.4.0. The step reaches a tag with the
-  // next scheduled release (Tag 8, 2026-11-05T21:00Z); G4's tag check is
-  // then enabled (see card note). Checking it now would assert an
-  // immutable fact the tag cannot satisfy — a red the tag can never fix.
-  if (!opts.tagReadme && (typeof readme !== 'string' || !readme.includes("getLatestBlockhash('finalized')"))) {
+  // G4: applied to the WORKING tree AND the tag tree (no opt-out from v0.2.3,
+  // see the note above).
+  if (typeof readme !== 'string' || !readme.includes("getLatestBlockhash('finalized')")) {
     gates.push('readme-blockhash-step-not-runnable');
   }
   return gates;
@@ -103,7 +99,7 @@ const latest = latestReleaseTag(tags);
 
 test('T1 the released artifacts satisfy the contract (RED while the tag is stale)', { skip: !latest && 'no release tag exists in this checkout' }, () => {
   const repoManifest = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
-  const repoGates = manifestGates(repoManifest, fs.readFileSync(path.join(ROOT, 'README.md'), 'utf8'), { tagReadme: false });
+  const repoGates = manifestGates(repoManifest, fs.readFileSync(path.join(ROOT, 'README.md'), 'utf8'));
   assert.deepStrictEqual(repoGates, [], `the working tree must satisfy G1: ${repoGates.join(', ')}`);
 
   // G3: package.json version and the release tag must name the same thing,
@@ -113,7 +109,7 @@ test('T1 the released artifacts satisfy the contract (RED while the tag is stale
 
   const tagManifest = JSON.parse(showTag(latest, 'package.json'));
   const tagReadme = showTag(latest, 'README.md');
-  const g2 = manifestGates(tagManifest, tagReadme, { tagReadme: true });
+  const g2 = manifestGates(tagManifest, tagReadme);
   assert.deepStrictEqual(g2, [], `release tag ${latest} is stale-by-content: ${g2.join(', ')}`);
 });
 

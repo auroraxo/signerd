@@ -4,15 +4,17 @@ Scoped signing daemon for Solana: the ssh-agent pattern, applied to Solana keys.
 
 **Status: v0 shipped to `main` (2026-11-01), NOT a signing service or security-reviewed wallet.** The scope was narrowed on 2026-10-26 after an adversarial review (see Safety boundary). On 2026-10-27 the first tested *legacy System-transfer-only* refusal checker and its atomic expenditure/replay ledger were added; on 2026-10-27/28 the local daemon (Unix socket, encrypted keystore, grant file) was added; on 2026-10-31 the **message-grant envelope** landed and on 2026-11-01 the whole qualification branch (envelope + reviews #6–#9 + the real openreceipts consumer) was **merged to main and tagged `v0.1.0`**. **The daemon holds a real key and produces real signatures — it has passed seven adversarial review rounds (daemon hardening 2026-10-27; signing path 2026-10-29, #2; migration/replay 2026-10-29, #3; open-handle 2026-10-30, #4; 18 external attack probes, #5; seal surface, #6; message envelope, #7 — the last plus #8/#9 re-verified on 2026-11-01, #9 for the first time by an independent reviewer), and every finding from all rounds is fixed and regression-tested against the reviewed code. No professional audit has happened, there are no outside users yet, and no real funds should use it yet.** The rest of the v1 envelope below remains a plan.
 
-## Install (measured 2026-11-05)
+## Install (measured 2026-11-06)
 
 No package is published to npm yet — the artifact is ready and the remaining gate is credentials (see Distribution and adoption below) — so the install path that exists today is the release tag:
 
 ```bash
-npm install github:auroraxo/signerd#v0.2.2
+npm install github:auroraxo/signerd#v0.2.3
 ```
 
-That path is **measured, not asserted**: `node tools/measure-install-path.mjs --ref v0.2.2` performs a real install from the tag into an empty directory and checks the installed manifest (version matches the tag, not publish-blocked) and the quickstart, writing `research/install-path-<tag>-<date>.json`. The superseded tag `v0.1.0` measured `defective:private-true+readme-no-quickstart` (it predates the stranger-install fixes below) — that artifact is kept as the falsification record.
+That path is **measured, not asserted**: `node tools/measure-install-path.mjs --ref v0.2.3` performs a real install from the tag into an empty directory and checks the installed manifest (version matches the tag, not publish-blocked) and the quickstart, writing `research/install-path-<tag>-<date>.json`. The superseded tag `v0.1.0` measured `defective:private-true+readme-no-quickstart` (it predates the stranger-install fixes below) — that artifact is kept as the falsification record.
+
+**What the tag must ship (measured 2026-11-06, `test/installed-tag-journey.test.js`):** every command this README documents in a code block must be *dispatched by the pinned tag* and documented by the tag's own README — because the installed package ships the TAG's README, not this page's. v0.2.2 failed exactly this: it was cut before `grant-remove` existed, so a stranger who installed the pin and followed the revocation instruction hit an unknown command. The journey test reads the pin from this README, so moving the pin moves the measurement; a command documented here but absent from the tag turns the suite red before the next release, not after it.
 
 **There is no Rust package and no cargo-based install path.** signerd is a Node package with no `Cargo.toml`; a listing elsewhere advertised an install-from-git cargo command, which fails with `could not find Cargo.toml` (measured 2026-11-05, `research/install-path-v0.1.0-2026-11-05.json`) and has been corrected.
 
