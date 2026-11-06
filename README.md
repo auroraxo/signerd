@@ -275,6 +275,20 @@ signerd grant-add --grants ~/.config/signerd/grants.json --name ops-payroll --ap
             --max-lamports 1000000 --window-max-lamports 1000000 \
             --window-seconds 60 --expires 2030-01-01T00:00:00Z
 
+# REVOKE a scope: remove the grant by name. Do NOT hand-edit the grant file —
+# the loader judges the file first (directory, lease, owner, mode, schema,
+# seal), the write is atomic (temp+rename), and the removal takes effect on
+# the daemon's NEXT request (no restart, no signal). An unknown name changes
+# nothing and the refusal lists the grants that are in the file.
+signerd grant-remove --grants ~/.config/signerd/grants.json --name ops-payroll
+# A SEALED file is re-sealed as part of the act (the old seal covered content
+# that no longer exists); it needs the seal passphrase:
+signerd grant-remove --grants ~/.config/signerd/grants.json --name ops-payroll \
+            --seal-passphrase-file ~/.config/signerd/seal.pass
+# Limits: removal is BY NAME (it removes the whole scope — it does not narrow
+# a cap; edit the file for that), and a grant removed mid-request is judged by
+# the loader read at the START of that request.
+
 # OR adopt a key you already hold — the migration path. Reads a solana-keygen
 # id.json, a base58 secret, or 64 raw bytes; encrypts it; leaves the source alone.
 # Refuses an existing keystore (the keygen line above writes the SAME file):

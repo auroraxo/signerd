@@ -18,6 +18,14 @@ Usage:
             atomic write; a SEALED file is never rewritten - re-seal after
             a hand edit); with --keystore the signer is read
             from the keystore's PUBLIC key (no passphrase needed)
+  signerd grant-remove --grants <file> --name <grant> [--seal-passphrase-file <file>]
+            remove ONE grant from an existing grant file (the revocation
+            path): the loader judges the file first (directory, lease,
+            owner, mode, schema, seal), the write is atomic (temp+rename),
+            and the removal takes effect on the daemon's NEXT request — no
+            restart, no signal. An unknown --name changes NOTHING and the
+            refusal names the grants that are in the file. A SEALED file is
+            re-sealed as part of the act and needs --seal-passphrase-file
   signerd build-tx --keystore <file> --to <pubkey> --lamports <u64> --out <file>
             [--blockhash <b58-32>]
             build the UNSIGNED transaction file the documented 'sign --tx'
@@ -398,6 +406,77 @@ async function main() {
         process.stderr.write(
           `grant_file_symlink: ${grants} is a symlink\n` +
           `  fix: point --grants at the real file, or remove the link   # a symlink is never followed here\n`);
+        process.exit(1);
+      }
+      throw err;
+    }
+  }
+
+  if (command === 'grant-remove') {
+    const { removeGrantFromFile } = require('../src/grantadd');
+    const grants = requireArg(args, 'grants');
+    const name = requireArg(args, 'name');
+    try {
+      const sealPassphrase = typeof args['seal-passphrase-file'] === 'string'
+        ? readPassphrase(args, 'seal-passphrase-file') : undefined;
+      const out = removeGrantFromFile({ file: grants, name, sealPassphrase });
+      process.stdout.write(JSON.stringify({ ok: true, ...out }) + '\n');
+      return;
+    } catch (err) {
+      // Name the repair, not just the verdict (the same rule as
+      // grant-add/passphrase/keystore/tx refusals).
+      if (err && err.code === 'grant_not_found') {
+        const listed = Array.isArray(err.grants) && err.grants.length > 0
+          ? `in-file grants: ${err.grants.join(', ')}\n`
+          : 'the file holds no grants\n';
+        process.stderr.write(
+          `grant_not_found: no grant named ${name} in ${grants}\n` +
+          `  ${listed}` +
+          `  fix: choose one of the in-file names with --name   # a removal removes the whole scope, by name\n`);
+        process.exit(1);
+      }
+      if (err && err.code === 'grant_file_sealed') {
+        process.stderr.write(
+          `grant_file_sealed: ${grants} carries an HMAC seal\n` +
+          `  fix: add --seal-passphrase-file <file>   # the removal re-seals the file for you\n`);
+        process.exit(1);
+      }
+      if (err && err.code === 'grant_file_unsealed') {
+        process.stderr.write(
+          `grant_file_unsealed: ${grants} carries no seal, but --seal-passphrase-file was given\n` +
+          `  fix: leave out --seal-passphrase-file to remove from an unsealed file, or\n` +
+          `  fix: signerd seal-grants --grants ${grants} --seal-passphrase-file <file>\n`);
+        process.exit(1);
+      }
+      if (err && err.code === 'grant_file_symlink') {
+        process.stderr.write(
+          `grant_file_symlink: ${grants} is a symlink\n` +
+          `  fix: point --grants at the real file, or remove the link   # a symlink is never followed here\n`);
+        process.exit(1);
+      }
+      if (err && err.code === 'grant_file_mode') {
+        process.stderr.write(
+          `${err.code}: ${err.message}\n` +
+          `  fix: chmod 600 ${grants}   # a grant file another user can write must not be modified\n`);
+        process.exit(1);
+      }
+      if (err && err.code === 'grant_file_dir_mode') {
+        process.stderr.write(
+          `${err.code}: ${err.message}\n` +
+          `  fix: chmod 700 ${path.dirname(path.resolve(grants))}   # a stranger could swap the file there\n`);
+        process.exit(1);
+      }
+      if (err && err.code === 'grant_file_unreadable') {
+        process.stderr.write(
+          `${err.code}: ${err.message}\n` +
+          `  fix: nothing to remove — no grant file at ${grants}\n` +
+          `  fix: signerd grant-add --grants ${grants} --name <grant> ...   # create one\n`);
+        process.exit(1);
+      }
+      if (err && err.code === 'grant_file_write_failed') {
+        process.stderr.write(
+          `${err.code}: ${err.detail || 'the atomic write failed'}\n` +
+          `  fix: check the directory is writable and has space; the existing file is UNCHANGED\n`);
         process.exit(1);
       }
       throw err;

@@ -1,0 +1,81 @@
+{
+  "measuredAt": "2026-11-05T23:58:00.000Z",
+  "repo": "auroraxo/signerd",
+  "what": "grant-remove: the CLI revocation path that the card's honest-limits list named as missing ('kein Grant-Entfernen (Handedit)'), measured with a test-first ladder and a mutation battery",
+  "hypothesis": "A scope can only be taken away by hand-editing a security-relevant JSON file. The product refuses hand edits everywhere else (grant_file_* refusals, atomic writes, seal provenance), so a revocation path built on the loader + atomic rename should be reachable and should take effect on a LIVE daemon's next request without a restart.",
+  "defect": {
+    "id": "GR-no-removal-command",
+    "surface": "CLI + README",
+    "evidence": "git grep -c 'grant-remove' on tree bf72775 = 0 in bin/, README documents only grant-add and seal-grants; the card's limits list says 'kein Grant-Entfernen (Handedit)'. `signerd grant-remove` on bf72775 exits 1 with an unknown-command refusal (measured as T1-T5 all RED).",
+    "class": "4th recurrence of the linear-reader/surface class on this card (grant-create README dead-end, keystore_exists, grant-add 2nd-scope, now removal)"
+  },
+  "fix": {
+    "command": "signerd grant-remove --grants <file> --name <grant> [--seal-passphrase-file <file>]",
+    "module": "src/grantadd.js removeGrantFromFile",
+    "rulesKept": [
+      "the product's own loader (src/grantfile.js loadGrantFile) is the judge: directory mode/owner, kernel read lease, file owner+mode, schema, every remaining grant, seal when a passphrase is given",
+      "atomic temp(O_EXCL,0600)+fsync+rename; inode changes so a pre-opened write descriptor is orphaned",
+      "survivors copied through from the loader's parsed grants, not re-serialized by this code",
+      "symlink refused (grant_file_symlink), same defect measured on grant-add 2026-11-05",
+      "a sealed file is re-sealed as part of the act; a sealed file without a passphrase is refused (grant_file_sealed) so a rewrite can never destroy the seal",
+      "a passphrase given for an unsealed file is refused (grant_file_unsealed) - --seal-passphrase-file must never mean 'seal now'",
+      "unknown name changes NOTHING and the refusal names the grants that are in the file (grant_not_found + in-file list)"
+    ],
+    "limits": [
+      "removal is BY NAME: it removes the whole scope, it does not narrow a cap",
+      "a grant removed while a request is in flight is judged by the loader read at the START of that request",
+      "a wrong passphrase refuses (the seal is never destroyed unauthenticated)",
+      "no freshness/lock check: two concurrent grant-remove processes are not serialized beyond the loader's read lease",
+      "no audit log of who revoked what - the file carries no author"
+    ]
+  },
+  "ladder": {
+    "preFixTree": "bf72775",
+    "postFixTree": "working tree (this change)",
+    "newInstrument": "test/grant-remove-surface.test.js (12 tests: T1-T5, G1-G7)",
+    "preFix": {"tests": 12, "pass": 0, "fail": 12},
+    "postFix": {"tests": 12, "pass": 12, "fail": 0},
+    "note": "all 12 are RED on the pre-fix tree, including the guards: the instrument IS the fix (there is no removal command to guard). This is stated rather than papered over - no test here is a false-positive guard on the pre-fix tree."
+  },
+  "mutationBattery": {
+    "how": "each mutation applied to the working tree, `node --test test/grant-remove-surface.test.js`, then byte-restored (src/grantadd.js + bin/signerd.js + README.md)",
+    "caught": [
+      {"id": "M1", "mutation": "the removal loop no longer skips the named grant (removal removes nothing)", "result": "RED 9 pass / 3 fail"},
+      {"id": "M2", "mutation": "write in place (copyFileSync) instead of temp+rename - not atomic, inode preserved", "result": "RED 11/1"},
+      {"id": "M3", "mutation": "drop the grant_file_sealed refusal - a sealed file is rewritten without a passphrase", "result": "RED 11/1"},
+      {"id": "M4", "mutation": "drop the symlink refusal - follow the link", "result": "RED 11/1"},
+      {"id": "M5", "mutation": "swallow the grant_not_found refusal text in the CLI", "result": "RED 11/1"},
+      {"id": "M6b", "mutation": "remove BOTH README occurrences of grant-remove", "result": "RED 11/1"},
+      {"id": "M7b", "mutation": "rewrite the survivor's CONTENT (expiresAt forced to a new value)", "result": "RED 11/1"},
+      {"id": "M7c", "mutation": "reverse the survivor's key order (bytes change, parsed content equal)", "result": "RED 11/1 AFTER G6 was strengthened; 12/0 before it"},
+      {"id": "M9", "mutation": "a sealed file is removed but never re-sealed", "result": "RED 11/1"}
+    ],
+    "firstBatterySurvivors": [
+      {"id": "M6", "mutation": "removed ONE of two README occurrences", "whySurvived": "bad mutation, not a weak test: the other occurrence still matched the T4 regex; the corrected mutation (M6b, both occurrences) is caught"},
+      {"id": "M7", "mutation": "JSON.parse(JSON.stringify(grant)) + String(destination)", "whySurvived": "equivalent mutant - the round trip is byte-identical for these values (measured: json.dumps equality holds)"},
+      {"id": "M10", "mutation": "loadGrantFile(resolved, {...options, skipMode:true})", "whySurvived": "equivalent mutant - src/grantfile.js contains no skipMode option, so the mutation changes nothing (grep -c skipMode src/grantfile.js = 0)"}
+    ],
+    "realGapFound": {
+      "id": "G6-was-content-only",
+      "statement": "G6 was named 'byte-identical' but asserted deepStrictEqual on the PARSED grant only, so a key-order rewrite (M7c) passed while the file bytes changed",
+      "fix": "G6 now compares JSON.stringify of the survivor (byte-level serialization) BEFORE the content comparison",
+      "retest": "M7c -> 11 pass / 1 fail (G6 RED), working tree -> 12/12"
+    }
+  },
+  "liveVerification": {
+    "t2": "a daemon started with two grants signs a payroll tx (exit 0), grant-remove runs with NO restart and NO signal, the SAME daemon then refuses that grant with grant_not_found on its next request, and the surviving grant still signs (exit 0)",
+    "inode": "T1 asserts the grant file's inode CHANGES across the removal (rename, not truncate-in-place)",
+    "mode": "the rewritten file stays 0600 and no .tmp- file survives the atomic write"
+  },
+  "suite": {
+    "before": "371 tests (371 pass / 0 fail) on bf72775 - the card's recorded baseline",
+    "after": "383 tests (383 pass / 0 fail, 0 skip) = 371 + 12 new grant-remove tests"
+  },
+  "whatThisDoesNotProve": [
+    "no external user has ever run grant-remove",
+    "no audit / no author identity in the file",
+    "revocation is by scope name only - no partial cap narrowing",
+    "two concurrent removals are not ordered beyond the read lease",
+    "not a security approval: no audit, no real keys, no outside user"
+  ]
+}

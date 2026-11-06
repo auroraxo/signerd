@@ -293,9 +293,9 @@ const MAX_GRANTS_LOCAL = MAX_GRANTS; // single source of truth: src/grantfile.js
  *
  * LIMITS: an appended grant takes effect on the daemon's NEXT request (the
  * loader re-reads every request) — it does not restart or notify the
- * daemon; there is no "remove a grant" command (edit by hand, or replace
- * the file); a hand-edited sealed file must be re-sealed with
- * `seal-grants`.
+ * daemon; a sealed file is not extendable by CLI without the passphrase
+ * (see extendGrantFile's own rules); a hand-edited sealed file must be
+ * re-sealed with `seal-grants`.
  */
 function extendGrantFile({ file, name, grant, sealPassphrase }) {
   validateGrant(name, grant);
@@ -369,6 +369,125 @@ function extendGrantFile({ file, name, grant, sealPassphrase }) {
 }
 
 /**
+ * Remove ONE grant from an existing grant file — the CLI's `grant-remove`.
+ *
+ * WHY: measured 2026-11-05, the card's honest-limits list said "kein
+ * Grant-Entfernen (Handedit)": there was NO command to revoke a scope.
+ * `grant-add` could add one, the loader loads a MAP of grants, and the
+ * daemon re-reads the file on EVERY request (revocation is supposed to take
+ * effect immediately) — yet the operator had to hand-edit a
+ * security-relevant JSON file to take a scope away.
+ *
+ * The hand-edit path is exactly the path this product refuses elsewhere:
+ *   - a hand edit can leave the file in a state the daemon refuses at run
+ *     time (a broken grant) → the daemon then refuses EVERY request,
+ *     including the scopes that were still valid;
+ *   - a hand edit of a SEALED file destroys the HMAC provenance, and the
+ *     repair (re-seal) is a second hand step;
+ *   - a hand edit is a non-atomic truncate: a crash leaves a torn file.
+ *
+ * THE RULE THIS KEEPS: exactly the same rule extendGrantFile keeps — a file
+ * that would be refused at `run` time is refused here. The PRODUCT's own
+ * loader (src/grantfile.js) is the judge: directory mode and ownership, the
+ * kernel read lease (nobody holds the file open for writing), file owner and
+ * mode, schema, every remaining grant, and the seal when a passphrase is
+ * given. Nothing is written until the whole file has been accepted.
+ *
+ * Refuses (nothing is written, ever):
+ *   - the grant is not in the file           -> grant_not_found (the refusal
+ *     names the grants that ARE in the file);
+ *   - the file is sealed and no passphrase    -> grant_file_sealed
+ *     (a rewrite would destroy the seal's provenance);
+ *   - a passphrase for a file with no seal    -> grant_file_unsealed
+ *     (--seal-passphrase-file must never imply "seal this file now");
+ *   - the current seal does not verify        -> the loader's
+ *     grant_file_seal_* reason (never destroy content we could not
+ *     authenticate);
+ *   - anything else the loader refuses        -> the loader's reason.
+ *
+ * WRITES: the same atomic temp+fsync+rename as extendGrantFile — the
+ * daemon's read lease (F_RDLCK) never conflicts with the write, so a
+ * revocation works against a RUNNING daemon; the removal takes effect on
+ * the daemon's NEXT request, with no restart and no signal.
+ *
+ * A SEALED file is re-sealed as part of the act (the old seal covers
+ * content that no longer exists; the new seal covers the content that
+ * does), so the file stays loadable in the daemon's sealed mode.
+ *
+ * LIMITS: the removal is by NAME — it removes the whole scope, it does not
+ * narrow a cap (edit the file for that); the surviving grants are copied
+ * through byte-identically; a grant that is removed while a request is in
+ * flight is judged by the loader's read at the START of that request.
+ */
+function removeGrantFromFile({ file, name, sealPassphrase }) {
+  if (typeof name !== 'string' || !NAME.test(name)) throw fail('grant_name_invalid', String(name));
+  const resolved = path.resolve(file);
+
+  // Never follow a symlink: the loader refuses one (O_NOFOLLOW), so writing
+  // through it would touch a path the operator never named — the same
+  // defect measured on grant-add (2026-11-05).
+  const link = lstatOrNull(resolved);
+  if (link !== null && link.isSymbolicLink()) throw fail('grant_file_symlink', resolved);
+  if (link === null) throw fail('grant_file_unreadable', 'ENOENT');
+
+  // Seal presence needs the raw document: loadGrantFile only VERIFIES a
+  // seal when a key provider is given and would otherwise ignore it — the
+  // one outcome this command must never produce is an unsealed write over
+  // a sealed file.
+  let raw;
+  try {
+    raw = fs.readFileSync(resolved, 'utf8');
+  } catch (err) {
+    throw fail('grant_file_unreadable', err.code);
+  }
+  let doc;
+  try {
+    doc = JSON.parse(raw);
+  } catch {
+    throw fail('grant_file_invalid');
+  }
+  const sealed = doc !== null && typeof doc === 'object' &&
+    Object.getOwnPropertyDescriptor(doc, 'seal') !== undefined;
+  if (sealed && sealPassphrase === undefined) throw fail('grant_file_sealed', resolved);
+  if (!sealed && sealPassphrase !== undefined) throw fail('grant_file_unsealed', resolved);
+
+  // THE JUDGE: the product's loader, with the seal key when the operator
+  // gave one. Directory, lease, owner, mode, schema, seal, and every
+  // existing grant must all pass before anything is written.
+  const options = sealPassphrase === undefined ? {}
+    : { sealKeyFor: makeSealKeyProvider(sealPassphrase) };
+  const loaded = loadGrantFile(resolved, options);
+
+  const existing = Object.getOwnPropertyNames(loaded.grants);
+  if (!existing.includes(name)) {
+    const err = fail('grant_not_found', name);
+    err.grants = existing.slice().sort();
+    throw err;
+  }
+
+  // The survivors are copied through BYTE-IDENTICALLY (the grant objects
+  // the loader parsed, not a re-serialization of our own): a removal is not
+  // a chance to rewrite a grant's content.
+  const grants = {};
+  for (const key of existing) {
+    if (key === name) continue;
+    grants[key] = loaded.grants[key];
+  }
+
+  const out = sealPassphrase === undefined
+    ? { version: 1, grants }
+    : sealDocument({ version: 1, grants }, sealPassphrase);
+
+  writeAtomic(resolved, out);
+  return {
+    file: resolved,
+    removed: name,
+    grants: Object.keys(grants).sort(),
+    sealed: sealPassphrase !== undefined,
+  };
+}
+
+/**
  * Write a whole grant document atomically: temp file in the SAME directory
  * (O_EXCL so the name cannot be a planted symlink), fsync, fchmod 0600
  * (never umask-inherited), rename. On any failure the temp file is removed
@@ -405,4 +524,5 @@ module.exports = {
   writeGrantFile,
   addGrantToFile,
   extendGrantFile,
+  removeGrantFromFile,
 };
