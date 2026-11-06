@@ -1,0 +1,22 @@
+== control (the unmutated tree must be green)
+  ℹ pass 7 ℹ fail 0 
+
+== M1: the daemon ignores the dry flag (falls through to the real sign)
+  M1 daemon ignores dry                        ℹ pass 4 ℹ fail 3 
+== M2: the daemon accepts a non-boolean dry value (fail-open typing)
+  M2 permissive dry typing                     ℹ pass 6 ℹ fail 1 
+== M3: the CLI no longer knows --dry (flag surface regresses)
+  M3 --dry not in the flag surface             ℹ pass 6 ℹ fail 1 
+== M4: the CLI writes --out even on a dry run
+  M4 --out written on a dry run                ℹ pass 6 ℹ fail 1 
+== M5: the ledger preview journals anyway (preview = approve)
+  M5 preview journals the spend                ℹ pass 5 ℹ fail 2 
+== M6: the dry path skips the policy decision (allowed without checking)
+  M6 dry skips the policy decision             ℹ pass 5 ℹ fail 2 
+== M7: the message preview journals anyway
+  M7 message preview journals                  ℹ pass 6 ℹ fail 1 
+
+== final control (the tree must be green again)
+  ℹ pass 7 ℹ fail 0 
+
+MUTATION LADDER PASS: every mutation was caught and the tree was restored byte-identically
