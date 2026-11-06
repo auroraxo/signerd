@@ -15,6 +15,10 @@
 #   6. a replayed receipt body is refused after a daemon restart,
 #   7. R6-1 (review #6): an EMPTY seal passphrase file must REFUSE to start,
 #      not silently degrade to unsealed mode.
+#   8. DRY-RUN FALSIFICATION: `--dry` of the identical receipt body is
+#      allowed, signs nothing, writes nothing (--out + journal), and the SAME
+#      body still signs for real afterwards (a dry that leaked a replay entry
+#      would refuse here).
 #
 # Everything secret lives in a mktemp dir that is removed at the end.
 # The day directory holds only the public receipt and the report.
@@ -103,6 +107,66 @@ test -S "$WORK/signerd.sock" || { echo "daemon did not start"; cat "$WORK/daemon
 echo "== 4. client: receipt.py --via-signerd (empty OPENRECEIPTS_HOME) =="
 CLIENT_HOME="$WORK/client-home"   # never created by a correct client
 RECEIPT_OUT="$WORK/receipt.json"
+
+# 4a. DRY-RUN FALSIFICATION (card next step 2026-11-06):
+# The identical receipt body the real client is about to sign is previewed
+# through `--dry` FIRST:
+#   - must answer { ok: true, dry: true, allowed: true },
+#   - must NOT produce a signature,
+#   - must NOT write to --out,
+#   - must NOT touch the journal (bytes before == bytes after),
+#   - the SAME body is then signed for real in step 4b; a dry run that had
+#     leaked anything into the journal would refuse with `replay`.
+JOURNAL="$WORK/journal.jsonl"
+JOURNAL_BYTES() { if [ -f "$JOURNAL" ]; then wc -c < "$JOURNAL"; else echo 0; fi; }
+JOURNAL_BEFORE="$(JOURNAL_BYTES)"
+DRY_BODY="$WORK/dry-body.json"
+DRY_OUT="$WORK/dry-out.json"
+node -e '
+const fs = require("node:fs");
+const day = process.argv[1];
+const body = {
+  schema: "openreceipts/v1",
+  issuer: "auroraxo",
+  type: "release",
+  subject: "auroraxo/signerd",
+  claims: { "message-grant": "live", "via": "signerd" },
+  note: "receipt signed through the signerd daemon, no key in the client",
+  issued_at: `${day}T21:00:00+00:00`,
+};
+fs.writeFileSync(process.argv[2], JSON.stringify(body, null, 2) + "\n");
+' "$DAY" "$DRY_BODY"
+
+DRY_RES="$(node "$SIGNERD"/bin/signerd.js sign-message \
+  --socket "$WORK/signerd.sock" --grant releases \
+  --body "$DRY_BODY" --out "$DRY_OUT" --dry)"
+echo "dry preview response: $DRY_RES"
+node -e '
+const res = JSON.parse(process.argv[1]);
+if (!res.ok || !res.dry || !res.allowed) {
+  console.error("dry run refused:", res);
+  process.exit(1);
+}
+if (res.signature !== undefined) {
+  console.error("dry run produced signature:", res);
+  process.exit(1);
+}
+if (res.budgetConsumed !== false) {
+  console.error("dry run consumed budget:", res);
+  process.exit(1);
+}
+' "$DRY_RES"
+
+if [ -e "$DRY_OUT" ]; then
+  echo "FAIL: --dry wrote the --out file"; exit 1
+fi
+JOURNAL_AFTER_DRY="$(JOURNAL_BYTES)"
+if [ "$JOURNAL_BEFORE" -ne "$JOURNAL_AFTER_DRY" ]; then
+  echo "FAIL: --dry mutated the journal ($JOURNAL_BEFORE -> $JOURNAL_AFTER_DRY)"; exit 1
+fi
+echo "OK: dry preview allowed, 0 bytes journaled, --out untouched"
+
+# 4b. REAL CLIENT RUN: identical body, client has no key material
 cd "$OPENRECEIPTS"
 OPENRECEIPTS_HOME="$CLIENT_HOME" python3 receipt.py sign \
   --issuer auroraxo --type release --subject auroraxo/signerd \
@@ -195,6 +259,11 @@ fs.writeFileSync(out, JSON.stringify({
     overdrawn_window_refused: "window_cap, no file written",
     replay_after_restart_refused: "replay, no file written",
     empty_seal_passphrase_refused: "seal_passphrase_required, daemon did not start",
+    dry_preview_allowed: true,
+    dry_wrote_no_signature: true,
+    dry_journaled_bytes: 0,
+    dry_out_untouched: true,
+    real_sign_after_dry_succeeded: true,
     receipt: doc,
   },
 }, null, 2) + "\n");

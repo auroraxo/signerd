@@ -1,0 +1,16 @@
+{
+  "pubkey": "z74vce0VgGTpPP7Nu/G+O9IVDgcKg/lceC/2GAvwzi8=",
+  "receipt": {
+    "claims": {
+      "message-grant": "live",
+      "via": "signerd"
+    },
+    "issued_at": "2026-11-06T21:00:00+00:00",
+    "issuer": "auroraxo",
+    "note": "receipt signed through the signerd daemon, no key in the client",
+    "schema": "openreceipts/v1",
+    "subject": "auroraxo/signerd",
+    "type": "release"
+  },
+  "sig": "zM7NwAyneVXkuV79is1llnkwTr4zVP0agIQM8baxjDk1Giyls1i78mZN3q/y22kZzSEW1/oKWljflZr2xOc1DA=="
+}
