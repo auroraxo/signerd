@@ -156,7 +156,16 @@ async function stopDaemon(child, signal = 'SIGTERM') {
   try { child.kill(signal); } catch { /* already gone */ }
   await Promise.race([gone, sleep(10000)]);
   children.delete(child);
-  try { fs.rmSync(child.spawnfile, { force: true }); } catch { /* ignore */ }
+  // The socket is removed by the daemon's own shutdown path; the temp dir is
+  // the OS's to clean. NOTHING here touches child.spawnfile - that is the
+  // NODE BINARY (child_process sets it to the executable it spawned), and
+  // deleting it destroys the runner's toolchain: on a GitHub runner the
+  // runner user owns /opt/hostedtoolcache, so the delete SUCCEEDED there
+  // and every later `spawn node` failed with ENOENT. Measured 2026-11-06:
+  // the first CI run of this test deleted the runner's node binary and the
+  // whole suite went red with `spawn .../node ENOENT` - which looks like a
+  // flaky runner but was this line. (Locally the delete failed with
+  // EACCES, which the catch swallowed, so it passed here.)
 }
 
 // ---------------------------------------------------------------------------
