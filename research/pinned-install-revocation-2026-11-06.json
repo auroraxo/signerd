@@ -1,0 +1,45 @@
+{
+  "measuredAt": "2026-11-06T05:12:00Z",
+  "repo": "auroraxo/signerd",
+  "kind": "pinned-install-revocation-journey",
+  "pinnedTag": "v0.2.3",
+  "install": {
+    "command": "npm install github:auroraxo/signerd#v0.2.3",
+    "source": "published tag (public github), not the local checkout",
+    "installedManifestVersion": "0.2.3",
+    "installedManifestPrivate": false,
+    "installPathVerdict": "clean",
+    "installPathArtifact": "research/install-path-v0.2.3-2026-11-06.json"
+  },
+  "theDefectThatWasFixed": {
+    "pinBefore": "v0.2.2",
+    "command": "signerd grant-remove",
+    "observedAtOldPin": "USAGE banner, exit 2 (unknown command)",
+    "observedAtNewPin": "dispatched: answers with the file-missing repair (grant_file_unreadable), not the USAGE banner",
+    "alsoMissingAtOldPin": ["grant-add --append", "import --overwrite repair"],
+    "whyNoInstrumentCaughtIt": "every prior journey ran main's CLI or read the tag's manifest; neither can notice a command the tag simply does not have"
+  },
+  "liveRevocationChain": {
+    "surface": "the installed package in an empty directory, nothing but the published tag",
+    "keygen": {"ok": true, "publicKey": "7zq4RALAERKXHsxZ59B1ximQ8TWJkE5nYNfSw24u5LYR"},
+    "grantAddScope1": {"ok": true, "grant": "ops-24h"},
+    "grantAddScope2Append": {"ok": true, "grant": "ops-payroll", "appended": true, "grants": ["ops-24h", "ops-payroll"]},
+    "grantRemove": {"ok": true, "removed": "ops-payroll", "grantsAfter": ["ops-24h"]},
+    "daemon": {"ok": true, "grants": ["ops-24h"], "signer": "7zq4RALAERKXHsxZ59B1ximQ8TWJkE5nYNfSw24u5LYR"},
+    "signSurvivingScopeBefore": {"ok": true, "signature": "u94Sba62uSMcRSjeYfqBAKytxPu3MPzCA4vHwNhh7THzv2Tbcpd1U14PLkM9SL8nAdxcx8BSeevrnkaTgR5noss", "unsignedTxBytes": 215, "signedWireBytes": 215},
+    "revokeWhileDaemonRuns": {"command": "grant-remove ops-payroll", "restart": false, "signal": false},
+    "signRevokedScopeAfter": {"ok": false, "error": "grant_not_found"},
+    "signSurvivingScopeAfter": {"ok": true, "signature": "3CpykAkw29dxY8Zhn6K2wUsyTXTwrPivCrtSgRJffQMGAdj7aQWHD1x8eRHefQmbzTa6wuA2dDGg3XA9ougZej9h", "note": "a FRESH transaction; re-signing the SAME message is refused 'replay' by the product, which is the correct direction"},
+    "byteSizeMeasuredSeparately": {"unsignedTxBytes": 215, "signedWireBytes": 215, "method": "stat on the built file, and base64-decoded length of the daemon's signed answer, in a separate daemon run"}
+  },
+  "ownDeviation": "the first harness run created the ledger's parent directory under the default umask and the daemon refused it with 'ledger_dir_mode' — the product was right, the harness was wrong; re-run with umask 077",
+  "limits": [
+    "own host measurement, no external user, no audit, no real funds",
+    "revocation is by NAME; it does not narrow a cap",
+    "a grant removed mid-request is judged by the loader read at the START of that request",
+    "no audit trail of who revoked what; concurrent removals are not ordered beyond the read lease",
+    "the message envelope's signature path is unaffected; the transaction envelope remains legacy-only"
+  ],
+  "noVerdict": false,
+  "reason": null
+}

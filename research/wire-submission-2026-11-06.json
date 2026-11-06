@@ -1,0 +1,13 @@
+{
+  "tool": "measure-wire-submission",
+  "rpc": "http://127.0.0.1:8999",
+  "at": "2026-11-06T04:15:54.538Z",
+  "transferLamports": 42,
+  "expectedFeeLamports": 5000,
+  "localGuard": {
+    "local": true,
+    "host": "127.0.0.1"
+  },
+  "verdict": "no-verdict",
+  "reason": "runtime not reachable: {\"networkError\":\"fetch failed\"}"
+}
