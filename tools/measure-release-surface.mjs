@@ -123,6 +123,20 @@ export function apiClaimsIn(body) {
   return found;
 }
 
+// A cargo install claim is an ADVERTISEMENT: a command a stranger copies.
+// The rule therefore scans CODE BLOCKS only, like apiClaimsIn above — a
+// sentence that says "no cargo install path exists" (the honest limit
+// statement) is not an advertisement. Measured 2026-11-06: the naive
+// substring rule fired on the v0.2.3 release body's own denial of the cargo
+// path and reported body-advertises-cargo-install for it.
+export function cargoClaimsIn(body) {
+  const found = [];
+  for (const b of codeBlocks(body)) {
+    if (/cargo\s+install/.test(b)) found.push('cargo install');
+  }
+  return found;
+}
+
 export function bodyHasLimitStatement(body) {
   const s = String(body || '').toLowerCase();
   return (
@@ -169,7 +183,7 @@ export function releaseDefects(tag, tree, body) {
     // recommends the newer tag satisfies this; a page with no working
     // install command is the defect).
     if (!/npm install github:auroraxo\/signerd#v\d/i.test(b)) defects.push('body-no-install-command');
-    if (b.includes('cargo install')) defects.push('body-advertises-cargo-install');
+    if (cargoClaimsIn(b).length) defects.push('body-advertises-cargo-install');
     const claims = apiClaimsIn(b);
     if (claims.length) defects.push('body-nonexistent-api');
     if (!bodyHasLimitStatement(b)) defects.push('body-no-limits');

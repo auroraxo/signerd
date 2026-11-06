@@ -194,6 +194,41 @@ test('T9 a superseded-but-honest surface loses the surface defects but keeps the
   assert.strictEqual(v.latestTag, 'v0.2.0');
 });
 
+test('T11 prose that says a cargo install path does NOT exist is not an advertisement', () => {
+  // Measured 2026-11-06: the v0.2.3 release body stated the limit "No Rust
+  // package, no cargo install path — this is a Node package" and the naive
+  // substring rule flagged it as body-advertises-cargo-install. The rule
+  // fired on the sentence that DENIES the thing it is guarding — the exact
+  // trap apiClaimsIn avoids by scanning code blocks only (its comment says
+  // so), which the cargo rule never inherited.
+  const body =
+    'Install: `npm install github:auroraxo/signerd#v0.2.0`\n' +
+    'No Rust package, no cargo install path — this is a Node package.\n' +
+    'Not a professional audit. No outside users yet.';
+  const v = derive({
+    releases: [{ tag: 'v0.2.0', body, draft: false, prerelease: false, createdAt: '2026-11-06T03:58:54Z' }],
+    tags: ['v0.1.0', 'v0.2.0'],
+    trees: { 'v0.2.0': goodTree },
+  });
+  assert.strictEqual(v.defects.filter((d) => d.endsWith('body-advertises-cargo-install')).length, 0,
+    `a denial of the cargo path must not be reported as advertising it: ${v.defects.join(',')}`);
+});
+
+test('T12 a code block that hands a stranger a cargo install command is still a defect', () => {
+  // The guard T11 must not weaken: the measured PR #280 body put the real
+  // command in a fence, and that is what a stranger copies.
+  const body =
+    'Install: `npm install github:auroraxo/signerd#v0.2.0`\n\n' +
+    '```bash\ncargo install --git https://github.com/auroraxo/signerd --tag v0.1.0\n```\n' +
+    'Not a professional audit. No outside users yet.';
+  const v = derive({
+    releases: [{ tag: 'v0.2.0', body, draft: false, prerelease: false, createdAt: '2026-11-06T03:58:54Z' }],
+    tags: ['v0.1.0', 'v0.2.0'],
+    trees: { 'v0.2.0': goodTree },
+  });
+  assert.ok(v.defects.includes('v0.2.0:body-advertises-cargo-install'), v.defects.join(','));
+});
+
 test('T10 an install command naming a tag this repo does not have is a false claim', () => {
   const body =
     'Install: `npm install github:auroraxo/signerd#v9.9.9`\nNot a professional audit. No outside users yet.';
