@@ -768,13 +768,18 @@ class Ledger {
     }
   }
   /**
-   * Decide whether an already policy-verified amount may consume budget.
-   * Callers must have a positive verdict from evaluate() first; this function
-   * does not inspect the wire and trusts only the amount string it is given.
+   * THE DECISION, shared by approve() (real, journals) and preview() (dry,
+   * journals nothing).
+   *
+   * Extracted 2026-11-06 so a dry run cannot drift from the real path: the
+   * replay check, the rolling-window sum, the cap test, expiry and the
+   * hardened clock are ONE implementation here, and only the commit differs
+   * afterwards.
+   *
+   * No write, no in-memory advance, no anchor: calling it twice changes
+   * nothing. That is the property a dry run depends on.
    */
-  approve({ wire, amountLamports, grant, now = new Date() }) {
-    // A rollback failure means the file may hold bytes we cannot account for:
-    // no further approval can be made durable, so every request refuses.
+  #decideSpend({ wire, amountLamports, grant, now }) {
     if (this.poisoned) return refused('ledger_inconsistent');
     if ((!Buffer.isBuffer(wire) && !(wire instanceof Uint8Array)) || wire.length === 0) {
       return refused('invalid_wire');
@@ -787,8 +792,6 @@ class Ledger {
     if (scope === null) return refused('invalid_grant');
     const expiry = expiryMs(grant);
     if (!Number.isFinite(expiry)) return refused('invalid_grant');
-    // Same hardened clock as policy.js: read once, real Date only, so a
-    // hostile `now` cannot bypass expiry here either.
     const nowMs = readClock(now);
     if (!Number.isFinite(nowMs)) return refused('invalid_clock');
     if (nowMs >= expiry) return refused('expired');
@@ -796,14 +799,9 @@ class Ledger {
     const fingerprint = messageImage(wire);
     const messageSha256 = crypto.createHash('sha256').update(fingerprint).digest('hex');
     const wireSha256 = crypto.createHash('sha256').update(wire).digest('hex');
-    // Replay check on BOTH: message identity (one signature per transaction
-    // message) AND wire identity (the raw wire bytes).
     if (this.messageHashes.has(messageSha256)) return refused('replay');
     if (this.fingerprints.has(wireSha256)) return refused('replay');
 
-    // Rolling window over (now - windowSeconds, now], deliberately including
-    // any record timestamped in the future: a backwards clock must not shrink
-    // already-recorded spend. An absurd window size counts every record.
     const windowMs = window.seconds * 1000;
     const cutoff = Number.isSafeInteger(windowMs) ? nowMs - windowMs : -Infinity;
     let spent = 0n;
@@ -818,6 +816,51 @@ class Ledger {
         windowRemainingLamports: remaining.toString(),
       });
     }
+    const totalSpent = spent + cost;
+    return {
+      allowed: true,
+      scope,
+      nowMs,
+      amount,
+      cost,
+      spent,
+      window,
+      messageSha256,
+      wireSha256,
+      windowSpentLamports: totalSpent.toString(),
+      windowRemainingLamports: (window.max - totalSpent).toString(),
+    };
+  }
+
+  /**
+   * DRY RUN: the same decision, committed NOWHERE.
+   */
+  preview({ wire, amountLamports, grant, now = new Date() }) {
+    const decision = this.#decideSpend({ wire, amountLamports, grant, now });
+    if (decision.allowed !== true) return decision;
+    return {
+      allowed: true,
+      dry: true,
+      amountLamports: decision.amount.toString(),
+      feeLamports: BASE_FEE_LAMPORTS.toString(),
+      totalLamports: decision.cost.toString(),
+      wireSha256: decision.wireSha256,
+      messageSha256: decision.messageSha256,
+      windowSpentLamports: decision.windowSpentLamports,
+      windowRemainingLamports: decision.windowRemainingLamports,
+      budgetConsumed: false,
+    };
+  }
+
+  /**
+   * Decide whether an already policy-verified amount may consume budget.
+   * Callers must have a positive verdict from evaluate() first; this function
+   * does not inspect the wire and trusts only the amount string it is given.
+   */
+  approve({ wire, amountLamports, grant, now = new Date() }) {
+    const decision = this.#decideSpend({ wire, amountLamports, grant, now });
+    if (decision.allowed !== true) return decision;
+    const { scope, nowMs, amount, cost, spent, window, messageSha256, wireSha256 } = decision;
 
     const recordBody = {
       v: this.macKey ? SEALED_JOURNAL_FORMAT : JOURNAL_FORMAT,
@@ -887,16 +930,13 @@ class Ledger {
   }
 
   /**
-   * Decide whether an already policy-verified receipt MESSAGE may consume
-   * budget. Callers must have a positive verdict from evaluateMessage() first.
-   *
-   * Same durability contract as approve(): the record is fsynced (and, in
-   * sealed mode, anchored) BEFORE the caller is told it may sign. One journal,
-   * one chain, one lock — message records ride the existing format with
-   * a=0/f=0 (no lamports move on chain) and a four-part message scope, so no
-   * journal format change and no second file to keep consistent.
+   * THE DECISION, shared by approveMessage() (real, journals) and
+   * previewMessage() (dry, journals nothing). Extracted 2026-11-06 for the
+   * same reason as #decideSpend(): the dry message path must not drift from
+   * the real one. No write, no in-memory advance: calling it twice changes
+   * nothing.
    */
-  approveMessage({ messageBytes, grant, now = new Date() }) {
+  #decideMessage({ messageBytes, grant, now = new Date() }) {
     if (this.poisoned) return refused('ledger_inconsistent');
     if ((!Buffer.isBuffer(messageBytes) && !(messageBytes instanceof Uint8Array)) ||
         messageBytes.length === 0) {
@@ -935,6 +975,39 @@ class Ledger {
         windowRemainingMessages: String(Math.max(0, window.max - signed)),
       });
     }
+    return { allowed: true, identity, nowMs, signed, window, scope };
+  }
+
+  /**
+   * DRY RUN of approveMessage(): the same decision, committed NOWHERE.
+   */
+  previewMessage({ messageBytes, grant, now = new Date() }) {
+    const decision = this.#decideMessage({ messageBytes, grant, now });
+    if (decision.allowed !== true) return decision;
+    return {
+      allowed: true,
+      dry: true,
+      messageIdentity: decision.identity,
+      windowMessages: String(decision.signed + 1),
+      windowRemainingMessages: String(Math.max(0, decision.window.max - decision.signed - 1)),
+      budgetConsumed: false,
+    };
+  }
+
+  /**
+   * Decide whether an already policy-verified receipt MESSAGE may consume
+   * budget. Callers must have a positive verdict from evaluateMessage() first.
+   *
+   * Same durability contract as approve(): the record is fsynced (and, in
+   * sealed mode, anchored) BEFORE the caller is told it may sign. One journal,
+   * one chain, one lock — message records ride the existing format with
+   * a=0/f=0 (no lamports move on chain) and a four-part message scope, so no
+   * journal format change and no second file to keep consistent.
+   */
+  approveMessage({ messageBytes, grant, now = new Date() }) {
+    const decision = this.#decideMessage({ messageBytes, grant, now });
+    if (decision.allowed !== true) return decision;
+    const { identity, nowMs, signed, window, scope } = decision;
 
     const recordBody = {
       v: this.macKey ? SEALED_JOURNAL_FORMAT : JOURNAL_FORMAT,
@@ -1037,8 +1110,21 @@ function gate(wire, grant, now = new Date(), ledger) {
   return ledger.approve({ wire, amountLamports: verdict.amountLamports, grant, now });
 }
 
+/**
+ * The DRY twin of gate(): the same decision, committed nowhere.
+ *
+ * Fails closed when no ledger is attached, exactly like gate(): an allowed
+ * policy verdict alone is never sufficient, not even to preview.
+ */
+function previewGate(wire, grant, now = new Date(), ledger) {
+  const verdict = evaluate(wire, grant, now);
+  if (!verdict.allowed) return verdict;
+  if (!ledger || typeof ledger.preview !== 'function') return refused('ledger_unavailable');
+  return ledger.preview({ wire, amountLamports: verdict.amountLamports, grant, now });
+}
+
 module.exports = {
-  Ledger, gate, BASE_FEE_LAMPORTS,
+  Ledger, gate, previewGate, BASE_FEE_LAMPORTS,
   parseJournal, messageImage, assertJournalPath, chainHash, JOURNAL_FORMAT, GENESIS_HASH,
   JOURNAL_LEASE_MAX_BYTES, SEALED_JOURNAL_FORMAT, anchorPath: seal.anchorPath,
   messageScopeKey, parseMessageWindow, MESSAGE_DOMAIN,

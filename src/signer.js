@@ -3,7 +3,7 @@
 const crypto = require('node:crypto');
 const bs58 = require('bs58');
 const { VersionedTransaction } = require('@solana/web3.js');
-const { gate } = require('./ledger');
+const { gate, previewGate } = require('./ledger');
 
 const SIGNATURE_BYTES = 64;
 // Versioned wire layout: compact-u16 signature count (1 byte for count === 1),
@@ -124,4 +124,50 @@ function signApproved({ wire, grant, ledger, keypair, now = new Date() }) {
   };
 }
 
-module.exports = { signApproved, publicKeyObject, MESSAGE_OFFSET };
+/**
+ * DRY RUN of signApproved(): the same checks, the same verdict, NO signature.
+ *
+ * Deliberately the same order as signApproved():
+ *  1. wire shape and grant shape;
+ *  2. signer availability and key/grant match (refused before anything else);
+ *  3. the policy + budget decision, but through previewGate(), which decides
+ *     without writing anything - no journal record, no replay entry, no
+ *     window spend.
+ *
+ * A dry run therefore answers "would this be allowed right now?" and not
+ * "what would the signature be": it returns no signature and no bytes that
+ * could be submitted. The refusal reasons are identical to the real path, so
+ * `allowed: true` in a preview is a promise the real path keeps unless a
+ * concurrent request spends the same budget in between.
+ */
+function previewApproved({ wire, grant, ledger, keypair, now = new Date() }) {
+  if (!Buffer.isBuffer(wire) && !(wire instanceof Uint8Array)) return refused('invalid_wire');
+  const grantSigner = grant && typeof grant === 'object'
+    ? Object.getOwnPropertyDescriptor(grant, 'signer') : undefined;
+  if (!grantSigner || !('value' in grantSigner) || typeof grantSigner.value !== 'string') {
+    return refused('invalid_grant');
+  }
+  if (keypair === null || typeof keypair !== 'object' ||
+      keypair.publicKey === undefined || keypair.secretKey === undefined) {
+    return refused('signer_unavailable');
+  }
+  if (keypair.publicKey.toBase58() !== grantSigner.value) return refused('signer_key_mismatch');
+
+  const verdict = previewGate(wire, grant, now, ledger);
+  if (!verdict.allowed) return verdict;
+
+  return {
+    allowed: true,
+    dry: true,
+    amountLamports: verdict.amountLamports,
+    feeLamports: verdict.feeLamports,
+    totalLamports: verdict.totalLamports,
+    wireSha256: verdict.wireSha256,
+    messageSha256: verdict.messageSha256,
+    windowSpentLamports: verdict.windowSpentLamports,
+    windowRemainingLamports: verdict.windowRemainingLamports,
+    budgetConsumed: false,
+  };
+}
+
+module.exports = { signApproved, previewApproved, publicKeyObject, MESSAGE_OFFSET };

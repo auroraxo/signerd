@@ -43,8 +43,8 @@ Usage:
             --grants <file> --ledger <file> --socket <file>
             [--grant-seal-passphrase-file <file>]
             [--journal-seal-passphrase-file <file>]
-  signerd sign --socket <file> --grant <name> --tx <wire-file> [--out <file>]
-  signerd sign-message --socket <file> --grant <name> --body <json-file> [--out <file>]
+  signerd sign --socket <file> --grant <name> --tx <wire-file> [--out <file>] [--dry]
+  signerd sign-message --socket <file> --grant <name> --body <json-file> [--out <file>] [--dry]
             [--add-grant --keystore <file>]  create the message grant for <name>
             from the body (issuer/type/subject) pinning the PUBLIC key recorded
             in <keystore>, if the grant file lacks it, then sign; the grant
@@ -294,8 +294,8 @@ async function main() {
       }
       throw err;
     }
-    const response = await request({ socketPath, grant, wire });
-    if (response.ok && typeof args.out === 'string') {
+    const response = await request({ socketPath, grant, wire, dry: args.dry === true ? true : undefined });
+    if (response.ok && !response.dry && typeof args.out === 'string') {
       fs.writeFileSync(args.out, Buffer.from(response.signed, 'base64'), { mode: 0o600 });
       delete response.signed;
     }
@@ -591,8 +591,8 @@ async function main() {
         }
       }
     }
-    const response = await request({ socketPath, grant, body: bodyText });
-    if (response.ok && typeof args.out === 'string') {
+    const response = await request({ socketPath, grant, body: bodyText, dry: args.dry === true ? true : undefined });
+    if (response.ok && !response.dry && typeof args.out === 'string') {
       // The receipt file, openreceipts-shaped: the body the daemon signed
       // (re-serialized with sorted keys, indent 2 - formatting is not
       // payload), plus pubkey and sig, exactly what `receipt.py verify` and

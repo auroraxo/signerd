@@ -118,4 +118,46 @@ function signMessageApproved({ body, grant, ledger, keypair, now = new Date() })
   };
 }
 
-module.exports = { signMessageApproved, messagePublicKey, MESSAGE_SEED_BYTES: SEED_BYTES };
+/**
+ * The DRY twin of signMessageApproved(): the same grant/key/envelope checks
+ * and the same window/replay decision, but no signature and no journal
+ * record. Refuses exactly what the real path refuses (signer_key_mismatch,
+ * envelope verdicts, window_cap, replay), so a dry "allowed" never
+ * contradicts a later real run.
+ */
+function previewMessageApproved({ body, grant, ledger, keypair, now = new Date() }) {
+  const pubkey = messagePublicKey(keypair);
+  if (pubkey === null) return refused('signer_unavailable');
+  const pinned = grant && typeof grant === 'object'
+    ? Object.getOwnPropertyDescriptor(grant, 'pubkey') : undefined;
+  if (!pinned || !('value' in pinned) || typeof pinned.value !== 'string') {
+    return refused('invalid_grant');
+  }
+  if (grantPublicKeyObject(keypair, pinned.value) === null) return refused('signer_key_mismatch');
+
+  const verdict = evaluateMessage(body, grant, now);
+  if (!verdict.allowed) return verdict;
+
+  if (!ledger || typeof ledger.previewMessage !== 'function') return refused('ledger_unavailable');
+  const approval = ledger.previewMessage({
+    messageBytes: verdict.messageBytes,
+    messageSha256: verdict.messageSha256,
+    grant, now,
+  });
+  if (!approval.allowed) return approval;
+  return {
+    allowed: true,
+    dry: true,
+    kind: 'message',
+    messageSha256: verdict.messageSha256,
+    messageBytes: verdict.messageBytes.length,
+    pubkey,
+    windowMessages: approval.windowMessages,
+    windowRemainingMessages: approval.windowRemainingMessages,
+    budgetConsumed: false,
+  };
+}
+
+module.exports = {
+  signMessageApproved, previewMessageApproved, messagePublicKey, MESSAGE_SEED_BYTES: SEED_BYTES,
+};

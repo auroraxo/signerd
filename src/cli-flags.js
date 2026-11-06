@@ -60,14 +60,14 @@ const COMMAND_FLAGS = {
     'grant-seal-passphrase-file', 'journal-seal-passphrase-file',
   ],
   'build-tx': ['keystore', 'to', 'lamports', 'out', 'blockhash'],
-  sign: ['socket', 'grant', 'tx', 'out'],
+  sign: ['socket', 'grant', 'tx', 'out', 'dry'],
   'grant-add': [
     'grants', 'name', 'signer', 'keystore', 'destination', 'max-lamports',
     'window-max-lamports', 'window-seconds', 'expires', 'append',
     'seal-passphrase-file',
   ],
   'grant-remove': ['grants', 'name', 'seal-passphrase-file'],
-  'sign-message': ['socket', 'grant', 'body', 'out', 'add-grant', 'keystore', 'grants'],
+  'sign-message': ['socket', 'grant', 'body', 'out', 'add-grant', 'keystore', 'grants', 'dry'],
   status: [
     'grants', 'ledger', 'grant-seal-passphrase-file', 'journal-seal-passphrase-file',
   ],

@@ -41,9 +41,15 @@ function buildTransferWire({ fromPubkey, toPubkey, lamports, blockhash }) {
  * Returns the daemon's answer verbatim: either { ok: true, signed, ... } or
  * { ok: false, error, ... }. A refusal is data, not an exception — the caller
  * is expected to learn WHY it was refused instead of working around it.
+ *
+ * `dry: true` asks for the VERDICT without the signature: the daemon runs
+ * the same policy and the same budget decision, returns { ok: true, dry: true,
+ * allowed: true, ... } with no `signed` wire, and journals nothing (no
+ * replay entry, no window spend). The same wire can then still be signed for
+ * real.
  */
-async function signViaDaemon({ socketPath, grant, wire, timeoutMs }) {
-  return request({ socketPath, grant, wire, timeoutMs });
+async function signViaDaemon({ socketPath, grant, wire, timeoutMs, dry }) {
+  return request({ socketPath, grant, wire, timeoutMs, dry: dry === true ? true : undefined });
 }
 
 /**
@@ -87,9 +93,12 @@ function buildReceiptBody({ issuer, type, subject, claims = {}, note, issuedAt }
  * The body travels as a JSON TEXT; the daemon parses it and signs the
  * canonical bytes derived from the parsed value. A refusal is data, not an
  * exception.
+ *
+ * `dry: true` asks for the VERDICT without the signature (same contract as
+ * signViaDaemon): nothing is signed and nothing is journaled.
  */
-async function signMessageViaDaemon({ socketPath, grant, body, timeoutMs }) {
-  return request({ socketPath, grant, body: JSON.stringify(body), timeoutMs });
+async function signMessageViaDaemon({ socketPath, grant, body, timeoutMs, dry }) {
+  return request({ socketPath, grant, body: JSON.stringify(body), timeoutMs, dry: dry === true ? true : undefined });
 }
 
 module.exports = {

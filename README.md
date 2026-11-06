@@ -411,7 +411,9 @@ The earlier version of this section showed a `Signerd.connect(...)` / `signer.si
 legacy transfer from a fee payer's **public** key, sends it, and writes back the signed wire.
 It never opens a key file — see "User zero, measured" below.
 
-The planned core is a Rust daemon, a TypeScript SDK, and a built-in MCP server. `--dry` runs the same scope path without producing a real signature.
+The planned core is a Rust daemon, a TypeScript SDK, and a built-in MCP server.
+
+**Shipped 2026-11-06: `--dry` is real.** `signerd sign --dry` and `signerd sign-message --dry` (and a strict `dry: true` boolean on the wire frame) run the *same* scope path — the same policy evaluation, the same replay check, the same rolling-window and per-transaction budget decision — without producing a signature and without writing the journal: no record, no replay entry, no window spend, so the identical request can still be signed for real afterwards. Refusals are identical to the real path, so a dry `allowed: true` is a promise the real path keeps except when a concurrent request spends the same budget in between. Two deliberate limits: `dry` must be a boolean or the request fails closed with `request_invalid` (never degraded into a real signature), and a dry run writes nothing to `--out`. Pinned by `test/dry-run-surface.test.js` (7 cases) and `tools/mutation-ladder-dry.sh` (7 mutations, each one caught).
 
 ### User zero, measured
 

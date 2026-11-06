@@ -6,8 +6,8 @@ const net = require('node:net');
 const path = require('node:path');
 const { Ledger } = require('./ledger');
 const { loadGrantFile } = require('./grantfile');
-const { signApproved } = require('./signer');
-const { signMessageApproved } = require('./signer-message');
+const { signApproved, previewApproved } = require('./signer');
+const { signMessageApproved, previewMessageApproved } = require('./signer-message');
 const { classifySocketPath } = require('./socketprobe');
 const { claimJournalLock, ownsJournalLock } = require('./journal-lock');
 
@@ -41,6 +41,14 @@ function decodeRequest(raw) {
   }
   const wireField = Object.getOwnPropertyDescriptor(doc, 'wire');
   const bodyField = Object.getOwnPropertyDescriptor(doc, 'body');
+  const dryField = Object.getOwnPropertyDescriptor(doc, 'dry');
+  // dry is OPTIONAL: when present it must be a strict boolean. A non-boolean
+  // value (e.g. "true" or 1) is a malformed request, fail closed - never
+  // silently degraded to a non-dry real signature.
+  if (dryField !== undefined && (typeof dryField.value !== 'boolean')) {
+    throw fail('request_invalid');
+  }
+  const dry = dryField !== undefined ? dryField.value : false;
   // A request carries EITHER a transaction wire (base64) OR a message body
   // (a JSON text). Both at once is a malformed request, never "both paths".
   if (wireField && bodyField) throw fail('request_invalid');
@@ -59,7 +67,7 @@ function decodeRequest(raw) {
     } catch {
       throw fail('body_invalid');
     }
-    return { grantName: grantName.value, body };
+    return { grantName: grantName.value, body, dry };
   }
   if (!wireField || !('value' in wireField)) throw fail('request_invalid');
   // The wire is a BASE64 STRING. Buffer.from(array, 'base64') silently
@@ -72,7 +80,7 @@ function decodeRequest(raw) {
   // Canonical base64 only: Node's decoder also skips characters that are not
   // in the alphabet and accepts base64url, so the round trip is the check.
   if (!wire.length || wire.toString('base64') !== wireField.value) throw fail('request_invalid');
-  return { grantName: grantName.value, wire };
+  return { grantName: grantName.value, wire, dry };
 }
 
 /** True when `pid` refers to a live process (EPERM = alive, owned by someone else). */
@@ -242,6 +250,28 @@ class Daemon {
     // an accidental cross-envelope approval.
     if (parsed.body !== undefined) {
       if (grant.kind !== 'message') return { ok: false, error: 'grant_kind_mismatch' };
+      // The DRY path: same checks, same verdict, no signature, no journal
+      // record, no budget consumed. The refusal reasons are identical, so a
+      // dry "allowed" is a promise a real run keeps (modulo a concurrent
+      // spend, which is stated as a limit in the README).
+      if (parsed.dry === true) {
+        const preview = previewMessageApproved({
+          body: parsed.body, grant, ledger: this.ledger, keypair: this.keypair, now: new Date(),
+        });
+        if (!preview.allowed) return { ok: false, error: preview.refused, detail: preview };
+        return {
+          ok: true,
+          dry: true,
+          allowed: true,
+          kind: 'message',
+          messageSha256: preview.messageSha256,
+          messageBytes: preview.messageBytes,
+          pubkey: preview.pubkey,
+          windowMessages: preview.windowMessages,
+          windowRemainingMessages: preview.windowRemainingMessages,
+          budgetConsumed: false,
+        };
+      }
       const verdict = signMessageApproved({
         body: parsed.body, grant, ledger: this.ledger, keypair: this.keypair, now: new Date(),
       });
@@ -258,6 +288,28 @@ class Daemon {
       };
     }
     if (grant.kind === 'message') return { ok: false, error: 'grant_kind_mismatch' };
+    // The DRY path (transaction): the same policy and the same budget
+    // decision as the real path, but nothing is signed and nothing is
+    // journaled - no record, no replay entry, no window spend.
+    if (parsed.dry === true) {
+      const preview = previewApproved({
+        wire: parsed.wire, grant, ledger: this.ledger, keypair: this.keypair, now: new Date(),
+      });
+      if (!preview.allowed) return { ok: false, error: preview.refused, detail: preview };
+      return {
+        ok: true,
+        dry: true,
+        allowed: true,
+        amountLamports: preview.amountLamports,
+        feeLamports: preview.feeLamports,
+        totalLamports: preview.totalLamports,
+        wireSha256: preview.wireSha256,
+        messageSha256: preview.messageSha256,
+        windowSpentLamports: preview.windowSpentLamports,
+        windowRemainingLamports: preview.windowRemainingLamports,
+        budgetConsumed: false,
+      };
+    }
     const verdict = signApproved({
       wire: parsed.wire, grant, ledger: this.ledger, keypair: this.keypair, now: new Date(),
     });
@@ -558,7 +610,7 @@ class Daemon {
 }
 
 /** Client: connect, send one request, read one response. */
-function request({ socketPath, grant, wire, body, timeoutMs = REQUEST_TIMEOUT_MS }) {
+function request({ socketPath, grant, wire, body, dry, timeoutMs = REQUEST_TIMEOUT_MS }) {
   return new Promise((resolve, reject) => {
     const socket = net.connect(socketPath);
     let buffer = Buffer.alloc(0);
@@ -569,6 +621,7 @@ function request({ socketPath, grant, wire, body, timeoutMs = REQUEST_TIMEOUT_MS
       const payload = body !== undefined
         ? { grant, body }
         : { grant, wire: Buffer.from(wire).toString('base64') };
+      if (dry !== undefined) payload.dry = dry;
       socket.write(JSON.stringify(payload) + '\n');
     });
     socket.on('data', (chunk) => {
