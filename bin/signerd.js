@@ -4,7 +4,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { checkFlags, closestFlag, parseArgv } = require('../src/cli-flags');
-const { checkOutWritable } = require('../src/out-preflight');
+const { checkOutWritable, outPreflightFix, writeOutAtomic, outWriteFix } = require('../src/out-preflight');
 
 /**
  * Refuse an unwritable --out BEFORE anything is read, requested or signed.
@@ -20,9 +20,7 @@ const { checkOutWritable } = require('../src/out-preflight');
 function requireWritableOut(outPath) {
   const check = checkOutWritable(outPath);
   if (check.ok) return;
-  const fix = check.code === 'out_is_directory'
-    ? `  fix: give --out a FILE path, not a directory (e.g. ${check.path}.json)`
-    : `  fix: create the directory first (mkdir -p ${check.parent}) or point --out at a writable path`;
+  const fix = outPreflightFix(check);
   process.stderr.write(`${check.code}: ${check.message}\n${fix}\n`);
   process.exit(2);
 }
@@ -373,7 +371,31 @@ async function main() {
     }
     const response = await request({ socketPath, grant, wire, dry: args.dry === true ? true : undefined });
     if (response.ok && !response.dry && typeof args.out === 'string') {
-      fs.writeFileSync(args.out, Buffer.from(response.signed, 'base64'), { mode: 0o600 });
+      // DELIVERY. The daemon has already signed: the budget is spent and the
+      // replay identity is recorded. If the write fails now, the signature
+      // must NOT die with it (measured live 2026-11-07: `ulimit -f 0` made
+      // the write fail AFTER signing — exit 1, stdout empty, and the retry
+      // permanently refused `replay`, so the operator paid for bytes they
+      // could never get back).
+      //
+      // So: deliver atomically, and on failure exit 3 with the signed wire
+      // ON STDOUT. Exit 3 means "the work happened, the file did not" — a
+      // distinct state from a refusal (1) and from a usage error (2).
+      const signed = Buffer.from(response.signed, 'base64');
+      const delivery = writeOutAtomic(args.out, signed);
+      if (!delivery.ok) {
+        response.outError = {
+          code: delivery.code,
+          errno: delivery.errno,
+          path: delivery.path,
+          message: delivery.message,
+        };
+        process.stderr.write(
+          `out_write_failed: the signature was produced but could not be written to ${delivery.path}: ${delivery.message}\n` +
+          `${outWriteFix(delivery)}\n`);
+        process.stdout.write(JSON.stringify(response) + '\n');
+        process.exit(3);
+      }
       delete response.signed;
     }
     process.stdout.write(JSON.stringify(response) + '\n');
@@ -681,7 +703,24 @@ async function main() {
       const ordered = {};
       for (const key of Object.keys(bodyObj).sort()) ordered[key] = bodyObj[key];
       const doc = { receipt: ordered, pubkey: response.pubkey, sig: response.signature };
-      fs.writeFileSync(args.out, JSON.stringify(doc, null, 2) + '\n', { mode: 0o600 });
+      // DELIVERY, same rule as `sign`: the receipt is already signed. If the
+      // write fails, the receipt must survive on stdout (exit 3) instead of
+      // dying with the budget that was already spent on it.
+      const delivery = writeOutAtomic(args.out, Buffer.from(JSON.stringify(doc, null, 2) + '\n'));
+      if (!delivery.ok) {
+        response.receiptDoc = doc;
+        response.outError = {
+          code: delivery.code,
+          errno: delivery.errno,
+          path: delivery.path,
+          message: delivery.message,
+        };
+        process.stderr.write(
+          `out_write_failed: the receipt was produced but could not be written to ${delivery.path}: ${delivery.message}\n` +
+          `${outWriteFix(delivery)}\n`);
+        process.stdout.write(JSON.stringify(response) + '\n');
+        process.exit(3);
+      }
     }
     process.stdout.write(JSON.stringify(response) + '\n');
     process.exit(response.ok ? 0 : 1);
@@ -740,7 +779,11 @@ async function main() {
     const sealed = sealDocument(doc, passphrase);
     const out = typeof args.out === 'string' ? args.out : file;
     requireWritableOut(out);
-    fs.writeFileSync(out, JSON.stringify(sealed, null, 2) + '\n', { mode: 0o600 });
+    const delivery = writeOutAtomic(out, Buffer.from(JSON.stringify(sealed, null, 2) + '\n'));
+    if (!delivery.ok) {
+      process.stderr.write(`out_write_failed: cannot write sealed grants to ${out}: ${delivery.message}\n`);
+      process.exit(1);
+    }
     // The operator must see WHAT was sealed: sealing a forged file makes the
     // forgery valid, so the names and the caps are printed.
     const summary = Object.keys(sealed.grants).sort().map((name) => ({

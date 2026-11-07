@@ -115,9 +115,14 @@ function buildTxFile({
     fromPubkey, toPubkey, lamports: amount, blockhash: bh,
   });
 
-  // Owner-only, like every other file this tool writes (0600 even under a
-  // loose umask — the grant file rule).
-  fsx.writeFileSync(out, wire, { mode: 0o600 });
+  // Atomic: a failed write must not leave a truncated or half-built wire at
+  // `out`, and the result lands owner-only regardless of the mode the target
+  // had before (writeFileSync's mode only applies on create).
+  const delivery = require('./out-preflight').writeOutAtomic(out, wire);
+  if (!delivery.ok) {
+    const err = new BuildTxError(delivery.code, delivery.message);
+    throw err;
+  }
 
   return {
     ok: true,

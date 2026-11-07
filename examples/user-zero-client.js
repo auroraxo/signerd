@@ -39,7 +39,7 @@
 
 const fs = require('node:fs');
 const { buildTransferWire, signViaDaemon } = require('../src/client');
-const { checkOutWritable } = require('../src/out-preflight');
+const { checkOutWritable, outPreflightFix, writeOutAtomic, outWriteFix } = require('../src/out-preflight');
 const {
   parseTokens, arityProblemsFor, checkFlagsFor, closestFlag,
   CLIENT_FLAGS, CLIENT_SWITCH_FLAGS,
@@ -147,9 +147,7 @@ async function main() {
   if (typeof args.out === 'string') {
     const check = checkOutWritable(args.out);
     if (!check.ok) {
-      const fix = check.code === 'out_is_directory'
-        ? `  fix: give --out a FILE path, not a directory (e.g. ${check.path}.json)`
-        : `  fix: create the directory first (mkdir -p ${check.parent}) or point --out at a writable path`;
+      const fix = outPreflightFix(check);
       process.stderr.write(`${check.code}: ${check.message}\n${fix}\n`);
       process.exit(2);
     }
@@ -186,17 +184,35 @@ async function main() {
   }
 
   const signed = Buffer.from(response.signed, 'base64');
-  if (typeof args.out === 'string') fs.writeFileSync(args.out, signed, { mode: 0o600 });
+  let outError;
+  if (typeof args.out === 'string') {
+    const delivery = writeOutAtomic(args.out, signed);
+    if (!delivery.ok) {
+      outError = {
+        code: delivery.code,
+        errno: delivery.errno,
+        path: delivery.path,
+        message: delivery.message,
+      };
+      process.stderr.write(
+        `out_write_failed: the signature was produced but could not be written to ${delivery.path}: ${delivery.message}\n` +
+        `${outWriteFix(delivery)}\n`);
+    }
+  }
 
   process.stdout.write(JSON.stringify({
     ok: true,
     signature: response.signature,
+    signed: outError ? response.signed : undefined,
+    outError,
     amountLamports: response.amountLamports,
     feeLamports: response.feeLamports,
     seq: response.seq,
     signedBytes: signed.length,
     out: typeof args.out === 'string' ? args.out : null,
   }) + '\n');
+
+  if (outError) process.exit(3);
 
   if (args.hold === true) {
     process.stdout.write('READY_TO_SCAN\n');

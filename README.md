@@ -434,6 +434,53 @@ byte-identically). Limits: preflight checks what the local filesystem answers at
 (a TOCTOU window remains — `writeFileSync` errors are still possible), and it does not create
 the parent directory for you.
 
+**2026-11-07: a delivery that fails *after* signing keeps the signature (exit 3).**
+The preflight above closes the door on the failures it can see, but it cannot see every one:
+the filesystem can change between the preflight and the write, the disk can fill, and the
+output path can be a node the preflight did not classify. Measured on the tree at `aebe5f9`,
+each of these destroyed a **paid-for** signature — the daemon had already signed, the journal
+had grown, the budget was charged and the replay identity recorded, and then the write failed:
+
+| `--out` target | old behaviour | consequence |
+|---|---|---|
+| dangling symlink | preflight said `ok:true`; `ENOENT` after signing | signature lost, retry refused `replay` |
+| a FIFO | preflight said `ok:true`; the daemon's `open` blocked forever | daemon hung **after** signing |
+| `ulimit -f 0` (`RLIMIT_FSIZE`) | `EFBIG` after signing | signature lost, retry refused `replay` |
+| an existing 200-byte file | `O_TRUNC` truncated it to **0 bytes**, then the write failed | the operator's old file destroyed *and* no new one |
+| an existing `0644` file | the write succeeded and the file stayed `0644` | the delivered signature stayed world-readable |
+
+Two changes close that window.
+
+**The preflight now judges the *resolved* target.** `src/out-preflight.js` follows the final
+symlink chain (`lstat` at every hop, never `stat`, 32-hop limit) and refuses what the write
+would actually open: a symlink loop (`out_symlink_loop`), and any non-regular node — directory,
+FIFO, device, socket (`out_not_regular_file`). A symlink to a **valid** regular file is
+accepted and written *through*; the link is not the defect.
+
+**Delivery is atomic.** `writeOutAtomic()` writes a same-directory temporary file at mode
+`0600`, `fsync`s it, and `rename`s it over the target. A failed write therefore never touches
+the previous file, and a successful one lands `0600` regardless of the target's old mode.
+
+**The exit code says what happened.** `bin/signerd.js`, `examples/user-zero-client.js`,
+`src/buildtx.js` and `seal-grants` now distinguish three outcomes:
+
+| exit | meaning |
+|---|---|
+| 0 | signed **and** delivered |
+| 1 | the daemon or the policy refused (no signature was made) |
+| 2 | a usage/preflight refusal (no signature was made) |
+| 3 | **the signature was made, the file delivery failed** |
+
+On exit 3 the signed wire (or the signed receipt document) is **still on stdout**, and the
+error is reported as `outError` in the JSON answer plus a `fix:` line on stderr. The
+signature is no longer thrown away: an operator can salvage it with the repair the error
+names, and the journal already records what was signed. Pinned by `test/out-delivery.test.js`
+(13 cases: 10 red on the pre-fix tree, 3 guards) and `tools/mutation-ladder-out-delivery.sh`
+(8 mutations, each caught, tree restored byte-identically). Limits: exit 3 still means the
+`--out` file does **not** contain the signature — the artefact is on stdout; the preflight is
+still a point-in-time check, so a TOCTOU window remains (that window is what exit 3 exists
+for); and a symlink chain longer than 32 hops is refused rather than followed.
+
 **2026-11-07: the example client obeys the daemon's flag surface, and `--dry` is real there.**
 The client ships in the npm package, and until now it carried its own hand-rolled parser.
 Measured against the real daemon, that parser dropped flags without a word: `--totally-unknown x`

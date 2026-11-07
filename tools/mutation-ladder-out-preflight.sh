@@ -86,8 +86,8 @@ PY
 cat > "$SNAP/m4.py" <<'PY'
 p='src/out-preflight.js'
 s=open(p).read()
-old="      if (stat.isDirectory()) {\n        return {\n          ok: false,\n          code: 'out_is_directory',\n          path: outPath,\n          message: `the output path ${outPath} is an existing directory`,\n        };\n      }"
-new="      // mutation: directory check dropped"
+old="    if (stat.isDirectory()) {\n      return {\n        ok: false,\n        code: 'out_is_directory',"
+new="    if (false && stat.isDirectory()) {\n      return {\n        ok: false,\n        code: 'out_is_directory',"
 assert old in s, 'M4 anchor missing'
 s=s.replace(old,new,1)
 open(p,'w').write(s)
