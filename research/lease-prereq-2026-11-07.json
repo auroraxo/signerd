@@ -1,0 +1,113 @@
+{
+  "measuredAt": "2026-11-07T23:34:50.132Z",
+  "repo": "https://github.com/auroraxo/signerd",
+  "preRef": "v0.2.7",
+  "preVersion": "0.2.7",
+  "postRef": "working tree",
+  "postVersion": "0.2.7",
+  "question": "Does a stranger with no C compiler get an actionable refusal from `signerd run`?",
+  "method": "three real trees (published tag v0.2.7 shape, fixed tree), offline, no network; the tarball ships the helper SOURCE and never the binary, so the helper is compiled at runtime",
+  "cases": [
+    {
+      "id": "A",
+      "tree": "published tag v0.2.7",
+      "label": "no compiler",
+      "prep": {
+        "keygen": 0,
+        "grantAdd": 0
+      },
+      "exitCode": 1,
+      "code": "grant_file_lease_unavailable",
+      "codeOccurrences": 2,
+      "doubledVerdict": true,
+      "hasFixLine": false,
+      "namesCompiler": true,
+      "namesHelper": false,
+      "leaksNodeInternal": true,
+      "leaksCompilerDump": false,
+      "stderr": "grant_file_lease_unavailable: grant_file_lease_unavailable: spawnSync /tmp/signerd-no-such-compiler-for-measurement ENOENT"
+    },
+    {
+      "id": "B",
+      "tree": "published tag v0.2.7",
+      "label": "read-only install dir",
+      "prep": {
+        "keygen": 0,
+        "grantAdd": 0
+      },
+      "exitCode": 1,
+      "code": "grant_file_lease_unavailable",
+      "codeOccurrences": 2,
+      "doubledVerdict": true,
+      "hasFixLine": false,
+      "namesCompiler": false,
+      "namesHelper": true,
+      "leaksNodeInternal": false,
+      "leaksCompilerDump": true,
+      "stderr": "grant_file_lease_unavailable: grant_file_lease_unavailable: /usr/bin/ld: cannot open output file /tmp/signerd-lease-measure-Bmk4TE/preB/tools/leasecheck: Permission denied\ncollect2: error: ld returned 1 exit status"
+    },
+    {
+      "id": "C",
+      "tree": "fixed tree",
+      "label": "no compiler",
+      "prep": {
+        "keygen": 0,
+        "grantAdd": 0
+      },
+      "exitCode": 1,
+      "code": "grant_file_lease_unavailable",
+      "codeOccurrences": 1,
+      "doubledVerdict": false,
+      "hasFixLine": true,
+      "namesCompiler": true,
+      "namesHelper": true,
+      "leaksNodeInternal": false,
+      "leaksCompilerDump": false,
+      "stderr": "grant_file_lease_unavailable: the C compiler \"/tmp/signerd-no-such-compiler-for-measurement\" was not found — signerd builds the lease helper from source, so it needs one\n  fix: install a C compiler (cc), or point CC at one: CC=/path/to/cc signerd run ...   # the lease helper is built from tools/leasecheck.c, so the daemon needs a compiler once"
+    },
+    {
+      "id": "D",
+      "tree": "fixed tree",
+      "label": "read-only install dir",
+      "prep": {
+        "keygen": 0,
+        "grantAdd": 0
+      },
+      "exitCode": 1,
+      "code": "grant_file_lease_unavailable",
+      "codeOccurrences": 1,
+      "doubledVerdict": false,
+      "hasFixLine": true,
+      "namesCompiler": true,
+      "namesHelper": true,
+      "leaksNodeInternal": false,
+      "leaksCompilerDump": false,
+      "stderr": "grant_file_lease_unavailable: the lease helper could not be written to /tmp/signerd-lease-measure-Bmk4TE/fixD/tools — the compiler ran, but that directory is not writable\n  fix: make the install directory writable (or pre-build it there: cc -O2 -o tools/leasecheck tools/leasecheck.c)   # the helper must be written next to its shipped source"
+    },
+    {
+      "id": "E",
+      "tree": "fixed tree",
+      "label": "working compiler",
+      "prep": {
+        "keygen": 0,
+        "grantAdd": 0
+      },
+      "started": true,
+      "helperBuilt": true,
+      "helperBytes": 16672,
+      "stdout": "{\"ok\":true,\"socketPath\":\"/tmp/signerd-lease-meas-mEuq6J/sb/signerd.sock\",\"grants\":[\"ops-24h\"],\"ledger\":{\"records\":0,\"seq\":0,\"fingerprints\":0},\"signer\":\"BGb9Cy7uMWThzEZEU4dgb6KKzjNAVm8CxroDLwXozfrE\"}"
+    }
+  ],
+  "verdict": {
+    "preFixDoubledVerdict": true,
+    "preFixNoRepair": true,
+    "preFixLeaksInternal": true,
+    "postFixSingleCode": true,
+    "postFixHasRepair": true,
+    "postFixNoInternalLeak": true,
+    "postFixReadOnlyHasOwnRepair": true,
+    "postFixStillStarts": true
+  },
+  "noVerdict": false,
+  "reason": "all verdict fields must hold for the fix to count as measured, not asserted"
+}
