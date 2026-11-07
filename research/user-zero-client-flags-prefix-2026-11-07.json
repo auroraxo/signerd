@@ -1,0 +1,60 @@
+{
+  "tool": "examples/user-zero-client.js pre-fix flag handling",
+  "date": "2026-11-07",
+  "tree": "dabb688 (pre-fix; the fix is the working tree)",
+  "method": "real daemon (bin/signerd run), real example client as a separate process, one distinct wire per case (distinct lamports+blockhash) so replay cannot mask a verdict",
+  "cases": {
+    "M1_dry_flag": {
+      "argv_extra": [
+        "--dry"
+      ],
+      "exit": 0,
+      "stdout": "{\"ok\":true,\"signature\":\"4ohXmCSmwpv81TgHxUnR1eLABxXEpaARisPJZcUqSV4mCyLNdy18uykcVW9yLaK31WKP7rfRzqBnEcQoGXNkJUWo\",\"amountLamports\":\"11\",\"feeLamports\":\"5000\",\"seq\":1,\"signedBytes\":215}",
+      "journalDeltaBytes": 366,
+      "outFileWritten": 215,
+      "verdict": "FAIL-OPEN: a dry request was answered with a REAL signature and a journal record"
+    },
+    "M2_duplicate_lamports": {
+      "argv": [
+        "--lamports",
+        "22",
+        "--lamports",
+        "999"
+      ],
+      "exit": 0,
+      "stdout_amount": "999",
+      "journalDeltaBytes": 367,
+      "verdict": "FAIL-OPEN: last value wins silently; the operator named 22 first, 999 was signed"
+    },
+    "M3_unknown_flag": {
+      "argv_extra": [
+        "--totally-unknown",
+        "x"
+      ],
+      "exit": 0,
+      "stdout_amount": "33",
+      "journalDeltaBytes": 366,
+      "verdict": "FAIL-OPEN: the unknown flag was dropped without a word and the request was signed"
+    },
+    "M4_missing_value": {
+      "argv_extra": [
+        "--lamports"
+      ],
+      "exit": 2,
+      "stderr_first_line": "missing --lamports",
+      "journalDeltaBytes": 0,
+      "verdict": "NOT A DEFECT (guard): a required flag with no value was already refused by requireArg"
+    },
+    "M5_switch_with_value": {
+      "argv_extra": [
+        "--hold",
+        "yes"
+      ],
+      "exit": 0,
+      "stdout_amount": "55",
+      "journalDeltaBytes": 366,
+      "verdict": "FAIL-OPEN: a switch given a value was accepted and the request signed"
+    }
+  },
+  "first_observation": "an earlier run mixed the cases onto ONE wire; the replay gate then answered {error:replay} for cases 3 and 5, masking their real verdicts. Fixed by giving each case its own wire. The instrument must not let one case consume another's identity."
+}

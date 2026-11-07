@@ -120,6 +120,17 @@ const SWITCH_FLAGS = {
  * rule is about flags that ARE known and were used with the wrong shape).
  */
 function parseArgv(argv) {
+  const { args, raw } = parseTokens(argv);
+  const command = argv.length > 0 && !argv[0].startsWith('--') ? argv[0] : undefined;
+  return { args, problems: arityProblems(command, raw) };
+}
+
+/**
+ * The token walk itself: the same shape for every surface that refuses by
+ * arity. `raw` holds the CANDIDATE problems; which of them apply is decided
+ * against a flag table afterwards (arityProblems / arityProblemsFor).
+ */
+function parseTokens(argv) {
   const args = { _: [] };
   const raw = [];
   const seen = new Map(); // flag -> the value it was first given
@@ -137,28 +148,26 @@ function parseArgv(argv) {
     seen.set(key, hasValue ? next : true);
     if (hasValue) { args[key] = next; i += 1; } else { args[key] = true; }
     // Candidate arity problems: which one applies depends on whether the
-    // command treats the flag as a value flag or as a switch.
+    // surface treats the flag as a value flag or as a switch.
     raw.push(hasValue
       ? { code: 'flag_takes_no_value', flag: key, value: next }
       : { code: 'missing_value', flag: key });
   }
-  const command = argv.length > 0 && !argv[0].startsWith('--') ? argv[0] : undefined;
-  return { args, problems: arityProblems(command, raw) };
+  return { args, raw };
 }
 
 /**
- * The arity rule for ONE command: which of the candidate problems actually
- * apply. A flag the command does not take is NOT an arity question - the
- * flag surface owns it (unknown_flag) - and a switch without a value is
- * exactly right, so both are dropped here.
+ * The arity rule against an EXPLICIT surface (the same rule as below, but
+ * the caller names the flags instead of looking them up by command). The
+ * example client uses it: its flags are not signerd commands, but the rule
+ * that a flag given twice, a value flag with no value and a switch given a
+ * value must be refused is the same rule.
  */
-function arityProblems(command, problems) {
-  const supported = COMMAND_FLAGS[command];
-  if (supported === undefined) return []; // unknown command: not this rule
-  const known = new Set(supported);
-  const switches = new Set(SWITCH_FLAGS[command] || []);
+function arityProblemsFor(supportedList, switchList, raw) {
+  const known = new Set(supportedList);
+  const switches = new Set(switchList || []);
   const out = [];
-  for (const p of problems) {
+  for (const p of raw) {
     if (!known.has(p.flag)) continue; // the flag surface owns this one
     if (p.code === 'duplicate_flag') { out.push(p); continue; }
     if (p.code === 'missing_value') {
@@ -172,6 +181,18 @@ function arityProblems(command, problems) {
     }
   }
   return out;
+}
+
+/**
+ * The arity rule for ONE command: which of the candidate problems actually
+ * apply. A flag the command does not take is NOT an arity question - the
+ * flag surface owns it (unknown_flag) - and a switch without a value is
+ * exactly right, so both are dropped here.
+ */
+function arityProblems(command, problems) {
+  const supported = COMMAND_FLAGS[command];
+  if (supported === undefined) return []; // unknown command: not this rule
+  return arityProblemsFor(supported, SWITCH_FLAGS[command], problems);
 }
 
 /**
@@ -252,23 +273,65 @@ function closestFlag(typed, supported) {
 function checkFlags(command, args, positionals) {
   const supported = COMMAND_FLAGS[command];
   if (supported === undefined) return { ok: true }; // unknown command: not this rule
-  const known = new Set(supported);
+  return checkFlagsFor(supported, args, (positionals || []).slice(1)); // [0] is the command itself
+}
+
+/**
+ * The same rule against an EXPLICIT flag list (used by the example client):
+ * every flag read must be listed, and every positional must be one the
+ * surface reads - a mistyped flag or a stray token is refused, not dropped.
+ */
+function checkFlagsFor(supportedList, args, extraPositionals) {
+  const known = new Set(supportedList);
   for (const key of Object.getOwnPropertyNames(args)) {
     if (key === '_') continue;
     if (!known.has(key)) {
-      return { ok: false, code: 'unknown_flag', flag: key, supported: [...supported].sort() };
+      return { ok: false, code: 'unknown_flag', flag: key, supported: [...supportedList].sort() };
     }
   }
-  const extra = (positionals || []).slice(1); // [0] is the command itself
+  const extra = extraPositionals || [];
   if (extra.length > 0) {
     return {
-      ok: false, code: 'unknown_argument', argument: extra[0], supported: [...supported].sort(),
+      ok: false, code: 'unknown_argument', argument: extra[0], supported: [...supportedList].sort(),
     };
   }
   return { ok: true };
 }
 
+/**
+ * THE EXAMPLE CLIENT'S FLAG SURFACE (measured 2026-11-07, live).
+ *
+ * `examples/user-zero-client.js` is the documented way for a user-zero
+ * adopter to ask for a signature without holding a key, and it ships in the
+ * npm package. It kept its own parseArgs, which dropped every flag it did
+ * not know and let the last value win for every flag given twice. Measured
+ * against the real daemon, before the fix:
+ *
+ *   --totally-unknown x          -> exit 0, a REAL signature, 366 journal
+ *                                    bytes. The flag vanished.
+ *   --lamports 22 --lamports 999 -> exit 0, a REAL signature for 999.
+ *   --out (no value)             -> exit 0, a REAL signature; --out read as
+ *                                    absent.
+ *   --hold yes                   -> exit 0, a REAL signature.
+ *   --dry                        -> exit 0, a REAL signature - the REVERSE
+ *                                    of what the flag means.
+ *
+ * The client is the first thing a user-zero adopter touches, and a client
+ * that drops flags signs what the operator did not ask for. It now uses the
+ * SAME rules as the daemon CLI (the surface, the arity, the repair).
+ *
+ * The flags are listed here, next to the daemon's, so there is ONE place
+ * that says which flags exist - a surface that lives in two files drifts.
+ */
+const CLIENT_FLAGS = [
+  'socket', 'grant', 'from', 'to', 'lamports', 'blockhash', 'out', 'hold', 'dry',
+];
+
+/** The client's switches: they take no value by design. */
+const CLIENT_SWITCH_FLAGS = ['hold', 'dry'];
+
 module.exports = {
   COMMAND_FLAGS, SWITCH_FLAGS, checkFlags, closestFlag, editDistance,
-  parseArgv, arityProblems,
+  parseArgv, arityProblems, parseTokens, arityProblemsFor, checkFlagsFor,
+  CLIENT_FLAGS, CLIENT_SWITCH_FLAGS,
 };
