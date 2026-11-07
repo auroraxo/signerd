@@ -340,8 +340,8 @@ async function main() {
             ? '  fix: pass a plain non-negative integer, e.g. --lamports 42'
             : err.code === 'keystore_unreadable'
               ? '  fix: point --keystore at a keystore created by `signerd keygen`'
-              : `  fix: ${err.message}`;
-        process.stderr.write(`${err.code}: ${err.message}\n${fix}\n`);
+              : `  fix: ${detailOf(err)}`;
+        process.stderr.write(`${err.code}: ${detailOf(err)}\n${fix}\n`);
         process.exit(2);
       }
       throw err;
@@ -508,13 +508,13 @@ async function main() {
         }
         if (err && err.code === 'grant_file_mode') {
           process.stderr.write(
-            `${err.code}: ${err.message}\n` +
+            `${err.code}: ${detailOf(err)}\n` +
             `  fix: chmod 600 ${grants}   # a grant file another user can write must not be extended\n`);
           process.exit(1);
         }
         if (err && err.code === 'grant_file_dir_mode') {
           process.stderr.write(
-            `${err.code}: ${err.message}\n` +
+            `${err.code}: ${detailOf(err)}\n` +
             `  fix: chmod 700 ${path.dirname(path.resolve(grants))}   # a stranger could swap the file there\n`);
           process.exit(1);
         }
@@ -548,6 +548,17 @@ async function main() {
         process.stderr.write(
           `grant_file_symlink: ${grants} is a symlink\n` +
           `  fix: point --grants at the real file, or remove the link   # a symlink is never followed here\n`);
+        process.exit(1);
+      }
+      // The create path refused with a bare errno (measured 2026-11-08:
+      // `EACCES: permission denied, open '<path>'`) - no code, no repair.
+      // The --append path already refused this code with a repair; the two
+      // paths now refuse the same way.
+      if (err && err.code === 'grant_file_write_failed') {
+        process.stderr.write(
+          `${err.code}: ${err.detail || 'the grant file could not be written'}\n` +
+          `  fix: make the directory writable (chmod 700 $(dirname ${grants})) and retry\n` +
+          `  fix: or point --grants at a file in a directory you own\n`);
         process.exit(1);
       }
       throw err;
@@ -598,19 +609,19 @@ async function main() {
       }
       if (err && err.code === 'grant_file_mode') {
         process.stderr.write(
-          `${err.code}: ${err.message}\n` +
+          `${err.code}: ${detailOf(err)}\n` +
           `  fix: chmod 600 ${grants}   # a grant file another user can write must not be modified\n`);
         process.exit(1);
       }
       if (err && err.code === 'grant_file_dir_mode') {
         process.stderr.write(
-          `${err.code}: ${err.message}\n` +
+          `${err.code}: ${detailOf(err)}\n` +
           `  fix: chmod 700 ${path.dirname(path.resolve(grants))}   # a stranger could swap the file there\n`);
         process.exit(1);
       }
       if (err && err.code === 'grant_file_unreadable') {
         process.stderr.write(
-          `${err.code}: ${err.message}\n` +
+          `${err.code}: ${detailOf(err)}\n` +
           `  fix: nothing to remove — no grant file at ${grants}\n` +
           `  fix: signerd grant-add --grants ${grants} --name <grant> ...   # create one\n`);
         process.exit(1);

@@ -48,6 +48,32 @@ const BASE58 = /^[1-9A-HJ-NP-Za-km-z]+$/;
 const U64 = /^(0|[1-9][0-9]*)$/;
 const EXPIRES = /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d{1,3})?Z$/;
 
+/**
+ * The write could not complete — NAMED, not a bare errno.
+ *
+ * WHY (measured 2026-11-08, on this tree): `signerd grant-add` into a
+ * read-only directory (root-owned config dir, read-only container layer)
+ * refused with exactly this and nothing else:
+ *
+ *   EACCES: permission denied, open '/tmp/.../ro/grants.json'
+ *
+ * No machine-readable code a parser can key on, no `fix:` line, and the
+ * reason — the DIRECTORY is not writable — never stated, while the --append
+ * path already refused `grant_file_write_failed` with a repair (the CLI has
+ * printed that repair since the atomic-write path landed; only the create
+ * path wrote the file with a raw fs.writeFileSync outside it). The two paths
+ * now refuse the same way: one code, one detail, one repair.
+ */
+function writeFailed(err, target) {
+  // The CLI prints `${err.code}: ${err.detail}` for this code, so the detail
+  // carries the OS phrase, not the errno again (which would read
+  // `grant_file_write_failed: EACCES: EACCES: permission denied`).
+  const detail = err && err.message ? err.message : `the write to ${target} failed`;
+  const e = fail('grant_file_write_failed', detail);
+  e.detail = detail;
+  return e;
+}
+
 function fail(reason, detail) {
   const err = new Error(detail === undefined ? reason : `${reason}: ${detail}`);
   err.code = reason;
@@ -199,8 +225,13 @@ function writeGrantFile({ file, name, grant }) {
   }
 
   const doc = { version: 1, grants: { [name]: grant } };
-  fs.writeFileSync(resolved, JSON.stringify(doc, null, 2) + '\n', { mode: 0o600 });
-  fs.chmodSync(resolved, 0o600); // writeFileSync's mode applies on create only
+  try {
+    fs.writeFileSync(resolved, JSON.stringify(doc, null, 2) + '\n', { mode: 0o600 });
+    fs.chmodSync(resolved, 0o600); // writeFileSync's mode applies on create only
+  } catch (err) {
+    try { fs.unlinkSync(resolved); } catch { /* never landed */ }
+    throw writeFailed(err, resolved);
+  }
   return { file: resolved, grant: name };
 }
 
@@ -237,8 +268,12 @@ function addGrantToFile({ file, name, grant }) {
   }
   grants[name] = grant;
   const out = { version: 1, grants };
-  fs.writeFileSync(resolved, JSON.stringify(out, null, 2) + '\n', { mode: 0o600 });
-  fs.chmodSync(resolved, 0o600);
+  try {
+    fs.writeFileSync(resolved, JSON.stringify(out, null, 2) + '\n', { mode: 0o600 });
+    fs.chmodSync(resolved, 0o600);
+  } catch (err) {
+    throw writeFailed(err, resolved);
+  }
   return { file: resolved, grant: name };
 }
 
@@ -509,10 +544,7 @@ function writeAtomic(target, doc) {
   } catch (err) {
     if (fd !== undefined) { try { fs.closeSync(fd); } catch { /* already closed */ } }
     try { fs.unlinkSync(tmp); } catch { /* never existed */ }
-    const e = new Error('grant_file_write_failed');
-    e.code = 'grant_file_write_failed';
-    if (err && err.code) e.detail = err.code;
-    throw e;
+    throw writeFailed(err, target);
   }
 }
 
