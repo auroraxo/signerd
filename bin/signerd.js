@@ -4,6 +4,28 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { checkFlags, closestFlag, parseArgv } = require('../src/cli-flags');
+const { checkOutWritable } = require('../src/out-preflight');
+
+/**
+ * Refuse an unwritable --out BEFORE anything is read, requested or signed.
+ *
+ * Measured 2026-11-07 (pre-fix aebe5f9): `sign --out <missing-dir>/x.bin`
+ * had the daemon SIGN first (journal written, budget charged, replay
+ * identity recorded) and only then crash in fs.writeFileSync with a bare
+ * ENOENT — the signature was thrown away, and every retry with a corrected
+ * --out was refused `replay`. Same for sign-message, the example client,
+ * build-tx and seal-grants. Refusing before the round trip keeps the spend
+ * and the replay set untouched, so the operator's fix actually works.
+ */
+function requireWritableOut(outPath) {
+  const check = checkOutWritable(outPath);
+  if (check.ok) return;
+  const fix = check.code === 'out_is_directory'
+    ? `  fix: give --out a FILE path, not a directory (e.g. ${check.path}.json)`
+    : `  fix: create the directory first (mkdir -p ${check.parent}) or point --out at a writable path`;
+  process.stderr.write(`${check.code}: ${check.message}\n${fix}\n`);
+  process.exit(2);
+}
 
 const USAGE = `signerd — scoped signing daemon for Solana (early prototype)
 
@@ -295,14 +317,18 @@ async function main() {
   if (command === 'build-tx') {
     const { BuildTxError, buildTxFile } = require('../src/buildtx');
     try {
-      const out = buildTxFile({
+      // Preflight the destination before anything is read or built: a bare
+      // ENOENT after a successful build tells the operator nothing they can
+      // act on (P5).
+      requireWritableOut(args.out);
+      const built = buildTxFile({
         keystorePath: args.keystore,
         to: args.to,
         lamports: args.lamports,
         out: args.out,
         blockhash: typeof args.blockhash === 'string' ? args.blockhash : undefined,
       });
-      process.stdout.write(JSON.stringify(out) + '\n');
+      process.stdout.write(JSON.stringify(built) + '\n');
       return;
     } catch (err) {
       if (err instanceof BuildTxError) {
@@ -326,6 +352,9 @@ async function main() {
     const socketPath = requireArg(args, 'socket');
     const grant = requireArg(args, 'grant');
     const txPath = requireArg(args, 'tx');
+    // Preflight BEFORE the round trip: a refusal here must leave the
+    // journal, the budget and the replay set untouched (P1/P2).
+    requireWritableOut(args.out);
     let wire;
     try {
       wire = fs.readFileSync(txPath);
@@ -575,6 +604,9 @@ async function main() {
     const { request } = require('../src/daemon');
     const socketPath = requireArg(args, 'socket');
     const grant = requireArg(args, 'grant');
+    // Preflight BEFORE the socket round trip (P3): an unwritable --out must
+    // not sign, journal, or charge rolling-window budget.
+    requireWritableOut(args.out);
     const bodyText = fs.readFileSync(requireArg(args, 'body'), 'utf8');
     // Shape check BEFORE the round trip: the body must be a JSON object (a
     // bare number or string would only fail at the policy layer).
@@ -707,6 +739,7 @@ async function main() {
     }
     const sealed = sealDocument(doc, passphrase);
     const out = typeof args.out === 'string' ? args.out : file;
+    requireWritableOut(out);
     fs.writeFileSync(out, JSON.stringify(sealed, null, 2) + '\n', { mode: 0o600 });
     // The operator must see WHAT was sealed: sealing a forged file makes the
     // forgery valid, so the names and the caps are printed.

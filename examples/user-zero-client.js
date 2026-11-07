@@ -39,6 +39,7 @@
 
 const fs = require('node:fs');
 const { buildTransferWire, signViaDaemon } = require('../src/client');
+const { checkOutWritable } = require('../src/out-preflight');
 const {
   parseTokens, arityProblemsFor, checkFlagsFor, closestFlag,
   CLIENT_FLAGS, CLIENT_SWITCH_FLAGS,
@@ -136,6 +137,22 @@ async function main() {
   if (!Number.isSafeInteger(lamports) || lamports < 0) {
     process.stderr.write('--lamports must be a non-negative integer\n');
     process.exit(2);
+  }
+
+  // Refuse an unwritable --out BEFORE the socket round trip (P4): the
+  // daemon would otherwise sign, journal and charge budget, and the crash
+  // afterwards would both destroy the signature and make the same request
+  // permanently `replay`. Checked after the wire is built? No — before it:
+  // a refusal must not depend on the wire being valid.
+  if (typeof args.out === 'string') {
+    const check = checkOutWritable(args.out);
+    if (!check.ok) {
+      const fix = check.code === 'out_is_directory'
+        ? `  fix: give --out a FILE path, not a directory (e.g. ${check.path}.json)`
+        : `  fix: create the directory first (mkdir -p ${check.parent}) or point --out at a writable path`;
+      process.stderr.write(`${check.code}: ${check.message}\n${fix}\n`);
+      process.exit(2);
+    }
   }
 
   // Only public values are read: the fee payer's public key, the destination,

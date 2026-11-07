@@ -413,6 +413,27 @@ The earlier version of this section showed a `Signerd.connect(...)` / `signer.si
 legacy transfer from a fee payer's **public** key, sends it, and writes back the signed wire.
 It never opens a key file — see "User zero, measured" below.
 
+**2026-11-07: an unwritable `--out` is refused before the daemon signs.**
+Measured on the tree at `aebe5f9`: with `--out` aimed at a directory that did not exist,
+`signerd sign --out …` made the daemon **sign first** — the journal grew 366 bytes, the budget
+was charged, the replay identity was recorded — and only then crashed on `fs.writeFileSync`
+with a bare `ENOENT:` and exit 1. The signature was thrown away, and retrying the identical
+wire with a corrected `--out` was permanently refused `replay`: budget spent, nothing delivered,
+and the operator's repair ("create the directory") could never take effect. `sign-message`
+(303 journal bytes, receipt lost), the shipped `examples/user-zero-client.js` (uncaught ENOENT),
+`build-tx` and `seal-grants` (bare errno, exit 1) had the same shape.
+
+Every `--out` consumer now runs a preflight (`src/out-preflight.js`) **before** the socket is
+touched: a missing/unwritable parent, an existing directory as target, or an unwritable target
+file is refused with `out_parent_unwritable` / `out_is_directory` / `out_unwritable`, a `fix:`
+line (e.g. `mkdir -p <parent>`) and exit 2 — journal untouched (0 bytes), no budget, no replay
+entry, so the corrected retry signs for real. That retry is the falsification. Pinned by
+`test/out-preflight.test.js` (9 cases: 7 red on the pre-fix tree, 2 guards) and
+`tools/mutation-ladder-out-preflight.sh` (6 mutations, each caught, tree restored
+byte-identically). Limits: preflight checks what the local filesystem answers at that moment
+(a TOCTOU window remains — `writeFileSync` errors are still possible), and it does not create
+the parent directory for you.
+
 **2026-11-07: the example client obeys the daemon's flag surface, and `--dry` is real there.**
 The client ships in the npm package, and until now it carried its own hand-rolled parser.
 Measured against the real daemon, that parser dropped flags without a word: `--totally-unknown x`
