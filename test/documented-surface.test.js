@@ -56,6 +56,9 @@ const TOOL = path.join(ROOT, 'tools', 'measure-documented-flags.mjs');
 const CLI = path.join(ROOT, 'bin', 'signerd.js');
 const README = path.join(ROOT, 'README.md');
 const CLI_REL = path.join('bin', 'signerd.js');
+// Where a tag fetched for measurement lives. NOT refs/tags/: that namespace is
+// the release census read by release-contract.test.js and measure-release-surface.
+const TEST_TAG_NS = 'refs/signerd-test-tags';
 
 // Populated in test.before: on a tree without the tool the import must fail
 // this file RED, not pass silently (the instrument IS the fix).
@@ -279,21 +282,36 @@ test('J1 main README documents only invocations main CLI accepts', () => {
 // state.
 // ---------------------------------------------------------------------------
 
-/** Materialize the pinned tag (local object store first, origin second). */
+/** Materialize the pinned tag (local object store first, origin second).
+ *
+ * The fetch target is a PRIVATE namespace (`refs/signerd-test-tags/`), never
+ * `refs/tags/`. Other tests — `release-contract.test.js` in particular — read
+ * `git tag -l` as the authoritative release-tag census; a test that writes the
+ * README's pin into `refs/tags/` turns that census into whatever this file
+ * happened to fetch. Measured 2026-11-07: in CI's tagless checkout
+ * (`fetch-depth: 1, fetch-tags: false`) the pin `v0.2.5` was fetched into
+ * `refs/tags/`, the census then read "latest release = v0.2.5" against
+ * package.json 0.2.6, and the release contract failed on a push that never
+ * touched a tag. Locally all tags exist, so the same run passed — a verdict
+ * that depended on which tags happened to be in the checkout.
+ *
+ * A test must not mutate the state another test treats as ground truth.
+ */
 function tagWorktree(tag) {
   const probe = spawnSync('git',
     ['rev-parse', '--verify', '--quiet', `${tag}^{commit}`], { cwd: ROOT });
   if (probe.status !== 0) {
     const fetched = spawnSync('git',
-      ['fetch', '--depth', '1', 'origin', `refs/tags/${tag}:refs/tags/${tag}`],
+      ['fetch', '--depth', '1', 'origin', `refs/tags/${tag}:${TEST_TAG_NS}/${tag}`],
       { cwd: ROOT, encoding: 'utf8' });
     if (fetched.status !== 0) {
       const why = String(fetched.stderr || '').trim().split('\n')[0] || `exit ${fetched.status}`;
       return { error: `pinned tag ${tag} is not local and not fetchable: ${why}` };
     }
   }
+  const ref = probe.status === 0 ? tag : `${TEST_TAG_NS}/${tag}`;
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'signerd-docsurface-tag-'));
-  const add = spawnSync('git', ['worktree', 'add', '--detach', '--force', dir, tag],
+  const add = spawnSync('git', ['worktree', 'add', '--detach', '--force', dir, ref],
     { cwd: ROOT, encoding: 'utf8' });
   if (add.status !== 0) return { error: `worktree add failed: ${String(add.stderr).trim()}` };
   const deps = path.join(dir, 'node_modules');

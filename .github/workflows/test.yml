@@ -9,6 +9,19 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # The release contract (test/release-contract.test.js) reads the
+          # release-tag census from the local object store. With the default
+          # fetch-depth 1 / fetch-tags false the checkout has NO tags, so the
+          # census had to come from whatever a sibling test happened to fetch
+          # — measured 2026-11-07: the README pin v0.2.5 was fetched into
+          # refs/tags/ by the tag-materializing tests, the census read
+          # "latest release = v0.2.5" against package.json 0.2.6, and a push
+          # that touched no tag failed the contract. Full history brings the
+          # real tags, so the verdict describes releases instead of checkout
+          # bookkeeping.
+          fetch-depth: 0
+          fetch-tags: true
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
@@ -32,6 +45,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Same reason as the test job: the consumer e2e runs the same test
+          # files' siblings, and a tagless checkout lets the tag census in
+          # another test be decided by a partial fetch.
+          fetch-depth: 0
+          fetch-tags: true
       - uses: actions/setup-node@v4
         with:
           node-version: '24'

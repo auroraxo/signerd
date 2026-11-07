@@ -53,6 +53,12 @@ const { execFileSync, spawnSync } = require('node:child_process');
 const ROOT = path.resolve(__dirname, '..');
 const CLI_REL = path.join('bin', 'signerd.js');
 const USAGE_BANNER = 'signerd — scoped signing daemon for Solana (early prototype)';
+// A tag fetched for measurement lives here, NOT in refs/tags/: that namespace
+// is the release census (release-contract.test.js, measure-release-surface),
+// and a test that writes into it decides another test's verdict. Measured
+// 2026-11-07 in CI: the pin fetched into refs/tags/ made the census read
+// "latest release = v0.2.5" against package.json 0.2.6.
+const TEST_TAG_NS = 'refs/signerd-test-tags';
 
 function git(args, opts = {}) {
   return execFileSync('git', args, { cwd: ROOT, encoding: 'utf8', ...opts }).trim();
@@ -94,17 +100,19 @@ let TAG_WORK = null;
 function tagWorktree(tag) {
   if (TAG_WORK) return TAG_WORK;
   const probe = spawnSync('git', ['rev-parse', '--verify', '--quiet', `${tag}^{commit}`], { cwd: ROOT });
+  let ref = tag;
   if (probe.status !== 0) {
     const fetched = spawnSync('git',
-      ['fetch', '--depth', '1', 'origin', `refs/tags/${tag}:refs/tags/${tag}`],
+      ['fetch', '--depth', '1', 'origin', `refs/tags/${tag}:${TEST_TAG_NS}/${tag}`],
       { cwd: ROOT, encoding: 'utf8' });
     if (fetched.status !== 0) {
       const why = String(fetched.stderr || '').trim().split('\n')[0] || `exit ${fetched.status}`;
       throw new SkipUnmeasurableTag(`pinned tag ${tag} is not local and not fetchable from origin: ${why}`);
     }
+    ref = `${TEST_TAG_NS}/${tag}`;
   }
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'signerd-tag-tree-'));
-  execFileSync('git', ['worktree', 'add', '--detach', '--force', dir, tag], { cwd: ROOT, stdio: 'pipe' });
+  execFileSync('git', ['worktree', 'add', '--detach', '--force', dir, ref], { cwd: ROOT, stdio: 'pipe' });
   TAG_WORK = dir;
   return dir;
 }
