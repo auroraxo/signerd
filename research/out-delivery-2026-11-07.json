@@ -1,0 +1,54 @@
+{
+  "date": "2026-11-07",
+  "tree": "main",
+  "contract": "exit 0 delivered | 1 refusal | 2 usage/preflight refusal | 3 signed but not delivered",
+  "d1_dangling_symlink_refused_before_signing": {
+    "exit": 2,
+    "stderrHead": "out_parent_unwritable: the output directory /tmp/signerd-delivery-measure-A7KFle/missing-dir does not exist (the link points at /tmp/signerd-delivery-measure-A7KFle/missing-dir/x.bin) |   fix: create the directory first (mkdir -p /tmp/signerd-delivery-measure-A7KFle/missing-dir) or point --out at a writable path",
+    "journalBytesBefore": 0,
+    "journalBytesAfter": 0,
+    "journalUntouched": true,
+    "stdoutEmpty": true,
+    "signed": false
+  },
+  "d2_fifo_refused_before_signing": {
+    "exit": 2,
+    "stderrHead": "out_not_regular_file: the output path /tmp/signerd-delivery-measure-A7KFle/d2-fifo is a FIFO, not a regular file |   fix: point --out at a regular file path, not /tmp/signerd-delivery-measure-A7KFle/d2-fifo",
+    "journalBytesBefore": 0,
+    "journalBytesAfter": 0,
+    "journalUntouched": true,
+    "stdoutEmpty": true,
+    "signed": false
+  },
+  "d3_symlink_to_valid_file_written_through": {
+    "exit": 0,
+    "linkStillALink": true,
+    "bytesDelivered": 215,
+    "deliveredMode": "600",
+    "journalGrew": true,
+    "signedOnStdout": false
+  },
+  "d4_write_failure_after_signing_keeps_the_signature": {
+    "exit": 3,
+    "stderrHead": "out_write_failed: the signature was produced but could not be written to /tmp/signerd-delivery-measure-A7KFle/d4-out.bin: EFBIG: file too large, write |   fix: the signature is on stdout — write it out yourself, the daemon already signed | ",
+    "journalBytesBefore": 365,
+    "journalBytesAfter": 730,
+    "daemonDidSign": true,
+    "stdoutHasSignedWire": true,
+    "signedBytesLength": 215,
+    "outErrorCode": "out_write_failed",
+    "outErrorErrno": "EFBIG"
+  },
+  "d5_failed_write_does_not_destroy_the_previous_file": {
+    "targetExists": true,
+    "previousBytesPreserved": true,
+    "previousBytesLength": 152,
+    "previousBytesLengthBefore": 152
+  },
+  "d6_delivered_mode_is_0600": {
+    "exit": 0,
+    "modeBefore": "644",
+    "modeAfter": "600",
+    "bytesDelivered": 215
+  }
+}
