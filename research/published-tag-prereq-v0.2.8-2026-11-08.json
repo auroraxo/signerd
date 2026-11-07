@@ -1,0 +1,72 @@
+{
+  "measuredAt": "2026-11-08T00:00:00.000Z",
+  "question": "Does a stranger installing the PUBLISHED v0.2.8 tag get an actionable refusal for the lease-helper prerequisite, instead of the measured v0.2.7 defect?",
+  "method": "real install from the published tag into an empty directory (`npm install github:auroraxo/signerd#v0.2.8`), then the documented quickstart verbatim, then the three prerequisite states — no network beyond the install itself",
+  "install": {
+    "command": "npm install github:auroraxo/signerd#v0.2.8",
+    "installedVersion": "0.2.8",
+    "emptyDirectory": true
+  },
+  "quickstart": {
+    "keygen": { "exit": 0 },
+    "grantAdd": { "exit": 0 },
+    "note": "both succeeded WITHOUT a compiler, as before — the helper is only needed at `run`"
+  },
+  "cases": [
+    {
+      "id": "A",
+      "label": "no compiler (CC points at a path that cannot exist)",
+      "exit": 1,
+      "firstLine": "grant_file_lease_unavailable: the C compiler \"/nonexistent/cc-for-verify\" was not found — signerd builds the lease helper from source, so it needs one",
+      "fixLine": "fix: install a C compiler (cc), or point CC at one: CC=/path/to/cc signerd run ...   # the lease helper is built from tools/leasecheck.c, so the daemon needs a compiler once",
+      "codeOccurrences": 1,
+      "doubledVerdict": false,
+      "leaksNodeInternal": false,
+      "leaksCompilerDump": false,
+      "verdict": "repaired"
+    },
+    {
+      "id": "B",
+      "label": "read-only install directory (node_modules/signerd/tools chmod 555)",
+      "exit": 1,
+      "firstLine": "grant_file_lease_unavailable: the lease helper could not be written to /tmp/signerd-v028-verify/node_modules/signerd/tools — the compiler ran, but that directory is not writable",
+      "fixLine": "fix: make the install directory writable (or pre-build it there: cc -O2 -o tools/leasecheck tools/leasecheck.c)   # the helper must be written next to its shipped source",
+      "codeOccurrences": 1,
+      "doubledVerdict": false,
+      "leaksNodeInternal": false,
+      "leaksCompilerDump": false,
+      "verdict": "repaired"
+    },
+    {
+      "id": "C",
+      "label": "working compiler (the ordinary path)",
+      "startLine": "{\"ok\":true,\"socketPath\":\"sb/signerd.sock\",\"grants\":[\"ops-24h\"],\"ledger\":{\"records\":0,\"seq\":0,\"fingerprints\":0},\"signer\":\"GPyiE9hn1ZtUo4wY1A1dLBkiWGvtYMUHYVZkYavQZRaU\"}",
+      "daemonStarted": true,
+      "helperBuilt": true,
+      "helperBytes": 16672,
+      "verdict": "starts"
+    }
+  ],
+  "contrastWithV027": {
+    "tag": "v0.2.7",
+    "noCompilerFirstLine": "grant_file_lease_unavailable: grant_file_lease_unavailable: spawnSync cc ENOENT",
+    "codeOccurrences": 2,
+    "fixLine": null,
+    "note": "measured 2026-11-07 in /tmp/signerd-nocc, the same empty-directory install; the raw log is kept at run-nocc.log"
+  },
+  "incidentalRefusalObserved": {
+    "what": "the first attempt used a sandbox directory with mode 775; the product refused the passphrase file before the daemon started",
+    "message": "passphrase-file must not live in a group/other writable directory (mode 775)",
+    "fix": "fix: chmod 700 /tmp/signerd-v028-verify/sb   # a stranger could replace the file there",
+    "significance": "the passphrase trap the README pins (275) fires on a stranger's temp directory and names its repair — not part of this fix, observed live on the published tag"
+  },
+  "verdict": {
+    "noCompilerRepaired": true,
+    "readOnlyRepaired": true,
+    "startsWithCompiler": true,
+    "codePrintedOnceEverywhere": true,
+    "everyRefusalHasFixLine": true
+  },
+  "noVerdict": false,
+  "reason": "all five verdict fields must hold on the PUBLISHED tag, not the checkout"
+}
