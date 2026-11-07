@@ -55,18 +55,74 @@ function fail(code, detail) {
   return err;
 }
 
+/**
+ * The detail of a refusal, WITHOUT the code prefix.
+ *
+ * WHY (measured 2026-11-07): every printer in this codebase writes
+ * `${err.code}: ${err.message}`, and `fail()` builds the message as
+ * `${code}: ${detail}` - so a refusal whose message carries the code
+ * prints it TWICE:
+ *
+ *   grant_file_lease_unavailable: grant_file_lease_unavailable: spawnSync cc ENOENT
+ *
+ * Every other refusal in this codebase prints its code once. The doubled
+ * verdict is what the stranger (and a log parser) actually reads. This
+ * helper strips ONE leading `${code}: ` so the printers keep their
+ * `${err.code}: ${err.message}` shape and the code appears exactly once.
+ */
+function detailOf(err) {
+  if (!err) return 'unknown error';
+  const code = typeof err.code === 'string' ? err.code : '';
+  const message = typeof err.message === 'string' ? err.message : String(err.message || '');
+  if (code && message.startsWith(`${code}: `)) return message.slice(code.length + 2);
+  if (code && message === code) return '';
+  return message;
+}
+
 let built = false;
 
-/** Compile the helper once, on demand. Never uses a shell. */
+/**
+ * Compile the helper once, on demand. Never uses a shell.
+ *
+ * WHY THE DETAIL IS SPOKEN FOR (measured 2026-11-07, against the published
+ * v0.2.7 tag installed in an empty directory): on a machine without a C
+ * compiler this threw the Node-internal string "spawnSync cc ENOENT" at
+ * the stranger. `cc` is the COMPILER; the message did not say so, did not
+ * say that it was missing rather than broken, and named no repair.
+ */
 function buildHelper() {
   const cc = process.env.CC || 'cc';
   const res = spawnSync(cc, ['-O2', '-o', HELPER, SOURCE], {
     encoding: 'utf8',
     timeout: 30000,
   });
-  if (res.error || res.status !== 0) {
-    const detail = res.error ? res.error.message : (res.stderr || `exit ${res.status}`).trim();
-    throw fail('lease_unavailable', detail);
+  if (res.error) {
+    // The compiler itself could not be started: ENOENT means there is no
+    // such program (not installed, or not on PATH).
+    if (res.error.code === 'ENOENT') {
+      throw fail('lease_unavailable',
+        `the C compiler "${cc}" was not found — signerd builds the lease helper from source, so it needs one`);
+    }
+    if (res.error.code === 'EACCES') {
+      throw fail('lease_unavailable',
+        `the C compiler "${cc}" is not executable — signerd builds the lease helper from source, so it needs one`);
+    }
+    throw fail('lease_unavailable',
+      `the C compiler "${cc}" could not be started: ${res.error.message}`);
+  }
+  if (res.status !== 0) {
+    const stderr = (res.stderr || '').trim();
+    // A read-only install directory (root-owned global npm prefix, read-only
+    // container layer) is a DIFFERENT repair from "no compiler": the
+    // compiler is there, the helper just cannot be written there. The
+    // measured refusal leaked two lines of ld/cc internals
+    // ("collect2: error: ld returned 1 exit status") and never said so.
+    if (/permission denied|cannot open output file|read-only file system/i.test(stderr)) {
+      throw fail('lease_unavailable',
+        `the lease helper could not be written to ${path.dirname(HELPER)} — the compiler ran, but that directory is not writable`);
+    }
+    throw fail('lease_unavailable',
+      `the lease helper did not compile with "${cc}" (exit ${res.status})${stderr ? `: ${stderr}` : ''}`);
   }
 }
 
@@ -196,4 +252,4 @@ function readUnderLease(file, options = {}) {
   return { meta, bytes };
 }
 
-module.exports = { readUnderLease, HELPER };
+module.exports = { readUnderLease, HELPER, detailOf };

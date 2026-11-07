@@ -5,6 +5,9 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { checkFlags, closestFlag, parseArgv } = require('../src/cli-flags');
 const { checkOutWritable, outPreflightFix, writeOutAtomic, outWriteFix } = require('../src/out-preflight');
+// Strip the leading `${code}: ` from a `fail()` message so a refusal prints
+// its code EXACTLY ONCE (measured doubled on 2026-11-07, see src/lease.js).
+const { detailOf } = require('../src/lease');
 
 /**
  * Refuse an unwritable --out BEFORE anything is read, requested or signed.
@@ -830,12 +833,37 @@ main().catch((err) => {
   // as a bare `grant_file_unreadable: ENOENT` with no way to guess the fix.
   if (err && err.code === 'grant_file_unreadable') {
     process.stderr.write(
-      `${err.code}: ${err.message}\n` +
+      `${err.code}: ${detailOf(err)}\n` +
       `  fix: signerd grant-add --grants <file> --name <grant> --keystore <file> --destination <pubkey>\n` +
       `          --max-lamports <u64> --window-max-lamports <u64> --window-seconds <secs> --expires <iso>` +
       `   # create the grant file run expects\n`);
     process.exit(1);
   }
-  process.stderr.write(`${err.code || 'error'}: ${err.message}\n`);
+  // The lease helper is compiled from the shipped tools/leasecheck.c the
+  // first time the daemon reads the grant file. On a machine without a C
+  // compiler (measured 2026-11-07, published tag v0.2.7 in an empty dir:
+  // keygen exit 0, grant-add exit 0, `run` -> "spawnSync cc ENOENT", exit 1)
+  // the stranger was told a Node-internal API name and given no repair,
+  // while every other refusal in this CLI names its fix. Both repairs this
+  // can need: a compiler, or a writable install directory.
+  if (err && typeof err.code === 'string' && err.code.endsWith('_lease_unavailable')) {
+    const detail = detailOf(err);
+    process.stderr.write(`${err.code}: ${detail}\n`);
+    if (/was not found|is not executable|could not be started/.test(detail)) {
+      process.stderr.write(
+        `  fix: install a C compiler (cc), or point CC at one: CC=/path/to/cc signerd run ...` +
+        `   # the lease helper is built from tools/leasecheck.c, so the daemon needs a compiler once\n`);
+    } else if (/not writable/.test(detail)) {
+      process.stderr.write(
+        `  fix: make the install directory writable (or pre-build it there: cc -O2 -o tools/leasecheck tools/leasecheck.c)` +
+        `   # the helper must be written next to its shipped source\n`);
+    } else {
+      process.stderr.write(
+        `  fix: build the lease helper by hand: cc -O2 -o tools/leasecheck tools/leasecheck.c` +
+        `   # then start the daemon again\n`);
+    }
+    process.exit(1);
+  }
+  process.stderr.write(`${err.code || 'error'}: ${detailOf(err)}\n`);
   process.exit(1);
 });

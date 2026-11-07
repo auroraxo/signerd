@@ -12,6 +12,12 @@ No package is published to npm yet — the artifact is ready and the remaining g
 npm install github:auroraxo/signerd#v0.2.7
 ```
 
+**Prerequisites (measured 2026-11-07):** the daemon needs a C compiler (`cc`) once, to build its kernel lease helper from the shipped `tools/leasecheck.c` — `keygen` and `grant-add` work without it, `run` is the first step that needs it. On a machine with no compiler it now refuses by naming the repair instead of a Node-internal error (measured live against the published `v0.2.7` tag installed in an empty directory: `grant_file_lease_unavailable: grant_file_lease_unavailable: spawnSync cc ENOENT`, exit 1, no `fix:` — the fix and its two repairs, no compiler and a read-only install directory, are in `test/lease-prereq-surface.test.js`). Install a compiler, or point `CC` at one (`CC=/path/to/cc signerd run ...`); if the install directory is read-only, build the helper there by hand:
+
+```bash
+cc -O2 -o node_modules/signerd/tools/leasecheck node_modules/signerd/tools/leasecheck.c
+```
+
 **What this pin ships that `v0.2.6` does not** (each measured below, each defect immutable on the v0.2.6 tag): a delivery that fails *after* the daemon signed **keeps the signature** — exit 3 carries the signed wire (or receipt document) on stdout with `outError` and a `fix:` line, instead of the old exit 1 with empty stdout and a retry permanently refused `replay`; the preflight judges the *resolved* target, so a dangling symlink, a FIFO or any non-regular node is refused `out_not_regular_file` before the daemon is paid (a symlink to a valid file is written through, never replaced); delivery is atomic — a same-directory `0600` temp, `fsync`, `rename`, so a failed write never truncates the file that was there and a successful one never lands world-readable. Earlier pin gains (wrongly-used flags refused, the shipped client obeying the flag surface, the sealed-mode block running verbatim, `--dry` real and falsified in the day-8 consumer run) are still shipped by this pin; the defects they close are immutable on the tags that carry them.
 
 The pin is **not allowed to drift from the releases**: `test/pin-release-sync.test.js` fails the suite when the front page pins a tag older than the newest release (measured red on 2026-11-07: pin `v0.2.5` against release `v0.2.6` — two releases of fixes a stranger copying this page would not get), so moving the release and moving the pin are one act.
