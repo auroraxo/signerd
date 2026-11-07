@@ -692,6 +692,47 @@ The refusal names the flag, the repair (the closest flag the command does take, 
 
 **Limits:** argument hygiene, not a sandbox — a flag that *is* in the list can still be given a bad value (the value validators judge that), and the allowlist only holds as long as a dispatch's flag list is kept in sync with `src/cli-flags.js` (pinned per direction: F4 checks every flag the README documents is accepted; the per-command lists are the flags each dispatch reads). Still user zero — no outside user has installed it, and nothing here changes signature bytes, grant semantics, journal format or the seal itself.
 
+## Flag-arity defects (2026-11-07) — a flag can be used wrongly and the difference is dropped
+
+The 2026-11-06 fix above answers *"is this flag known?"*. It cannot answer *"is this flag used the way you typed it?"* — and the parser turned tokens into a **map**, so three shapes simply vanished, because a map holds one value per key:
+
+**Measured (2026-11-07, live, pre-fix tree `6ff287d`) — four fail-opens, one class.**
+
+| Command line typed | What signerd did | What it should have done |
+|---|---|---|
+| `run --grants narrow.json --grants wide.json` | last wins **silently** | refuse `duplicate_flag` |
+| `grant-add … --max-lamports 1000 --max-lamports 999999999` | exit 0, file written with `maxLamports "999999999"` | refuse `duplicate_flag` |
+| `keygen --keystore first.key --keystore second.key` | exit 0, `second.key` created, `first.key` never created | refuse `duplicate_flag` |
+| `run … --grant-seal-passphrase-file` *(path forgotten)* | sealed mode reads as **absent** | refuse `missing_value` |
+
+The first row is the sharpest, because it is a **scope** change, not a convenience. Measured live: `narrow.json` caps the grant at 1000 lamports and `wide.json` at 999999999. The daemon given `--grants narrow.json --grants wide.json` enforced **wide** and **signed 500005000 lamports** (`{"ok":true,…,"seq":1}`) for a transaction that `narrow.json` alone refuses with `amount` (`{"ok":false,"error":"amount"}`). The operator named `narrow.json` first, and nothing said the second `--grants` replaced it.
+
+The fourth row is the 2026-11-06 failure **re-entering through arity instead of spelling**. `args["grant-seal-passphrase-file"]` becomes `true` when the path is missing, and the dispatch reads `typeof … === "string"` — so sealed mode reads as *not set*. Measured on the same tampered sealed grant file as above: the correct flag refuses `grant_file_seal_mismatch` (exit 1); the flag with no value let the daemon **start** and answer `{"ok":true}`. One forgotten path turned the sealed-mode guarantee off, exactly as one missing dash did.
+
+Two more measured in the same class: `grant-add … --seal-passphrase-file` *(no value, no `--append`)* exited 0 and wrote a file with **no `seal` field** — while the same flag *with* a value refuses `grant_file_unsealed`: one flag, two behaviours. And `sign … --dry true` made `args.dry` the **string** `"true"`, so `args.dry === true` was false and the request went out as a **real sign**: exit 0, a real signature, 368 bytes appended to the journal, `--out` written (215 bytes). The bare `--dry` previewed and wrote nothing. The README promises a non-boolean dry is *"never degraded into a real signature"* — the CLI degraded it anyway, because it read arity as presence.
+
+**Why nothing caught it:** every instrument in this repo compares a *documented* line against the CLI. A documented line cannot carry a duplicate flag twice without looking wrong on the page — so this class is invisible to the documented-surface, the installed-tag-journey and the release-surface alike. It needed an operator who types the same flag twice, which is exactly what a wrapper script or a copied command line does.
+
+**Fix (test-first).** `src/cli-flags.js` gains `parseArgv()` (the tokens, plus the arity problems) and `arityProblems()` (the rule, per command); `bin/signerd.js` refuses on the first problem **before** it reads, writes or starts anything:
+
+```
+duplicate_flag: --grants
+  fix: give --grants once   # it was given twice: "…/narrow.json" and "…/wide.json"
+  fix: signerd run cannot know which one you meant, and silently taking the last one changes what is enforced
+missing_value: --grant-seal-passphrase-file
+  fix: give --grant-seal-passphrase-file its value   # a flag without a value reads as absent, and an absent security flag turns a guarantee off
+flag_takes_no_value: --dry
+  fix: give --dry alone   # it is a switch and takes no value, but it was given "true"
+```
+
+Each refusal names the flag, the repair, and — for a duplicate — **both values**, so the operator can see which file was meant twice. The switch set is declared per command (`--dry`, `--append`, `--overwrite`, `--add-grant`, `--discard-legacy`), because the same name can be a switch in one command and a value flag in another.
+
+**Ladder (`test/flag-arity-surface.test.js`, 15 tests):** **11 RED / 4 GREEN** on the pre-fix tree `6ff287d` (the fix stashed, the test kept). The 11 RED are the defect tests — including the live daemon that signed 500005000 lamports, the tampered sealed file that started unsealed, and the `--dry true` that became a real signature. The 4 GREEN are the false-positive guards, and they are green **on both trees**: the bare `--dry` still previews and writes nothing (and the same body still signs for real afterwards), an unknown flag still answers `unknown_flag` with the did-you-mean suggestion, the ordinary documented commands still run, and an **absent** flag still answers the documented `missing --<flag>` — arity covers a flag that was *typed*, not one that was forgotten. After: **15/15**, full suite **450/450** (was 435).
+
+**Mutation ladder (`tools/mutation-ladder-arity.sh`, 7 mutations):** each mutation breaks one property of the rule in a plausible way — duplicates parsed but never reported; a value flag with no value accepted; a switch given a value accepted; `--dry` no longer declared a switch; the refusal computed but never acted on; the duplicate refusal no longer naming both values; the switch set dropped so every flag reads as a value flag. **All 7 caught**, the tree restored byte-identically (sha256).
+
+**Limits:** argument hygiene, not a sandbox — it says nothing about the *value* of a flag (a present-but-wrong value is judged by the value validators, as before), and it does not change signature bytes, grant semantics, journal format or the seal. The switch list is a second hand-maintained table next to `COMMAND_FLAGS`; a switch added to a dispatch without listing it there reads as a value flag. Still user zero — no outside user has installed it, and no real funds are involved.
+
 ## Next qualification
 
 0. A **third** independent adversarial review of the signing path after the review-#2 fixes land (`src/signer.js`, `src/daemon.js`, `src/keystore.js`, `src/grantfile.js`, `src/ledger.js`), before pointing it at a key with funds: two reviews have run (2026-10-27 hardening diff, 2026-10-29 signing path) and all 12 findings are fixed and regression-tested, but neither was a professional audit and the fixes themselves have not been independently reviewed.

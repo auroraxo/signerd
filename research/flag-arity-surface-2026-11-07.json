@@ -1,0 +1,122 @@
+{
+  "measuredAt": "2026-11-07",
+  "tree": "pre-fix 6ff287d (main) -> arity fix",
+  "class": "flag arity: a flag used wrongly, and the difference dropped",
+  "preFix": [
+    {
+      "id": "dup-grants",
+      "command": "run --grants narrow.json --grants wide.json",
+      "control": "daemon on narrow.json alone -> {\"ok\":false,\"error\":\"amount\",\"refused\":\"amount\"}",
+      "defect": "daemon enforced wide.json, {\"ok\":true,...,\"seq\":1,\"totalLamports\":\"500005000\"} (215 signed bytes); the operator named narrow.json FIRST",
+      "failOpen": true
+    },
+    {
+      "id": "dup-cap",
+      "command": "grant-add --max-lamports 1000 --max-lamports 999999999",
+      "control": "exit 0 -> grant file written",
+      "defect": "exit 0, grant file written with maxLamports \"999999999\"",
+      "failOpen": true
+    },
+    {
+      "id": "dup-keystore",
+      "command": "keygen --keystore first.key --keystore second.key",
+      "control": "exit 0 -> second.key created",
+      "defect": "exit 0, second.key created, first.key never created",
+      "failOpen": true
+    },
+    {
+      "id": "seal-flag-no-value",
+      "command": "run ... --grant-seal-passphrase-file   (path forgotten)",
+      "control": "same file with the correct flag -> grant_file_seal_mismatch (exit 1)",
+      "defect": "{\"ok\":true,...} - the daemon STARTED unsealed on a sealed-and-tampered grant file",
+      "failOpen": true
+    },
+    {
+      "id": "seal-flag-no-value-grant-add",
+      "command": "grant-add ... --seal-passphrase-file   (no value, no --append)",
+      "control": "same flag WITH a value -> grant_file_unsealed (exit 1)",
+      "defect": "exit 0, file written with NO seal field",
+      "failOpen": true
+    },
+    {
+      "id": "dry-with-value",
+      "command": "sign ... --dry true",
+      "control": "bare --dry -> {\"ok\":true,\"dry\":true,\"allowed\":true}, no signature, 0 journal bytes",
+      "defect": "exit 0, REAL signature, 368 journal bytes appended, --out written (215 bytes)",
+      "failOpen": true
+    }
+  ],
+  "afterFix": [
+    {
+      "id": "dup-grants",
+      "refusal": "duplicate_flag: --grants",
+      "exit": 2,
+      "namesBothValues": true,
+      "daemonStarted": false,
+      "journalWritten": false
+    },
+    {
+      "id": "dup-cap",
+      "refusal": "duplicate_flag: --max-lamports",
+      "exit": 2,
+      "namesBothValues": true,
+      "fileWritten": false
+    },
+    {
+      "id": "dup-keystore",
+      "refusal": "duplicate_flag: --keystore",
+      "exit": 2,
+      "namesBothValues": true,
+      "filesWritten": 0
+    },
+    {
+      "id": "seal-flag-no-value",
+      "refusal": "missing_value: --grant-seal-passphrase-file",
+      "exit": 2,
+      "daemonStarted": false
+    },
+    {
+      "id": "seal-flag-no-value-grant-add",
+      "refusal": "missing_value: --seal-passphrase-file",
+      "exit": 2,
+      "fileWritten": false
+    },
+    {
+      "id": "dry-with-value",
+      "refusal": "flag_takes_no_value: --dry",
+      "exit": 2,
+      "signatureProduced": false,
+      "journalBytes": 0,
+      "outWritten": false
+    }
+  ],
+  "controls": {
+    "bareDryStillPreviews": true,
+    "unknownFlagStillUnknownFlag": true,
+    "ordinaryCommandsStillRun": true,
+    "absentFlagStillMissingFlag": true
+  },
+  "ladder": {
+    "file": "test/flag-arity-surface.test.js",
+    "preFixRed": 11,
+    "preFixGreen": 4,
+    "postFix": "15/15"
+  },
+  "mutationLadder": {
+    "file": "tools/mutation-ladder-arity.sh",
+    "mutations": 7,
+    "caught": 7,
+    "treeRestoredByteIdentically": true
+  },
+  "suite": {
+    "before": 435,
+    "after": 450,
+    "fail": 0
+  },
+  "limits": [
+    "argument hygiene, not a sandbox: the VALUE of a flag is still judged by the value validators",
+    "the switch list is a second hand-maintained table next to COMMAND_FLAGS",
+    "no signature bytes, grant semantics, journal format or seal changed",
+    "own host measurement; no outside user; no audit; no real funds"
+  ]
+}

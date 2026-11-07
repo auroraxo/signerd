@@ -3,7 +3,7 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
-const { checkFlags, closestFlag } = require('../src/cli-flags');
+const { checkFlags, closestFlag, parseArgv } = require('../src/cli-flags');
 
 const USAGE = `signerd — scoped signing daemon for Solana (early prototype)
 
@@ -81,17 +81,16 @@ Notes:
 `;
 
 function parseArgs(argv) {
-  const args = { _: [] };
-  for (let i = 0; i < argv.length; i += 1) {
-    const token = argv[i];
-    if (token.startsWith('--')) {
-      const key = token.slice(2);
-      const next = argv[i + 1];
-      if (next === undefined || next.startsWith('--')) args[key] = true;
-      else { args[key] = next; i += 1; }
-    } else args._.push(token);
-  }
-  return args;
+  // The ARITY rule (measured 2026-11-07) needs the TOKENS, not just the
+  // map: a map cannot express "given twice", "given without a value" or
+  // "a switch given a value" - it can only hold one value per key, which is
+  // exactly why all three shapes used to vanish without a word.
+  //
+  // The problems are returned SEPARATELY, never as a key of `args`: the
+  // flag surface iterates the keys of `args`, and a bookkeeping key would
+  // be reported as an unknown flag. (First attempt did exactly that - G4
+  // caught it: `unknown_flag: --_problems`.)
+  return parseArgv(argv);
 }
 
 function requireArg(args, name) {
@@ -156,7 +155,7 @@ function readPassphrase(args, flag = 'passphrase-file') {
 }
 
 async function main() {
-  const args = parseArgs(process.argv.slice(2));
+  const { args, problems } = parseArgs(process.argv.slice(2));
   const command = args._[0];
 
   // THE FLAG SURFACE (measured 2026-11-06): a flag the operator set used to
@@ -180,6 +179,55 @@ async function main() {
       `  fix: signerd ${command} takes flags, not positional arguments ` +
       `(it ignores nothing: check the flag name above its value)\n`);
     process.exit(2);
+  }
+
+  // THE FLAG ARITY SURFACE (measured 2026-11-07, live, pre-fix tree 6ff287d).
+  // The flag surface above answers "is this flag KNOWN?". This answers "is
+  // this flag USED the way you typed it?" - and the answer matters, because
+  // the parser used to answer it by DROPPING what it could not express:
+  //
+  //   run --grants narrow.json --grants wide.json
+  //     last wins silently. Measured: the daemon enforced wide.json and
+  //     SIGNED 500005000 lamports that narrow.json (cap 1000) refuses with
+  //     `amount`. The operator named narrow.json FIRST.
+  //   run ... --grant-seal-passphrase-file      (path forgotten)
+  //     `args[...] === true`, so sealed mode read as NOT SET. Measured on a
+  //     sealed-and-tampered grant file: the correct flag refuses
+  //     `grant_file_seal_mismatch`, the flag with no value let the daemon
+  //     START and answer `{"ok":true}`.
+  //   sign ... --dry true
+  //     `args.dry` became the STRING "true", so the request went out as a
+  //     REAL sign: exit 0, a real signature, 368 bytes appended to the
+  //     journal, `--out` written.
+  //
+  // Refuse BEFORE anything is read, written or started, and name the
+  // repair. The shape is the same as the flag surface above: a
+  // machine-readable reason, a `fix:` line, exit 2.
+  const arity = problems || [];
+  if (arity.length > 0) {
+    const p = arity[0];
+    if (p.code === 'duplicate_flag') {
+      process.stderr.write(`duplicate_flag: --${p.flag}\n` +
+        `  fix: give --${p.flag} once   # it was given twice: ` +
+        `${JSON.stringify(p.first)} and ${JSON.stringify(p.second)}\n` +
+        `  fix: signerd ${command} cannot know which one you meant, and ` +
+        `silently taking the last one changes what is enforced\n`);
+      process.exit(2);
+    }
+    if (p.code === 'missing_value') {
+      process.stderr.write(`missing_value: --${p.flag}\n` +
+        `  fix: give --${p.flag} its value   # a flag without a value reads ` +
+        `as absent, and an absent security flag turns a guarantee off\n` +
+        `  fix: see \`signerd\` usage for the flags ${command} takes\n`);
+      process.exit(2);
+    }
+    if (p.code === 'flag_takes_no_value') {
+      process.stderr.write(`flag_takes_no_value: --${p.flag}\n` +
+        `  fix: give --${p.flag} alone   # it is a switch and takes no value, ` +
+        `but it was given ${JSON.stringify(p.value)}\n` +
+        `  fix: see \`signerd\` usage for the flags ${command} takes\n`);
+      process.exit(2);
+    }
   }
 
   if (command === 'keygen') {

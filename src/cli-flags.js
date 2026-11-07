@@ -45,7 +45,134 @@
 // list can still be given a wrong value (the value validators judge that).
 // It says nothing about flags of other commands: `keygen --grants x` is
 // refused because keygen has no grants, not because the value is wrong.
+//
+// THE FLAG ARITY SURFACE (measured 2026-11-07, live, on the pre-fix tree):
+//
+// The rule above answers "is this flag KNOWN?". It cannot answer "is this
+// flag USED the way you typed it?" - and the parser turns tokens into a MAP,
+// so three shapes vanish without a word:
+//
+//  1. a flag given TWICE. The map keeps the LAST value.
+//     `run --grants narrow.json --grants wide.json` enforced wide.json and
+//     signed 500005000 lamports that narrow.json (cap 1000) refuses with
+//     `amount`. The operator named narrow.json FIRST and never heard about
+//     the second one.
+//  2. a value-taking flag given NO value. `args[x]` becomes `true`, and the
+//     code reads `typeof args[x] === 'string'` - so the flag reads as ABSENT.
+//     `run ... --grant-seal-passphrase-file` (path forgotten) therefore
+//     started the daemon WITHOUT sealed mode on a sealed-and-tampered grant
+//     file: the correct flag refuses `grant_file_seal_mismatch`, the flag
+//     with no value answered `{"ok":true}`. The 2026-11-06 typo fix closed
+//     this failure through SPELLING; it re-entered through ARITY.
+//  3. a SWITCH given a value. `--dry true` made `args.dry` the STRING
+//     "true", `args.dry === true` false, and the request went out as a REAL
+//     sign: exit 0, a real signature, 368 bytes appended to the journal,
+//     `--out` written. The README promises a non-boolean dry is "never
+//     degraded into a real signature" - the CLI degraded it anyway.
+//
+// The rules (pure, offline-pinnable; bin/signerd.js is the only caller):
+//   A1 a flag given TWICE is refused (`duplicate_flag`), naming the flag
+//      and both values - signerd cannot know which one you meant, and
+//      last-wins silently swaps scope, files and caps;
+//   A2 a value-taking flag given NO value is refused (`missing_value`),
+//      before it can read as "absent" and switch a security feature off;
+//   A3 a switch given a value is refused (`flag_takes_no_value`) - a dry
+//      must never become a real sign;
+//   A4 the refusal happens BEFORE anything is read, written or started.
+//
+// WHAT THIS DOES NOT DO: it says nothing about the VALUE of a flag - a
+// value that is present but wrong is judged by the value validators, as
+// before. And a flag that is simply ABSENT is still answered `missing --x`
+// by requireArg: arity covers a flag that was TYPED, not one forgotten.
 const FLAG_DISTANCE_MAX = 3;
+
+/**
+ * The flags that are SWITCHES: they take no value by design. A value here
+ * is a mistake worth refusing - `--dry true` must not become a real sign.
+ *
+ * Listed per command, because the same name can be a switch in one command
+ * and a value flag in another (`--out` is a path, `--dry` is a switch).
+ */
+const SWITCH_FLAGS = {
+  keygen: ['overwrite'],
+  import: ['overwrite'],
+  'grant-add': ['append'],
+  sign: ['dry'],
+  'sign-message': ['dry', 'add-grant'],
+  migrate: ['discard-legacy'],
+};
+
+/**
+ * Parse a command line into { args, problems }.
+ *
+ * `args` is the parsed map (the same shape the old parseArgs produced), so
+ * the callers keep working unchanged. `problems` is the list of ARITY
+ * violations: every flag that was given twice, every value-taking flag
+ * without a value, every switch with a value. The caller refuses on the
+ * first problem, before anything is read, written or started.
+ *
+ * The problems carry the values that were typed, so the refusal can say
+ * WHICH file was meant twice, not only WHICH flag.
+ *
+ * `argv[0]` is the command; the arity rule only fires for a command signerd
+ * actually has (an unknown command is answered by the usage banner, and a
+ * flag signerd does not take is answered by the flag surface above - this
+ * rule is about flags that ARE known and were used with the wrong shape).
+ */
+function parseArgv(argv) {
+  const args = { _: [] };
+  const raw = [];
+  const seen = new Map(); // flag -> the value it was first given
+  for (let i = 0; i < argv.length; i += 1) {
+    const token = argv[i];
+    if (!token.startsWith('--')) { args._.push(token); continue; }
+    const key = token.slice(2);
+    const next = argv[i + 1];
+    const hasValue = !(next === undefined || next.startsWith('--'));
+    if (seen.has(key)) {
+      raw.push({ code: 'duplicate_flag', flag: key, first: seen.get(key), second: hasValue ? next : true });
+      if (hasValue) i += 1;
+      continue;
+    }
+    seen.set(key, hasValue ? next : true);
+    if (hasValue) { args[key] = next; i += 1; } else { args[key] = true; }
+    // Candidate arity problems: which one applies depends on whether the
+    // command treats the flag as a value flag or as a switch.
+    raw.push(hasValue
+      ? { code: 'flag_takes_no_value', flag: key, value: next }
+      : { code: 'missing_value', flag: key });
+  }
+  const command = argv.length > 0 && !argv[0].startsWith('--') ? argv[0] : undefined;
+  return { args, problems: arityProblems(command, raw) };
+}
+
+/**
+ * The arity rule for ONE command: which of the candidate problems actually
+ * apply. A flag the command does not take is NOT an arity question - the
+ * flag surface owns it (unknown_flag) - and a switch without a value is
+ * exactly right, so both are dropped here.
+ */
+function arityProblems(command, problems) {
+  const supported = COMMAND_FLAGS[command];
+  if (supported === undefined) return []; // unknown command: not this rule
+  const known = new Set(supported);
+  const switches = new Set(SWITCH_FLAGS[command] || []);
+  const out = [];
+  for (const p of problems) {
+    if (!known.has(p.flag)) continue; // the flag surface owns this one
+    if (p.code === 'duplicate_flag') { out.push(p); continue; }
+    if (p.code === 'missing_value') {
+      if (switches.has(p.flag)) continue; // a switch without a value is right
+      out.push(p);
+      continue;
+    }
+    if (p.code === 'flag_takes_no_value') {
+      if (!switches.has(p.flag)) continue; // not a switch: its value is right
+      out.push(p);
+    }
+  }
+  return out;
+}
 
 /**
  * The flags each command reads, straight from bin/signerd.js. A flag is
@@ -141,4 +268,7 @@ function checkFlags(command, args, positionals) {
   return { ok: true };
 }
 
-module.exports = { COMMAND_FLAGS, checkFlags, closestFlag, editDistance };
+module.exports = {
+  COMMAND_FLAGS, SWITCH_FLAGS, checkFlags, closestFlag, editDistance,
+  parseArgv, arityProblems,
+};
