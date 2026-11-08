@@ -1,0 +1,41 @@
+{
+  "measuredAt": "2026-11-08T22:51:09.478Z",
+  "tool": "measure-delivery-durability",
+  "tree": "the tree under measure (this repo by default)",
+  "contract": {
+    "D1": "the delivery fsyncs the PARENT DIRECTORY after the rename",
+    "D2": "that fsync happens AFTER the rename, not before",
+    "D3": "the temp file's own fsync is still there",
+    "D4": "a directory that cannot be fsynced does NOT fail the delivery"
+  },
+  "durable": true,
+  "results": [
+    {
+      "case": "normal-delivery",
+      "dirFsyncAfterRename": true,
+      "tempFileFsyncPresent": true,
+      "dirFsyncPresent": true,
+      "deliveredBytes": 24,
+      "eventKinds": [
+        "fsync(file)",
+        "rename",
+        "fsync(dir)"
+      ],
+      "pass": true
+    },
+    {
+      "case": "directory-not-fsyncable",
+      "deliveryFailed": false,
+      "errorDetail": null,
+      "artifactOnDisk": true,
+      "artifactBytes": 24,
+      "pass": true
+    }
+  ],
+  "limits": [
+    "the directory fsync makes the NAME durable against a crash of THIS machine",
+    "it does not protect against a filesystem that lies about fsync",
+    "it does not make the delivery atomic across a network filesystem",
+    "the check is at the moment of the delivery, not before the sign (TOCTOU window remains)"
+  ]
+}
