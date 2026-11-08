@@ -389,7 +389,7 @@ test('R2-3: the journal is refused when another user could write it, and refused
 test('R2-3b: the grant file is refused when its path can be rewritten by a stranger', () => {
   const dir = tmpDir();
   const file = path.join(dir, 'grants.json');
-  const doc = { version: 1, grants: { ops: grantFor('1'.repeat(44), 'So11111111111111111111111111111111111111112') } };
+  const doc = { version: 1, grants: { ops: grantFor('11111111111111111111111111111111', 'So11111111111111111111111111111111111111112') } };
   fs.writeFileSync(file, JSON.stringify(doc));
 
   // The grant file decides what may be signed and is re-read on EVERY request,

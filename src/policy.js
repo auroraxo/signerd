@@ -2,28 +2,26 @@
 
 const bs58 = require('bs58');
 const { PublicKey, SystemProgram, VersionedTransaction } = require('@solana/web3.js');
+const { isCanonicalPublicKey, isU64, isCanonicalExpiry } = require('./grantvalues');
 
 const MAX_WIRE_BYTES = 1232;
-const MAX_U64 = (1n << 64n) - 1n;
 
 function refused(reason) {
   return { allowed: false, refused: reason };
 }
 
+// The value semantics live in src/grantvalues.js - ONE copy, shared with
+// the creation path and the loader (measured 2026-11-08: the creation path
+// judged values by their SHAPE while this file judged them by their
+// MEANING, and 16 of 30 measured cases were written and then refused).
 function parseLamports(value) {
-  if (typeof value !== 'string' || !/^(0|[1-9][0-9]*)$/.test(value)) return null;
-  const amount = BigInt(value);
-  return amount <= MAX_U64 ? amount : null;
+  if (!isU64(value)) return null;
+  return BigInt(value);
 }
 
 function parseKey(value) {
-  try {
-    const key = new PublicKey(value);
-    if (key.toBase58() !== value) return null;
-    return key;
-  } catch {
-    return null;
-  }
+  if (!isCanonicalPublicKey(value)) return null;
+  return new PublicKey(value);
 }
 
 /**
@@ -73,15 +71,16 @@ function evaluate(raw, grant, now = new Date()) {
   const destination = parseKey(destinationField.value);
   const maximum = parseLamports(maximumField.value);
   const timestamp = typeof expiryField.value === 'string' &&
-    /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d{1,3})?Z$/.test(expiryField.value)
+    isCanonicalExpiry(expiryField.value)
     ? expiryField.value : null;
   const expiry = timestamp === null ? NaN : Date.parse(timestamp);
-  // Date.parse normalizes impossible calendar dates (e.g. February 30) instead
-  // of rejecting them. A normalized expiry could silently extend a grant.
-  const canonical = Number.isFinite(expiry) ? new Date(expiry).toISOString() : null;
-  if (!signer || !destination || maximum === null || !Number.isFinite(expiry) ||
-      canonical !== timestamp.replace(/(\.\d{1,3})?Z$/, (_, fraction) =>
-        `${fraction ? (fraction + '000').slice(0, 4) : '.000'}Z`)) return refused('invalid_grant');
+  // The expiry must be a moment that EXISTS and is canonical: Date.parse
+  // normalizes impossible calendar dates (February 30 becomes March 1/2)
+  // instead of rejecting them, and a normalized expiry would silently
+  // extend the grant past what the operator wrote.
+  if (!signer || !destination || maximum === null || !Number.isFinite(expiry)) {
+    return refused('invalid_grant');
+  }
   const nowMs = readClock(now);
   if (!Number.isFinite(nowMs)) return refused('invalid_clock');
   if (nowMs >= expiry) return refused('expired');

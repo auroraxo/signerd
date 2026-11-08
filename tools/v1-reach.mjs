@@ -111,16 +111,35 @@ function grantFor(row) {
 // 3.1.1 candidate; loading the SAME source against the candidate library
 // reports the real "version_or_alt". The source under test is byte-identical
 // either way; only the library binding differs.
-function loadPolicy(web3mod) {
-  const src = fs.readFileSync(path.join(HERE, '..', 'src', 'policy.js'), 'utf8');
+//
+// LOCAL MODULES (2026-11-08): src/policy.js now pulls its grant value rules
+// from src/grantvalues.js (one copy shared with the loader and the creation
+// path). A bare `require('./grantvalues')` would resolve against tools/ and
+// die with MODULE_NOT_FOUND, so local ids are resolved against src/ and
+// loaded recursively - WITH THE SAME CANDIDATE BINDING. grantvalues.js
+// parses the public keys, so measuring it against the pinned library while
+// policy.js ran on the candidate would be exactly the split this tool exists
+// to avoid.
+const srcCache = new Map();
+function loadSrc(id, web3mod, seen) {
+  if (id === '@solana/web3.js') return web3mod;
+  const resolved = id.startsWith('.')
+    ? path.resolve(path.join(HERE, '..', 'src'), id.endsWith('.js') ? id : `${id}.js`)
+    : null;
+  if (resolved === null) return require(id);
+  if (seen.has(resolved)) return seen.get(resolved).exports;
   const module_ = { exports: {} };
-  const boundRequire = (id) => {
-    if (id === '@solana/web3.js') return web3mod;
-    return require(id);
-  };
+  seen.set(resolved, module_);
+  srcCache.set(`${resolved}|${web3mod === undefined ? 'pinned' : 'candidate'}`, module_);
+  const src = fs.readFileSync(resolved, 'utf8');
+  const boundRequire = (nextId) => loadSrc(nextId, web3mod, seen);
   // eslint-disable-next-line no-new-func
   new Function('require', 'module', 'exports', src)(boundRequire, module_, module_.exports);
-  return module_.exports.evaluate;
+  return module_.exports;
+}
+
+function loadPolicy(web3mod) {
+  return loadSrc('./policy.js', web3mod, new Map()).evaluate;
 }
 
 function measure(label, web3mod, version, rows, reRunnable) {

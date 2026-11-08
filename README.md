@@ -831,6 +831,35 @@ Each refusal names the flag, the repair, and — for a duplicate — **both valu
 
 **Limits:** argument hygiene, not a sandbox — it says nothing about the *value* of a flag (a present-but-wrong value is judged by the value validators, as before), and it does not change signature bytes, grant semantics, journal format or the seal. The switch list is a second hand-maintained table next to `COMMAND_FLAGS`; a switch added to a dispatch without listing it there reads as a value flag. Still user zero — no outside user has installed it, and no real funds are involved.
 
+## Grant value contract defects (2026-11-08) — a scope the operator wrote could never sign
+
+The creation path (`signerd grant-add`) and the loader (`src/grantfile.js`) judged grant values by their **shape** — a base58 charset regex for keys, a calendar-shape regex for the expiry (`/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d{1,3})?Z$/`), digits-only regexes for the caps — while the daemon runtime (`src/policy.js`, `src/ledger.js`) judged them by their **meaning**: an actual 32-byte canonical public key (`new PublicKey(v).toBase58() === v`), a canonical RFC3339 round trip, a u64 in range (`[0, 2^64-1]`), a positive safe-integer window (`Number.isSafeInteger`).
+
+`Date.parse` normalizes impossible calendar dates instead of rejecting them: `Date.parse("2030-02-31T00:00:00Z")` rolls forward to `2030-03-03T00:00:00.000Z`. So `grant-add --expires 2030-02-31T00:00:00Z` exited 0, wrote the grant file, and every later request against that scope was refused `invalid_grant` — a scope that looked configured and was permanently dead.
+
+Measured with `tools/measure-grant-value-contract.mjs` (output `research/grant-value-contract-2026-11-08.json`): **16 of 30 candidate values** were accepted by the creation path and then refused by the daemon.
+
+All five validation sites (`grantadd.js`, `grantfile.js`, `policy.js`, `policy-message.js`, `ledger.js`) now read **one shared source of truth** (`src/grantvalues.js`):
+- `isCanonicalPublicKey(v)` — real 32-byte Ed25519 public key in canonical base58;
+- `isCanonicalExpiry(v)` — real instant that exists in UTC (no Feb 31, no month 13, no hour 25, no leap seconds);
+- `isU64(v)` — decimal integer in `[0, 2^64-1]`;
+- `isWindowSeconds(v)` — positive safe integer (no zero, no precision loss);
+- `isMessageCount(v)` — safe integer message count.
+
+The refusal voice follows the house rule: the machine-readable code `grant_field_invalid` appears exactly once and names a field-specific `fix:` line.
+
+**Ladder (`test/grant-value-contract.test.js`, 7 tests):** **4 RED / 3 GREEN** on the pre-fix tree (V1, V2, V5, V6 red; V3 oracle and V4 boundary guards green on both trees). After: **7/7**, full suite **502/502** (was 495).
+
+**Mutation ladder (`tools/mutation-ladder-grant-values.sh`, 5 mutations):**
+- M1: `grantadd` accepts calendar shape without canonical instant (Feb 31 bug) -> caught;
+- M2: `grantadd` accepts base58 charset without 32-byte key -> caught;
+- M3: `grantadd` accepts arbitrary digits for `maxLamports` -> caught;
+- M4: `loader` accepts non-canonical expiry -> caught;
+- M5: refusal drops the `fix:` line -> caught.
+All 5 caught, tree restored byte-identically.
+
+**Measurement artifact:** `research/grant-value-contract-2026-11-08.json` records 30 cases across both slots — before: 16 contract violations; after: 0.
+
 ## Next qualification
 
 0. A **third** independent adversarial review of the signing path after the review-#2 fixes land (`src/signer.js`, `src/daemon.js`, `src/keystore.js`, `src/grantfile.js`, `src/ledger.js`), before pointing it at a key with funds: two reviews have run (2026-10-27 hardening diff, 2026-10-29 signing path) and all 12 findings are fixed and regression-tested, but neither was a professional audit and the fixes themselves have not been independently reviewed.

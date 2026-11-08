@@ -4,6 +4,9 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { readUnderLease } = require('./lease');
 const { verifySealMac, parseSeal } = require('./grantseal');
+const {
+  isCanonicalPublicKey, isCanonicalExpiry, isU64, isWindowSeconds, isMessageCount,
+} = require('./grantvalues');
 
 const REQUIRED_FIELDS = [
   'signer', 'destination', 'maxLamports', 'expiresAt',
@@ -25,9 +28,6 @@ const RESERVED = new Set(['__proto__', 'constructor', 'prototype']);
 const NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 const MAX_GRANTS = 1000;
 
-const BASE58 = /^[1-9A-HJ-NP-Za-km-z]+$/;
-const U64 = /^(0|[1-9][0-9]*)$/;
-const EXPIRES = /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d{1,3})?Z$/;
 // A 32-byte Ed25519 public key in base64: 43 chars plus one '=' pad.
 const PUBKEY_B64 = /^[A-Za-z0-9+/]{43}=$/;
 
@@ -76,10 +76,10 @@ function validateGrant(name, grant) {
         Buffer.from(grant.pubkey, 'base64').length !== 32) {
       throw fail('grant_field_invalid', `${name}.pubkey`);
     }
-    if (!U64.test(grant.maxBytes) || Number(grant.maxBytes) < 1 ||
-        Number(grant.maxBytes) > 3072 || !U64.test(grant.windowMaxMessages) ||
-        !U64.test(grant.windowSeconds) || grant.windowSeconds === '0' ||
-        !EXPIRES.test(grant.expiresAt)) {
+    if (!isU64(grant.maxBytes) || Number(grant.maxBytes) < 1 ||
+        Number(grant.maxBytes) > 3072 || !isMessageCount(grant.windowMaxMessages) ||
+        !isWindowSeconds(grant.windowSeconds) ||
+        !isCanonicalExpiry(grant.expiresAt)) {
       throw fail('grant_field_invalid', `${name}.format`);
     }
     if (Object.getOwnPropertyDescriptor(grant, 'claimKeys')) {
@@ -103,17 +103,19 @@ function validateGrant(name, grant) {
       throw fail('grant_field_invalid', `${name}.${field}`);
     }
   }
-  if (!BASE58.test(grant.signer) || !BASE58.test(grant.destination)) {
+  // The keys must be real 32-byte canonical public keys, not merely base58
+  // CHARSET - the runtime parses them with `new PublicKey(v).toBase58() === v`
+  // and refuses everything else as invalid_grant. A file that loads but can
+  // never sign is the defect this module refuses to write or read
+  // (measured 2026-11-08: 16 of 30 create-time values were refused at
+  // request time; tools/measure-grant-value-contract.mjs).
+  if (!isCanonicalPublicKey(grant.signer) || !isCanonicalPublicKey(grant.destination)) {
     throw fail('grant_field_invalid', `${name}.key`);
   }
-  if (!U64.test(grant.maxLamports) || !U64.test(grant.windowMaxLamports) ||
-      !U64.test(grant.windowSeconds) || !EXPIRES.test(grant.expiresAt)) {
+  if (!isU64(grant.maxLamports) || !isU64(grant.windowMaxLamports) ||
+      !isWindowSeconds(grant.windowSeconds) || !isCanonicalExpiry(grant.expiresAt)) {
     throw fail('grant_field_invalid', `${name}.format`);
   }
-  // A zero-width window would set cutoff = now and exclude every record at or
-  // before now: the cap would silently never engage. Refuse it at load time
-  // (the ledger refuses it again per request).
-  if (grant.windowSeconds === '0') throw fail('grant_field_invalid', `${name}.windowSeconds`);
 }
 
 /**

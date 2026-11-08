@@ -3,6 +3,7 @@
 const crypto = require('node:crypto');
 const { canonicalReceiptBytes } = require('./receipt-identity');
 const { ownField, readClock } = require('./policy');
+const { isCanonicalExpiry } = require('./grantvalues');
 
 // The message-grant envelope: policy for signing a MESSAGE (an
 // openreceipts/v1 receipt body) instead of a Solana transaction wire.
@@ -162,13 +163,12 @@ function ownString(source, key) {
 // independently auditable.
 function expiryMs(grant) {
   const value = ownString(grant, 'expiresAt');
-  if (value === null || !/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d{1,3})?Z$/.test(value)) return NaN;
-  const expiry = Date.parse(value);
-  if (!Number.isFinite(expiry)) return NaN;
-  const canonical = new Date(expiry).toISOString();
-  const expected = value.replace(/(\.\d{1,3})?Z$/, (_, fraction) =>
-    `${fraction ? (fraction + '000').slice(0, 4) : '.000'}Z`);
-  return canonical === expected ? expiry : NaN;
+  // ONE canonical-expiry rule, shared with policy.js, the ledger, the loader
+  // and the creation path (src/grantvalues.js): a moment that exists, in
+  // canonical spelling. Four hand-kept copies is what let creation and
+  // runtime drift (measured 2026-11-08).
+  if (value === null || !isCanonicalExpiry(value)) return NaN;
+  return Date.parse(value);
 }
 
 // The grant's claim-key allowlist, if any: a comma-separated list of the

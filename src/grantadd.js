@@ -32,6 +32,9 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { validateGrant, loadGrantFile, MAX_GRANTS } = require('./grantfile');
 const { makeSealKeyProvider, sealDocument } = require('./grantseal');
+const {
+  isCanonicalPublicKey, isCanonicalExpiry, isU64, isWindowSeconds, isMessageCount,
+} = require('./grantvalues');
 
 /** lstat without following the final symlink; null when nothing is there. */
 function lstatOrNull(target) {
@@ -44,9 +47,14 @@ function lstatOrNull(target) {
 }
 
 const NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
-const BASE58 = /^[1-9A-HJ-NP-Za-km-z]+$/;
-const U64 = /^(0|[1-9][0-9]*)$/;
-const EXPIRES = /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d{1,3})?Z$/;
+// The value rules (a real 32-byte key, a moment that EXISTS, a cap inside
+// u64, a positive safe-integer window) live in src/grantvalues.js - the
+// SAME rules the loader and the daemon apply. A grant that grant-add
+// accepts must be a grant the daemon can honour; a grant the daemon
+// refuses must never be written (measured 2026-11-08: `grant-add --expires
+// 2030-02-31T00:00:00Z` exited 0 and every later request came back
+// invalid_grant - 16 of 30 measured cases, tools/measure-grant-value-
+// contract.mjs).
 
 /**
  * The write could not complete — NAMED, not a bare errno.
@@ -89,17 +97,17 @@ function validateTxGrantArgs(args) {
   const out = {};
   if (typeof args.name !== 'string' || !NAME.test(args.name)) throw fail('grant_name_invalid', String(args.name));
   out.name = args.name;
-  if (typeof args.signer !== 'string' || !BASE58.test(args.signer)) throw fail('grant_field_invalid', 'signer');
+  if (typeof args.signer !== 'string' || !isCanonicalPublicKey(args.signer)) throw fail('grant_field_invalid', 'signer');
   out.signer = args.signer;
-  if (typeof args.destination !== 'string' || !BASE58.test(args.destination)) throw fail('grant_field_invalid', 'destination');
+  if (typeof args.destination !== 'string' || !isCanonicalPublicKey(args.destination)) throw fail('grant_field_invalid', 'destination');
   out.destination = args.destination;
-  for (const field of ['maxLamports', 'windowMaxLamports', 'windowSeconds']) {
-    const value = args[field];
-    if (typeof value !== 'string' || !U64.test(value)) throw fail('grant_field_invalid', field);
-    out[field] = value;
-  }
-  if (out.windowSeconds === '0') throw fail('grant_field_invalid', 'windowSeconds');
-  if (typeof args.expiresAt !== 'string' || !EXPIRES.test(args.expiresAt)) throw fail('grant_field_invalid', 'expiresAt');
+  if (!isU64(args.maxLamports)) throw fail('grant_field_invalid', 'maxLamports');
+  out.maxLamports = args.maxLamports;
+  if (!isU64(args.windowMaxLamports)) throw fail('grant_field_invalid', 'windowMaxLamports');
+  out.windowMaxLamports = args.windowMaxLamports;
+  if (!isWindowSeconds(args.windowSeconds)) throw fail('grant_field_invalid', 'windowSeconds');
+  out.windowSeconds = args.windowSeconds;
+  if (typeof args.expiresAt !== 'string' || !isCanonicalExpiry(args.expiresAt)) throw fail('grant_field_invalid', 'expiresAt');
   out.expiresAt = args.expiresAt;
   return out;
 }
@@ -122,17 +130,17 @@ function validateMessageGrantArgs(args) {
     throw fail('grant_field_invalid', 'pubkey');
   }
   out.pubkey = args.pubkey;
-  if (typeof args.maxBytes !== 'string' || !U64.test(args.maxBytes) || Number(args.maxBytes) < 1) {
+  if (!isU64(args.maxBytes) || Number(args.maxBytes) < 1) {
     throw fail('grant_field_invalid', 'maxBytes');
   }
   out.maxBytes = args.maxBytes;
-  if (typeof args.expiresAt !== 'string' || !EXPIRES.test(args.expiresAt)) throw fail('grant_field_invalid', 'expiresAt');
+  if (typeof args.expiresAt !== 'string' || !isCanonicalExpiry(args.expiresAt)) throw fail('grant_field_invalid', 'expiresAt');
   out.expiresAt = args.expiresAt;
-  if (typeof args.windowMaxMessages !== 'string' || !U64.test(args.windowMaxMessages)) {
+  if (!isMessageCount(args.windowMaxMessages)) {
     throw fail('grant_field_invalid', 'windowMaxMessages');
   }
   out.windowMaxMessages = args.windowMaxMessages;
-  if (typeof args.windowSeconds !== 'string' || !U64.test(args.windowSeconds) || args.windowSeconds === '0') {
+  if (!isWindowSeconds(args.windowSeconds)) {
     throw fail('grant_field_invalid', 'windowSeconds');
   }
   out.windowSeconds = args.windowSeconds;

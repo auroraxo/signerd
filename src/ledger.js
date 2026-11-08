@@ -6,6 +6,7 @@ const path = require('node:path');
 const { evaluate, ownField, readClock } = require('./policy');
 const { readUnderLease } = require('./lease');
 const seal = require('./journalseal');
+const { MAX_U64, isU64, isWindowSeconds, isCanonicalExpiry } = require('./grantvalues');
 
 // The journal is loaded and re-read through the same kernel-enforced read
 // lease that guards the grant file (R4-2): a write handle that predates a
@@ -16,8 +17,6 @@ const seal = require('./journalseal');
 // not the binding size limit; a journal beyond it fails to load rather than
 // being truncated.
 const JOURNAL_LEASE_MAX_BYTES = 512 * 1024 * 1024;
-
-const MAX_U64 = (1n << 64n) - 1n;
 
 // A legacy wire starts with a compact-u16 signature count (one byte when the
 // count is 1), then the 64 signature bytes, then the message.
@@ -67,9 +66,7 @@ function ledgerError(code, detail) {
 }
 
 function parseU64(value) {
-  return typeof value === 'string' && /^(0|[1-9][0-9]*)$/.test(value)
-    ? (() => { const n = BigInt(value); return n <= MAX_U64 ? n : null; })()
-    : null;
+  return isU64(value) ? BigInt(value) : null;
 }
 
 function failWrite(code) {
@@ -89,26 +86,22 @@ function parseWindow(grant) {
   const secondsField = ownField(grant, 'windowSeconds');
   if (!maxField.ok || !secondsField.ok) return null;
   const max = parseU64(maxField.value);
-  const seconds = typeof secondsField.value === 'string' &&
-    /^(0|[1-9][0-9]*)$/.test(secondsField.value)
-    ? Number(secondsField.value) : null;
-  if (max === null || seconds === null || !Number.isSafeInteger(seconds) || seconds <= 0) return null;
-  return { max, seconds };
+  // ONE window rule, shared with the loader and the creation path
+  // (src/grantvalues.js): a positive SAFE integer. Zero would set the
+  // cutoff to "now" and exclude every record at or before it (the cap would
+  // silently never engage); beyond MAX_SAFE_INTEGER the millisecond
+  // arithmetic loses precision.
+  if (max === null || !isWindowSeconds(secondsField.value)) return null;
+  return { max, seconds: Number(secondsField.value) };
 }
 
-// Same canonical-expiry rule as policy.js: Date.parse normalizes impossible
-// calendar dates, so the round trip must reproduce the input exactly.
+// Same canonical-expiry rule as policy.js - ONE copy, in
+// src/grantvalues.js: Date.parse normalizes impossible calendar dates, so
+// the round trip must reproduce the input exactly.
 function expiryMs(grant) {
   const field = ownField(grant, 'expiresAt');
-  if (!field.ok || typeof field.value !== 'string' ||
-      !/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d{1,3})?Z$/.test(field.value)) return NaN;
-  const timestamp = field.value;
-  const expiry = Date.parse(timestamp);
-  if (!Number.isFinite(expiry)) return NaN;
-  const canonical = new Date(expiry).toISOString();
-  const expected = timestamp.replace(/(\.\d{1,3})?Z$/, (_, fraction) =>
-    `${fraction ? (fraction + '000').slice(0, 4) : '.000'}Z`);
-  return canonical === expected ? expiry : NaN;
+  if (!field.ok || !isCanonicalExpiry(field.value)) return NaN;
+  return Date.parse(field.value);
 }
 
 // The scope key identifies the money destination a grant speaks for. Spend is
@@ -166,11 +159,9 @@ function parseMessageWindow(grant) {
   const secondsField = ownField(grant, 'windowSeconds');
   if (!maxField.ok || !secondsField.ok) return null;
   const max = parseU64(maxField.value);
-  const seconds = typeof secondsField.value === 'string' &&
-    /^(0|[1-9][0-9]*)$/.test(secondsField.value) ? Number(secondsField.value) : null;
-  if (max === null || seconds === null || !Number.isSafeInteger(seconds) || seconds <= 0) return null;
+  if (max === null || !isWindowSeconds(secondsField.value)) return null;
   if (max > BigInt(Number.MAX_SAFE_INTEGER)) return null;
-  return { max: Number(max), seconds };
+  return { max: Number(max), seconds: Number(secondsField.value) };
 }
 
 // Each record carries the sha256 of its own fields plus the previous

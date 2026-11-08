@@ -838,6 +838,35 @@ async function main() {
 }
 
 main().catch((err) => {
+  // A grant VALUE the daemon cannot honour. The creation path and the
+  // loader now judge values by the SAME rules (src/grantvalues.js), so a
+  // refusal here means the grant would never sign - it must say what to
+  // write instead, not just which field was wrong (house rule: every
+  // refusal names a repair).
+  if (err && err.code === 'grant_field_invalid') {
+    const field = detailOf(err);
+    // The detail names the FIELD; the repair says what that field must hold.
+    // The rules are the ones the daemon applies (src/grantvalues.js).
+    const FIX = {
+      signer: 'a base58 Ed25519 public key of exactly 32 bytes (e.g. read it from the keystore: --keystore <file>)',
+      destination: 'a base58 Ed25519 public key of exactly 32 bytes (the recipient wallet address)',
+      expiresAt: 'a real UTC instant such as 2030-01-01T00:00:00Z - no Feb 31, no month 13, no offset',
+      maxLamports: 'an integer at most 18446744073709551615 (the u64 cap)',
+      windowMaxLamports: 'an integer at most 18446744073709551615 (the u64 window cap)',
+      windowSeconds: 'a positive whole number of seconds (no fractions, no zero)',
+      windowMaxMessages: 'a positive whole number of messages',
+      maxBytes: 'an integer between 1 and 3072',
+      // Details from validateGrant (the loader) arrive as `<name>.key` /
+      // `<name>.format` / `<name>.windowSeconds`.
+      key: 'a base58 Ed25519 public key of exactly 32 bytes (signer and destination)',
+      format: 'a value the daemon can honour: real UTC instant, u64 caps, positive whole window seconds',
+    };
+    const fix = FIX[field] || FIX[String(field).split('.').pop()] || 'a value the daemon can honour (see the grant-add usage)';
+    process.stderr.write(
+      `${err.code}: ${field}\n` +
+      `  fix: set the field to ${fix}\n`);
+    process.exit(1);
+  }
   // Name the repair, not just the verdict (same rule as the passphrase
   // refusal): the quickstart's `run` was the first contact with the product
   // for a stranger whose grant file did not exist yet — measured 2026-11-05
