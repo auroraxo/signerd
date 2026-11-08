@@ -917,6 +917,48 @@ All 5 caught, tree restored byte-identically.
 
 **Measurement artifact:** `research/grant-value-contract-2026-11-08.json` records 30 cases across both slots — before: 16 contract violations; after: 0.
 
+## Delivery durability defects (2026-11-08) — the delivered signature could be lost by a crash
+
+The `--out` delivery is atomic: a temp file in the same directory, `fsync`, then `rename` over the target. Atomic means a reader never sees a half-written artefact and a failed write never destroys the previous content. It does **not** mean the delivery is *durable* — and that word is the one the CLI's exit code promises.
+
+Measured 2026-11-08 with `strace` on this tree (one delivery, `writeOutAtomic`):
+
+```
+openat(".../.signed.json.signerd-<pid>-<hex>.tmp", O_WRONLY|O_CREAT|O_EXCL) = 22
+fsync(22)                                   = 0     <- the TEMP FILE
+rename(".../.signed.json....tmp", ".../signed.json") = 0
+```
+
+One `fsync`, on the temp file, and then the rename. **The parent directory is never fsynced.**
+
+A rename is a *directory* operation: until the directory entry itself is durable, a crash can lose it — the target reverts to its previous content, or the new name is not there at all. The temp file's own `fsync` made the **data** durable, not the **name**. So the sequence can end with the CLI having exited **0** ("signed **and** delivered"), the operator believing the paid-for signature is at `--out`, and the file on disk still holding the *previous* artefact — or nothing at all.
+
+That is the same loss this repo has been closing for a week, one layer further out: the daemon signed, the budget was charged and the replay identity was recorded, so the retry is refused `replay`. The signature is gone, and the honest report (exit 3 / exit 4) never happens, because the CLI said everything was fine.
+
+This is not a house-style nit. **Four sibling atomic-write sites in this very tree already fsync the parent directory after their rename** — `src/ledger.js:756`, `src/journalseal.js:237`, `src/journalseal-ops.js:297`, `src/migrate.js:145`. The `--out` delivery was the one that skipped it, and it is the one that carries a paid-for artefact.
+
+**The fix:** after the rename, the delivery opens the parent directory read-only and fsyncs it, so the *name* of the delivered artefact is durable when the CLI returns. Best effort, like every other site: the artefact **is** on disk at that point, so a platform that cannot fsync a directory must not turn a successful delivery into a failure. The trace after the fix:
+
+```
+fsync(22) = 0                                  <- the temp file (the data)
+rename(...) = 0
+openat(".../the-output-dir", O_RDONLY) = 22    <- the DIRECTORY
+fsync(22) = 0                                  <- the directory entry (the name)
+```
+
+**Ladder (`test/out-dir-fsync.test.js`, 3 tests):** **1 RED** on the pre-fix tree (D1/D2 — no directory fsync was seen at all), 2 guards green on both trees. After: **3/3**, full suite **513/513** (was 510). The ladder watches the real syscalls (`fs.fsyncSync` and `fs.renameSync` on the shared `node:fs` module) and records them in ORDER, because counting fsyncs cannot see a fsync that happens in the wrong place — see M2.
+
+**Mutation ladder (`tools/mutation-ladder-out-dir-fsync.sh`, 5 mutations):**
+- M1: the directory fsync removed -> caught;
+- M2: the directory fsync moved BEFORE the rename (makes the OLD name durable, leaves the new entry exactly as exposed as if there had been no fsync) -> caught;
+- M3: the temp file's own fsync dropped -> caught;
+- M4: a failing directory fsync turned into a failed delivery -> caught (the artefact is on disk; refusing it would be a new lie);
+- M5: the fsync done on the wrong directory -> caught.
+
+All 5 caught, the control stayed green, and the tree was restored byte-identically.
+
+**Limits, stated rather than hidden:** the directory fsync makes the name durable against a crash of *this machine*; it does not protect against a filesystem that lies about `fsync`, and it does not make the delivery atomic across a network filesystem (the temp file and the target share a directory, so the rename stays within one filesystem). A platform that refuses to fsync a directory gets the best-effort path and no guarantee — the same trade the four sibling sites make. The check is at the moment of the delivery, not before the sign.
+
 ## Next qualification
 
 0. A **third** independent adversarial review of the signing path after the review-#2 fixes land (`src/signer.js`, `src/daemon.js`, `src/keystore.js`, `src/grantfile.js`, `src/ledger.js`), before pointing it at a key with funds: two reviews have run (2026-10-27 hardening diff, 2026-10-29 signing path) and all 12 findings are fixed and regression-tested, but neither was a professional audit and the fixes themselves have not been independently reviewed.

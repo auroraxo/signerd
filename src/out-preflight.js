@@ -237,6 +237,26 @@ function writeOutAtomic(outPath, bytes) {
     // rename is atomic within the directory: no reader ever sees a truncated
     // or half-written target, and the new node carries the temp's 0600.
     fs.renameSync(tmp, target);
+    // The rename is a DIRECTORY operation: until the directory entry itself
+    // is durable, a crash can lose it — the target reverts to its previous
+    // content, or the new name is not there at all. The temp file's own
+    // fsync made the DATA durable, not the NAME.
+    //
+    // Measured 2026-11-08 (strace on this tree, one delivery): openat(tmp)
+    // -> fsync(tmp) -> rename(tmp, target), and NO fsync of the directory.
+    // Four sibling atomic-write sites in this repo already fsync the parent
+    // after their rename (src/ledger.js, src/journalseal.js,
+    // src/journalseal-ops.js, src/migrate.js); the --out delivery was the one
+    // that skipped it, and it is the one carrying a paid-for artefact: the
+    // CLI exited 0, so the operator believes the signature is at --out.
+    //
+    // Best effort, like every other site here: the artefact IS on disk at
+    // this point, so a platform that cannot fsync a directory must not turn
+    // a successful delivery into a failure.
+    try {
+      const dfd = fs.openSync(dir, 'r');
+      try { fs.fsyncSync(dfd); } finally { fs.closeSync(dfd); }
+    } catch { /* platform-dependent; the delivery itself already succeeded */ }
     return { ok: true, path: target };
   } catch (err) {
     if (fd !== undefined) {
