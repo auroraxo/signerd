@@ -40,6 +40,8 @@
 const fs = require('node:fs');
 const { buildTransferWire, signViaDaemon } = require('../src/client');
 const { checkOutWritable, outPreflightFix, writeOutAtomic, outWriteFix } = require('../src/out-preflight');
+const { deliverRecovery, deliverResponse, emit } = require('../src/recovery');
+const { writeStderrSync } = require('../src/stdout');
 const {
   parseTokens, arityProblemsFor, checkFlagsFor, closestFlag,
   CLIENT_FLAGS, CLIENT_SWITCH_FLAGS,
@@ -165,7 +167,10 @@ async function main() {
     // no --out file, no journal record, no window spend. Reporting it in
     // the same JSON shape keeps the output one-line parseable, and `dry:true`
     // makes it impossible to mistake a preview for a signature.
-    process.stdout.write(JSON.stringify({
+    // The write is VERIFIED (src/recovery.js): an unchecked write on a
+    // stdout that cannot hold the answer would leave the operator with
+    // nothing at all (measured 2026-11-08: exit 0, stdout 0 bytes).
+    emit(JSON.stringify({
       ok: true, dry: true, allowed: true,
       amountLamports: response.amountLamports,
       feeLamports: response.feeLamports,
@@ -178,9 +183,17 @@ async function main() {
 
   if (!response.ok) {
     // A refusal is the normal answer outside the grant's scope. Report it and
-    // leave nothing behind: no signature, no partial file.
-    process.stdout.write(JSON.stringify({ ok: false, error: response.error, detail: response.detail || null }) + '\n');
-    process.exit(1);
+    // leave nothing behind: no signature, no partial file. No artifact is at
+    // stake, so a stdout that cannot hold the refusal is reported on stderr
+    // and the exit code stays 1.
+    const answer = deliverResponse({
+      payload: JSON.stringify({ ok: false, error: response.error, detail: response.detail || null }) + '\n',
+      artifact: false,
+      ok: false,
+      exitCode: 1,
+    });
+    if (answer.stderr) writeStderrSync(answer.stderr);
+    process.exit(answer.exitCode);
   }
 
   const signed = Buffer.from(response.signed, 'base64');
@@ -194,13 +207,12 @@ async function main() {
         path: delivery.path,
         message: delivery.message,
       };
-      process.stderr.write(
-        `out_write_failed: the signature was produced but could not be written to ${delivery.path}: ${delivery.message}\n` +
-        `${outWriteFix(delivery)}\n`);
     }
   }
 
-  process.stdout.write(JSON.stringify({
+  // The response: the signed wire rides on stdout whenever the --out delivery
+  // failed or no --out was asked for.
+  const payload = JSON.stringify({
     ok: true,
     signature: response.signature,
     signed: outError ? response.signed : undefined,
@@ -210,12 +222,41 @@ async function main() {
     seq: response.seq,
     signedBytes: signed.length,
     out: typeof args.out === 'string' ? args.out : null,
-  }) + '\n');
+  }) + '\n';
 
-  if (outError) process.exit(3);
+  if (outError) {
+    // Exit 3 promises "the signed wire is on stdout" — a promise only the
+    // VERIFIED write can keep (src/recovery.js: measured 2026-11-08, the
+    // unchecked write made exit 3 with 0 bytes on a dead stdout).
+    const recovery = deliverRecovery({
+      payload,
+      outPath: outError.path,
+      outError,
+      subject: 'the signature',
+      fixLine: outWriteFix(outError),
+    });
+    writeStderrSync(recovery.stderr);
+    process.exit(recovery.exitCode);
+  }
+
+  const answer = deliverResponse({
+    payload,
+    // The example client's output format prints `signature` and
+    // `signedBytes` but not the raw signed wire when --out is omitted (the
+    // documented contract is that it is a CLI helper for user-zero, whose
+    // wire goes to --out). A failing stdout here is reported on stderr as a
+    // deliverability error rather than claiming the artefact itself is gone.
+    artifact: false,
+    ok: true,
+    exitCode: 0,
+  });
+  if (answer.stderr) writeStderrSync(answer.stderr);
+  if (answer.exitCode !== 0) process.exit(answer.exitCode);
 
   if (args.hold === true) {
-    process.stdout.write('READY_TO_SCAN\n');
+    // The parent waits for this marker; a write that vanishes would hang it
+    // until its timeout, so it goes through the verified write too.
+    emit('READY_TO_SCAN\n');
     // Stay alive until the parent closes stdin, so a memory scan sees the
     // same process that just performed the signing.
     await new Promise((resolve) => {

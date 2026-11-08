@@ -110,12 +110,18 @@ PY
 
 # M5: a delivery failure is reported as success (exit 0) — the operator is
 # told the file was written when it was not.
+#
+# The anchor moved with the verified-recovery fix (2026-11-08): the exit-3
+# path now asks src/recovery.js for the exit code, so the mutation has to
+# break THAT decision — the recovery reported as a success. The property
+# under test is unchanged: a delivery failure must never be reported as a
+# delivered signature.
 cat > "$SNAP/m5.py" <<'PY'
-p='bin/signerd.js'
+p='src/recovery.js'
 s=open(p).read()
-old="        process.stdout.write(JSON.stringify(response) + '\\n');\n        process.exit(3);"
+old="      exitCode: 3,\n      stderr: outLine + `${fixLine}\\n`,"
+new="      exitCode: 0, // mutation: failure reported as success\n      stderr: outLine + `${fixLine}\\n`,"
 assert old in s, 'M5 anchor missing'
-new="        process.stdout.write(JSON.stringify(response) + '\\n');\n        process.exit(0); // mutation: failure reported as success"
 s=s.replace(old,new,1)
 open(p,'w').write(s)
 PY
@@ -172,7 +178,7 @@ echo "== M4: delivery degraded to a plain (truncating) write"
 B=$(mutate src/out-preflight.js "$SNAP/m4.py"); check "M4 non-atomic truncating write" expect-red src/out-preflight.js "$B"
 
 echo "== M5: delivery failure reported as success"
-B=$(mutate bin/signerd.js "$SNAP/m5.py"); check "M5 failure reported as exit 0" expect-red bin/signerd.js "$B"
+B=$(mutate src/recovery.js "$SNAP/m5.py"); check "M5 failure reported as exit 0" expect-red src/recovery.js "$B"
 
 echo "== M6: signed wire stripped from stdout on failure"
 B=$(mutate bin/signerd.js "$SNAP/m6.py"); check "M6 signature stripped on failure" expect-red bin/signerd.js "$B"

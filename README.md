@@ -470,14 +470,15 @@ accepted and written *through*; the link is not the defect.
 the previous file, and a successful one lands `0600` regardless of the target's old mode.
 
 **The exit code says what happened.** `bin/signerd.js`, `examples/user-zero-client.js`,
-`src/buildtx.js` and `seal-grants` now distinguish three outcomes:
+`src/buildtx.js` and `seal-grants` now distinguish four outcomes:
 
 | exit | meaning |
 |---|---|
 | 0 | signed **and** delivered |
 | 1 | the daemon or the policy refused (no signature was made) |
 | 2 | a usage/preflight refusal (no signature was made) |
-| 3 | **the signature was made, the file delivery failed** |
+| 3 | **the signature was made, the file delivery failed — and the signed wire IS on stdout** |
+| 4 | **the signature was made, and the artefact is UNRECOVERABLE** (neither `--out` nor stdout could carry it) |
 
 On exit 3 the signed wire (or the signed receipt document) is **still on stdout**, and the
 error is reported as `outError` in the JSON answer plus a `fix:` line on stderr. The
@@ -488,6 +489,62 @@ names, and the journal already records what was signed. Pinned by `test/out-deli
 `--out` file does **not** contain the signature — the artefact is on stdout; the preflight is
 still a point-in-time check, so a TOCTOU window remains (that window is what exit 3 exists
 for); and a symlink chain longer than 32 hops is refused rather than followed.
+
+**2026-11-08: exit 3 is a promise the CLI now VERIFIES (the recovery channel is checked, not assumed).**
+
+The exit-3 promise above is exactly the promise the product must not break: *the artefact
+is on stdout*. Nothing used to check that. Measured on the tree that shipped v0.2.9, with a
+live daemon that really signed (the journal grew `366 -> 732` bytes, so **the spend
+happened**):
+
+| stdout channel | old behaviour | consequence |
+|---|---|---|
+| a regular file under `ulimit -f 0` (the ordinary `... > signed.json` capture) | `process.stdout.write(...)` then immediate `process.exit(3)` | **exit 3, stdout 0 bytes, stderr 0 bytes** — the write never reached the kernel and the error event never surfaced |
+| `/dev/full` (opens, every write fails `ENOSPC`) | same | same: exit 3 with nothing anywhere |
+| `/dev/null` (the write *succeeds* and the bytes are discarded) | same | exit 3 while nothing retains a byte |
+
+The exit code said "the artefact is here" in the one place the product promised truth.
+Three changes close it:
+
+**The response is written with a synchronous, length-checked write** (`src/stdout.js`).
+`fs.writeSync(1, ...)` returns how many bytes landed; under `RLIMIT_FSIZE` it can write
+*part* of the payload and fail on the next call, so the write is looped until the full
+length is down or an error is recorded. A partial write is a **failed** delivery — a
+truncated artefact is not an artefact. `EAGAIN` (a momentarily full pipe) is retried
+bounded; a zero-length probe is never used, because it succeeds on `/dev/full` and proves
+nothing.
+
+**The channel must RETAIN the bytes** (`stdoutRetainsBytes()` reads
+`/proc/self/fd/1`). `/dev/null` and `/dev/zero` accept every write and keep nothing, so
+"no error" is not proof of delivery. When `/proc` is unavailable the write result decides,
+and that assumption is documented rather than silent.
+
+**An exit code may only claim what was verified** (`src/recovery.js`). Exit 3 now means
+*the write landed in a channel that keeps it*; if it did not, the CLI exits **4**, prints
+`recovery_failed:` on stderr with the errno and the repair, and says plainly that the
+journal recorded the spend while the signature itself is gone. Exit 1 would be a lie in
+the other direction (1 says "no signature was made"), which is why 4 exists.
+
+Pinned by `test/recovery-channel.test.js` — 8 cases, 4 red on the pre-fix tree (CASE A a
+file stdout under `ulimit -f 0`, CASE B `/dev/full`, CASE D `/dev/null`, CASE E a
+**partial** write under `ulimit -f 1`) and 4 guards green on both trees (a healthy pipe
+still gets the complete exit-3 response, ordinary capture still exits 0, the example
+client keeps its contract), so the fix cannot be "pass by changing the healthy path".
+The red baseline was captured against the **real pre-fix binaries** in a separate git
+worktree at `0059c7a`, not against a simulation — it is committed at
+`research/recovery-channel-2026-11-08/red-baseline.txt` (4 red, 4 green), with the
+measurement and its limits in `research/recovery-channel-2026-11-08/report.md`.
+`tools/mutation-ladder-recovery-channel.sh` breaks each property of the fix in a
+plausible way (6 mutations: the async write of v0.2.9, the partial-write check, the
+retention check, the exit-3 lie, the silenced statement, an unverified second command)
+— each is caught, and the tree is restored byte-identically.
+
+Limits: the check happens at
+the moment of the write, not before the sign — a channel that breaks *between* the
+verification and the reader is still outside the contract (that window is what the
+journal's hashes are for); when `/proc` is unavailable, retention is assumed; and the
+new exit code 4 is unknown to a consumer that only knows 0/1/2/3 (the greppable
+`recovery_failed:` on stderr is the contract).
 
 **2026-11-07: the example client obeys the daemon's flag surface, and `--dry` is real there.**
 The client ships in the npm package, and until now it carried its own hand-rolled parser.

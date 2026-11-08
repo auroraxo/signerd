@@ -1,0 +1,15 @@
+# The tree this measurement was made against.
+#
+# PRE-FIX tree (the defect, and the tree that shipped v0.2.9):
+#   0059c7aec462fce46fe2dc4e3574e8cb7fbc9607
+#   2026-11-08 07:41:12 +0100
+#   "research: the published v0.2.9 release page measured (newest == latest)"
+#   The red baseline (red-baseline.txt) was captured against THIS tree, in a
+#   separate git worktree, with the real pre-fix binaries:
+#     git worktree add /tmp/signerd-prefix 0059c7a
+#     node --test test/recovery-channel.test.js
+#   -> 4 red (R1, R2, R4, R5), 4 green (R3, G1, G2, G3).
+#
+# POST-FIX tree: the commit that carries src/stdout.js, src/recovery.js,
+# test/recovery-channel.test.js and tools/mutation-ladder-recovery-channel.sh.
+# The ladder passes there (8 green) and every mutation is caught.

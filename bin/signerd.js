@@ -5,6 +5,8 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { checkFlags, closestFlag, parseArgv } = require('../src/cli-flags');
 const { checkOutWritable, outPreflightFix, writeOutAtomic, outWriteFix } = require('../src/out-preflight');
+const { deliverRecovery, deliverResponse } = require('../src/recovery');
+const { writeStderrSync } = require('../src/stdout');
 // Strip the leading `${code}: ` from a `fail()` message so a refusal prints
 // its code EXACTLY ONCE (measured doubled on 2026-11-07, see src/lease.js).
 const { detailOf } = require('../src/lease');
@@ -393,16 +395,33 @@ async function main() {
           path: delivery.path,
           message: delivery.message,
         };
-        process.stderr.write(
-          `out_write_failed: the signature was produced but could not be written to ${delivery.path}: ${delivery.message}\n` +
-          `${outWriteFix(delivery)}\n`);
-        process.stdout.write(JSON.stringify(response) + '\n');
-        process.exit(3);
+        // DELIVER THE RECOVERY, VERIFIED. Exit 3 promises "the artifact is
+        // on stdout" — a promise only the checked write can keep
+        // (src/recovery.js: measured 2026-11-08, the unchecked write made
+        // exit 3 with 0 bytes on a file stdout under RLIMIT_FSIZE=0).
+        const recovery = deliverRecovery({
+          payload: JSON.stringify(response) + '\n',
+          outPath: delivery.path,
+          outError: delivery,
+          subject: 'the signature',
+          fixLine: outWriteFix(delivery),
+        });
+        writeStderrSync(recovery.stderr);
+        process.exit(recovery.exitCode);
       }
       delete response.signed;
     }
-    process.stdout.write(JSON.stringify(response) + '\n');
-    process.exit(response.ok ? 0 : 1);
+    const answer = deliverResponse({
+      payload: JSON.stringify(response) + '\n',
+      // The artifact rides on stdout alone when there is no --out file to
+      // carry it — but a --dry response has NO signature in it, so nothing
+      // is lost there and the exit code must not claim otherwise.
+      artifact: response.dry !== true && typeof args.out !== 'string',
+      ok: response.ok === true,
+      exitCode: response.ok ? 0 : 1,
+    });
+    if (answer.stderr) writeStderrSync(answer.stderr);
+    process.exit(answer.exitCode);
   }
 
   if (command === 'grant-add') {
@@ -729,15 +748,29 @@ async function main() {
           path: delivery.path,
           message: delivery.message,
         };
-        process.stderr.write(
-          `out_write_failed: the receipt was produced but could not be written to ${delivery.path}: ${delivery.message}\n` +
-          `${outWriteFix(delivery)}\n`);
-        process.stdout.write(JSON.stringify(response) + '\n');
-        process.exit(3);
+        // Same verified recovery as `sign` (src/recovery.js): exit 3 only
+        // when the receipt document is ACTUALLY on stdout.
+        const recovery = deliverRecovery({
+          payload: JSON.stringify(response) + '\n',
+          outPath: delivery.path,
+          outError: delivery,
+          subject: 'the receipt',
+          fixLine: outWriteFix(delivery),
+        });
+        writeStderrSync(recovery.stderr);
+        process.exit(recovery.exitCode);
       }
     }
-    process.stdout.write(JSON.stringify(response) + '\n');
-    process.exit(response.ok ? 0 : 1);
+    const answer = deliverResponse({
+      payload: JSON.stringify(response) + '\n',
+      // No --out: the signature rides on stdout alone. A --dry response has
+      // no signature, so it never counts as a lost artifact.
+      artifact: response.dry !== true && typeof args.out !== 'string',
+      ok: response.ok === true,
+      exitCode: response.ok ? 0 : 1,
+    });
+    if (answer.stderr) writeStderrSync(answer.stderr);
+    process.exit(answer.exitCode);
   }
 
   if (command === 'status') {

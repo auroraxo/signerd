@@ -128,10 +128,14 @@ PY
 
 # M7: the arity problems are resolved against the WRONG command's shape -
 #     the switch set is dropped, so every flag reads as a value flag.
+#
+# The anchor moved in 3d71957 (the flag-surface fix: the switch set is now
+# passed in, so the CLI's own SWITCH_FLAGS table is no longer read here).
+# The property under test is unchanged: a switch without a value is right.
 cat > "$SNAP/m7.py" <<'PY'
 p='src/cli-flags.js'
 s=open(p).read()
-old="  const switches = new Set(SWITCH_FLAGS[command] || []);"
+old="  const switches = new Set(switchList || []);"
 new="  const switches = new Set([]); // mutation: no flag is a switch"
 assert old in s, 'M7 anchor missing'
 s=s.replace(old,new,1)

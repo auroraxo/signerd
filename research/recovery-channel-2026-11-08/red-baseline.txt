@@ -1,0 +1,22 @@
+# red baseline — pre-fix tree 0059c7aec462fce46fe2dc4e3574e8cb7fbc9607 (0059c7a, the tree that shipped v0.2.9)
+# captured 2026-11-08T15:47:04+01:00 against the FINAL test/recovery-channel.test.js
+# ladder: R1/R2/R4/R5 must be RED before the fix; R3/G1/G2/G3 must be GREEN on both trees
+# (guards green on the pre-fix tree too, so the fix cannot be 'pass by changing the healthy path')
+
+✖ R1 exit 3 is allowed only when the signed wire ACTUALLY reached stdout (CASE A) (690.832265ms)
+✖ R2 a dead device recovery channel must be VERIFIED and named (CASE B) (466.343184ms)
+✖ R4 a stdout that DISCARDS bytes must not be claimed as a recovery channel (482.417129ms)
+✖ R5 a PARTIAL write must not be reported as a delivered artefact (453.762352ms)
+✔ R3 GUARD a healthy pipe stdout still gets the complete exit-3 response (432.973093ms)
+✔ G1 GUARD ordinary stdout-to-file capture still gets exit 0 with ok:true (457.55173ms)
+✔ G2 GUARD the ordinary pipe path is unchanged (480.240221ms)
+✔ G3 GUARD the example client keeps its exit-code and stdout contract (518.930754ms)
+ℹ tests 8
+ℹ pass 4
+ℹ fail 4
+ℹ duration_ms 4334.275344
+✖ failing tests:
+✖ R1 exit 3 is allowed only when the signed wire ACTUALLY reached stdout (CASE A) (690.832265ms)
+✖ R2 a dead device recovery channel must be VERIFIED and named (CASE B) (466.343184ms)
+✖ R4 a stdout that DISCARDS bytes must not be claimed as a recovery channel (482.417129ms)
+✖ R5 a PARTIAL write must not be reported as a delivered artefact (453.762352ms)
