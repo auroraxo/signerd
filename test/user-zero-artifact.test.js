@@ -36,7 +36,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const ROOT = path.resolve(__dirname, '..');
-const ARTIFACT = path.join(ROOT, 'research', 'user-zero-v0.2.11-2026-11-08.json');
+const ARTIFACT = path.join(ROOT, 'research', 'user-zero-v0.2.12-2026-11-09.json');
 
 function load() {
   return JSON.parse(fs.readFileSync(ARTIFACT, 'utf8'));
