@@ -33,7 +33,8 @@ const path = require('node:path');
 const { validateGrant, loadGrantFile, MAX_GRANTS } = require('./grantfile');
 const { makeSealKeyProvider, sealDocument } = require('./grantseal');
 const {
-  isCanonicalPublicKey, isCanonicalExpiry, isU64, isWindowSeconds, isMessageCount,
+  isCanonicalPublicKey, isCanonicalExpiry, isU64, isWindowMaxLamports, isWindowSeconds,
+  isMessageCount,
 } = require('./grantvalues');
 
 /** lstat without following the final symlink; null when nothing is there. */
@@ -103,7 +104,11 @@ function validateTxGrantArgs(args) {
   out.destination = args.destination;
   if (!isU64(args.maxLamports)) throw fail('grant_field_invalid', 'maxLamports');
   out.maxLamports = args.maxLamports;
-  if (!isU64(args.windowMaxLamports)) throw fail('grant_field_invalid', 'windowMaxLamports');
+  // The window cap must be one the daemon can HONOUR: every approval is
+  // charged amount + 5000 (the base fee), so a cap below 5000 can never be
+  // met and every request against it would die with window_cap (measured
+  // 2026-11-09, research/grant-cap-domain-2026-11-09.json).
+  if (!isWindowMaxLamports(args.windowMaxLamports)) throw fail('grant_field_invalid', 'windowMaxLamports');
   out.windowMaxLamports = args.windowMaxLamports;
   if (!isWindowSeconds(args.windowSeconds)) throw fail('grant_field_invalid', 'windowSeconds');
   out.windowSeconds = args.windowSeconds;

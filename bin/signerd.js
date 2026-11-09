@@ -885,7 +885,7 @@ main().catch((err) => {
       destination: 'a base58 Ed25519 public key of exactly 32 bytes (the recipient wallet address)',
       expiresAt: 'a real UTC instant such as 2030-01-01T00:00:00Z - no Feb 31, no month 13, no offset',
       maxLamports: 'an integer at most 18446744073709551615 (the u64 cap)',
-      windowMaxLamports: 'an integer at most 18446744073709551615 (the u64 window cap)',
+      windowMaxLamports: 'an integer between 5000 (the base fee every approval costs) and 18446744073709551615 (the u64 window cap)',
       windowSeconds: 'a positive whole number of seconds (no fractions, no zero)',
       windowMaxMessages: 'a positive whole number of messages',
       maxBytes: 'an integer between 1 and 3072',

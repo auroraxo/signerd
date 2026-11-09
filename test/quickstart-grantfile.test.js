@@ -118,7 +118,7 @@ test('grant-add creates a valid transaction grant file, refuses to clobber', () 
   const before = fs.readFileSync(grants);
   const again = runWithUmask([CLI, 'grant-add', '--grants', grants,
     '--name', 'ops-24h', '--signer', publicKey, '--destination', destination,
-    '--max-lamports', '1', '--window-max-lamports', '1',
+    '--max-lamports', '5000', '--window-max-lamports', '5000',
     '--window-seconds', '60', '--expires', '2030-01-01T00:00:00Z'], '0002');
   assert.notStrictEqual(again.status, 0, 'grant-add must refuse to clobber an existing file');
   assert.match(again.stderr, /exists/i, 'the refusal must name the conflict');

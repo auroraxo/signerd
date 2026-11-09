@@ -1,0 +1,363 @@
+{
+  "generatedAt": "2026-11-09",
+  "tool": "tools/measure-grant-cap-domain.js",
+  "baseline": {
+    "tag": "v0.2.12",
+    "source": "git archive v0.2.12",
+    "commit": "063cd89ef3fa2ce45d7dd75d841afb2694d891fb"
+  },
+  "subject": {
+    "tree": "working tree",
+    "commit": "3e6b10d1b9c715c39eca2eb288f5973bfb258253"
+  },
+  "verdict": "fixed",
+  "before": {
+    "cases": 10,
+    "contractViolations": 4,
+    "defectCases": 5,
+    "defectCasesViolated": 4,
+    "guardCases": 5,
+    "guardCasesViolated": 0,
+    "violations": [
+      "tx.windowMaxLamports=0 (zero lamport window cap): load=true runtime=false refused=window_cap",
+      "tx.windowMaxLamports=1 (window cap below the base fee): load=true runtime=false refused=window_cap",
+      "tx.windowMaxLamports=4999 (one lamport below the base fee): load=true runtime=false refused=window_cap",
+      "msg.windowMaxMessages=0 (zero message cap): load=true runtime=false refused=window_cap"
+    ]
+  },
+  "after": {
+    "cases": 10,
+    "contractViolations": 0,
+    "defectCases": 5,
+    "defectCasesViolated": 0,
+    "guardCases": 5,
+    "guardCasesViolated": 0,
+    "violations": []
+  },
+  "rows": {
+    "before": [
+      {
+        "kind": "tx",
+        "field": "windowMaxLamports",
+        "value": "0",
+        "label": "zero lamport window cap",
+        "expect": "defect",
+        "loadAccepted": true,
+        "loadCode": null,
+        "runtimeAllowed": false,
+        "runtimeRefused": "window_cap",
+        "policyRefused": null,
+        "contractHolds": false,
+        "runtimeAtAmount42": {
+          "allowed": false,
+          "refused": "window_cap",
+          "policyRefused": null
+        }
+      },
+      {
+        "kind": "tx",
+        "field": "windowMaxLamports",
+        "value": "1",
+        "label": "window cap below the base fee",
+        "expect": "defect",
+        "loadAccepted": true,
+        "loadCode": null,
+        "runtimeAllowed": false,
+        "runtimeRefused": "window_cap",
+        "policyRefused": null,
+        "contractHolds": false,
+        "runtimeAtAmount42": {
+          "allowed": false,
+          "refused": "window_cap",
+          "policyRefused": null
+        }
+      },
+      {
+        "kind": "tx",
+        "field": "windowMaxLamports",
+        "value": "4999",
+        "label": "one lamport below the base fee",
+        "expect": "defect",
+        "loadAccepted": true,
+        "loadCode": null,
+        "runtimeAllowed": false,
+        "runtimeRefused": "window_cap",
+        "policyRefused": null,
+        "contractHolds": false,
+        "runtimeAtAmount42": {
+          "allowed": false,
+          "refused": "window_cap",
+          "policyRefused": null
+        }
+      },
+      {
+        "kind": "tx",
+        "field": "windowMaxLamports",
+        "value": "5000",
+        "label": "exactly the base fee",
+        "expect": "guard",
+        "loadAccepted": true,
+        "loadCode": null,
+        "runtimeAllowed": true,
+        "runtimeRefused": null,
+        "policyRefused": null,
+        "contractHolds": true,
+        "runtimeAtAmount42": {
+          "allowed": false,
+          "refused": "window_cap",
+          "policyRefused": null
+        }
+      },
+      {
+        "kind": "tx",
+        "field": "windowMaxLamports",
+        "value": "5042",
+        "label": "amount 42 plus the base fee",
+        "expect": "guard",
+        "loadAccepted": true,
+        "loadCode": null,
+        "runtimeAllowed": true,
+        "runtimeRefused": null,
+        "policyRefused": null,
+        "contractHolds": true,
+        "runtimeAtAmount42": {
+          "allowed": true,
+          "refused": null,
+          "policyRefused": null
+        }
+      },
+      {
+        "kind": "tx",
+        "field": "windowMaxLamports",
+        "value": "100000",
+        "label": "ordinary window cap",
+        "expect": "guard",
+        "loadAccepted": true,
+        "loadCode": null,
+        "runtimeAllowed": true,
+        "runtimeRefused": null,
+        "policyRefused": null,
+        "contractHolds": true,
+        "runtimeAtAmount42": {
+          "allowed": true,
+          "refused": null,
+          "policyRefused": null
+        }
+      },
+      {
+        "kind": "msg",
+        "field": "windowMaxMessages",
+        "value": "0",
+        "label": "zero message cap",
+        "expect": "defect",
+        "loadAccepted": true,
+        "loadCode": null,
+        "runtimeAllowed": false,
+        "runtimeRefused": "window_cap",
+        "policyRefused": null,
+        "contractHolds": false
+      },
+      {
+        "kind": "msg",
+        "field": "windowMaxMessages",
+        "value": "1",
+        "label": "one message cap",
+        "expect": "guard",
+        "loadAccepted": true,
+        "loadCode": null,
+        "runtimeAllowed": true,
+        "runtimeRefused": null,
+        "policyRefused": null,
+        "contractHolds": true
+      },
+      {
+        "kind": "msg",
+        "field": "windowMaxMessages",
+        "value": "5",
+        "label": "ordinary message cap",
+        "expect": "guard",
+        "loadAccepted": true,
+        "loadCode": null,
+        "runtimeAllowed": true,
+        "runtimeRefused": null,
+        "policyRefused": null,
+        "contractHolds": true
+      },
+      {
+        "kind": "msg",
+        "field": "windowMaxMessages",
+        "value": "00",
+        "label": "zero with leading zeros",
+        "expect": "defect",
+        "loadAccepted": false,
+        "loadCode": "grant_field_invalid",
+        "runtimeAllowed": false,
+        "runtimeRefused": "invalid_grant_window",
+        "policyRefused": null,
+        "contractHolds": true
+      }
+    ],
+    "after": [
+      {
+        "kind": "tx",
+        "field": "windowMaxLamports",
+        "value": "0",
+        "label": "zero lamport window cap",
+        "expect": "defect",
+        "loadAccepted": false,
+        "loadCode": "grant_field_invalid",
+        "runtimeAllowed": false,
+        "runtimeRefused": "window_cap",
+        "policyRefused": null,
+        "contractHolds": true,
+        "runtimeAtAmount42": {
+          "allowed": false,
+          "refused": "window_cap",
+          "policyRefused": null
+        }
+      },
+      {
+        "kind": "tx",
+        "field": "windowMaxLamports",
+        "value": "1",
+        "label": "window cap below the base fee",
+        "expect": "defect",
+        "loadAccepted": false,
+        "loadCode": "grant_field_invalid",
+        "runtimeAllowed": false,
+        "runtimeRefused": "window_cap",
+        "policyRefused": null,
+        "contractHolds": true,
+        "runtimeAtAmount42": {
+          "allowed": false,
+          "refused": "window_cap",
+          "policyRefused": null
+        }
+      },
+      {
+        "kind": "tx",
+        "field": "windowMaxLamports",
+        "value": "4999",
+        "label": "one lamport below the base fee",
+        "expect": "defect",
+        "loadAccepted": false,
+        "loadCode": "grant_field_invalid",
+        "runtimeAllowed": false,
+        "runtimeRefused": "window_cap",
+        "policyRefused": null,
+        "contractHolds": true,
+        "runtimeAtAmount42": {
+          "allowed": false,
+          "refused": "window_cap",
+          "policyRefused": null
+        }
+      },
+      {
+        "kind": "tx",
+        "field": "windowMaxLamports",
+        "value": "5000",
+        "label": "exactly the base fee",
+        "expect": "guard",
+        "loadAccepted": true,
+        "loadCode": null,
+        "runtimeAllowed": true,
+        "runtimeRefused": null,
+        "policyRefused": null,
+        "contractHolds": true,
+        "runtimeAtAmount42": {
+          "allowed": false,
+          "refused": "window_cap",
+          "policyRefused": null
+        }
+      },
+      {
+        "kind": "tx",
+        "field": "windowMaxLamports",
+        "value": "5042",
+        "label": "amount 42 plus the base fee",
+        "expect": "guard",
+        "loadAccepted": true,
+        "loadCode": null,
+        "runtimeAllowed": true,
+        "runtimeRefused": null,
+        "policyRefused": null,
+        "contractHolds": true,
+        "runtimeAtAmount42": {
+          "allowed": true,
+          "refused": null,
+          "policyRefused": null
+        }
+      },
+      {
+        "kind": "tx",
+        "field": "windowMaxLamports",
+        "value": "100000",
+        "label": "ordinary window cap",
+        "expect": "guard",
+        "loadAccepted": true,
+        "loadCode": null,
+        "runtimeAllowed": true,
+        "runtimeRefused": null,
+        "policyRefused": null,
+        "contractHolds": true,
+        "runtimeAtAmount42": {
+          "allowed": true,
+          "refused": null,
+          "policyRefused": null
+        }
+      },
+      {
+        "kind": "msg",
+        "field": "windowMaxMessages",
+        "value": "0",
+        "label": "zero message cap",
+        "expect": "defect",
+        "loadAccepted": false,
+        "loadCode": "grant_field_invalid",
+        "runtimeAllowed": false,
+        "runtimeRefused": "window_cap",
+        "policyRefused": null,
+        "contractHolds": true
+      },
+      {
+        "kind": "msg",
+        "field": "windowMaxMessages",
+        "value": "1",
+        "label": "one message cap",
+        "expect": "guard",
+        "loadAccepted": true,
+        "loadCode": null,
+        "runtimeAllowed": true,
+        "runtimeRefused": null,
+        "policyRefused": null,
+        "contractHolds": true
+      },
+      {
+        "kind": "msg",
+        "field": "windowMaxMessages",
+        "value": "5",
+        "label": "ordinary message cap",
+        "expect": "guard",
+        "loadAccepted": true,
+        "loadCode": null,
+        "runtimeAllowed": true,
+        "runtimeRefused": null,
+        "policyRefused": null,
+        "contractHolds": true
+      },
+      {
+        "kind": "msg",
+        "field": "windowMaxMessages",
+        "value": "00",
+        "label": "zero with leading zeros",
+        "expect": "defect",
+        "loadAccepted": false,
+        "loadCode": "grant_field_invalid",
+        "runtimeAllowed": false,
+        "runtimeRefused": "invalid_grant_window",
+        "policyRefused": null,
+        "contractHolds": true
+      }
+    ]
+  }
+}

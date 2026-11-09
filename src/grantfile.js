@@ -5,7 +5,8 @@ const path = require('node:path');
 const { readUnderLease } = require('./lease');
 const { verifySealMac, parseSeal } = require('./grantseal');
 const {
-  isCanonicalPublicKey, isCanonicalExpiry, isU64, isWindowSeconds, isMessageCount,
+  isCanonicalPublicKey, isCanonicalExpiry, isU64, isWindowMaxLamports, isWindowSeconds,
+  isMessageCount,
 } = require('./grantvalues');
 
 const REQUIRED_FIELDS = [
@@ -112,7 +113,11 @@ function validateGrant(name, grant) {
   if (!isCanonicalPublicKey(grant.signer) || !isCanonicalPublicKey(grant.destination)) {
     throw fail('grant_field_invalid', `${name}.key`);
   }
-  if (!isU64(grant.maxLamports) || !isU64(grant.windowMaxLamports) ||
+  // `isWindowMaxLamports` judges MEANING, not form: a decimal u64 AND a cap
+  // at least the base fee (5000), because every approval costs
+  // amount + 5000 against the window and a smaller cap can never be
+  // satisfied (research/grant-cap-domain-2026-11-09.json).
+  if (!isU64(grant.maxLamports) || !isWindowMaxLamports(grant.windowMaxLamports) ||
       !isWindowSeconds(grant.windowSeconds) || !isCanonicalExpiry(grant.expiresAt)) {
     throw fail('grant_field_invalid', `${name}.format`);
   }

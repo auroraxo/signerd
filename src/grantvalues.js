@@ -25,8 +25,11 @@
 //   isCanonicalPublicKey(v)  a real 32-byte key in canonical base58
 //   isCanonicalExpiry(v)     an instant that EXISTS and is canonical
 //   isU64(v)                 a decimal integer in [0, 2^64-1]
+//   isWindowMaxLamports(v)   a window cap the daemon can HONOUR: a decimal
+//                             integer in [5000, 2^64-1] (the base fee every
+//                             approval costs is the floor)
 //   isWindowSeconds(v)       a positive safe integer (the ledger's clock)
-//   isMessageCount(v)        a count in [0, MAX_SAFE_INTEGER]
+//   isMessageCount(v)        a POSITIVE count in [1, MAX_SAFE_INTEGER]
 //
 // WHY THE EXPIRY RULE IS A ROUND TRIP (not a regex): a regex can describe
 // the SHAPE of a timestamp, not whether the moment exists. "2030-02-31"
@@ -109,23 +112,55 @@ function isWindowSeconds(value) {
 }
 
 /**
+ * The MINIMUM window lamport cap a grant can ever honour: the Solana
+ * transaction base fee (5000 lamports). Every transfer through this
+ * daemon is charged `amount + 5000` against its rolling window (ledger.js:
+ * exactly one signature, no ComputeBudget instruction). A cap below 5000
+ * can NEVER be satisfied: the cheapest possible real request (a transfer
+ * of 0 lamports) costs 5000, so a cap in [0, 4999] makes every request
+ * die with `window_cap`.
+ *
+ * What the grant file accepts must be what the daemon can honour
+ * (measured 2026-11-09, research/grant-cap-domain-2026-11-09.json:
+ * 4 contract violations on v0.2.12).
+ */
+const MIN_WINDOW_LAMPORTS = 5000n;
+
+/** A window lamport cap: a decimal integer in [5000, 2^64-1]. */
+function isWindowMaxLamports(value) {
+  if (typeof value !== 'string' || !DECIMAL.test(value)) return false;
+  try {
+    const n = BigInt(value);
+    return n >= MIN_WINDOW_LAMPORTS && n <= MAX_U64;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * A count of messages (the message window counts receipts, not lamports):
- * a safe integer, because the ledger counts them in a Number.
+ * a POSITIVE safe integer in [1, MAX_SAFE_INTEGER]. A cap of 0 can never
+ * be reached: the ledger checks `signed + 1 > window.max` BEFORE the first
+ * signature, so 0 + 1 > 0 refuses the very first request with `window_cap`
+ * (dead on arrival). The CLI's own repair text already calls this
+ * "a positive whole number of messages".
  */
 function isMessageCount(value) {
   if (typeof value !== 'string' || !DECIMAL.test(value)) return false;
   const count = Number(value);
-  return Number.isSafeInteger(count) && count >= 0 && count <= MAX_SAFE;
+  return Number.isSafeInteger(count) && count > 0 && count <= MAX_SAFE;
 }
 
 module.exports = {
   MAX_U64,
   MAX_SAFE,
+  MIN_WINDOW_LAMPORTS,
   EXPIRES_SHAPE,
   DECIMAL,
   isCanonicalPublicKey,
   isCanonicalExpiry,
   isU64,
+  isWindowMaxLamports,
   isWindowSeconds,
   isMessageCount,
 };

@@ -233,7 +233,11 @@ test('L1 run refuses two --grants and never starts (measured: signed 500005000)'
   const s = setup('signerd-arity-dupgrants-');
   const narrow = path.join(s.root, 'narrow.json');
   const wide = path.join(s.root, 'wide.json');
-  grantAndTx(s, { cap: 1000, amount: 500000000, grants: narrow, tx: path.join(s.root, 'tx.bin') });
+  // cap 1000 (the value measured 2026-11-07) is no longer creatable: since
+  // 2026-11-09 a window cap below the 5000-lamport base fee is refused as
+  // dead on arrival (grant_field_invalid). 5000 keeps NARROW narrow: it
+  // still refuses the 500000000-lamport amount WIDE would have signed.
+  grantAndTx(s, { cap: 5000, amount: 500000000, grants: narrow, tx: path.join(s.root, 'tx.bin') });
   const addWide = sh([
     'grant-add', '--grants', wide, '--name', 'ops', '--keystore', s.keystore,
     '--destination', DESTINATION, '--max-lamports', '999999999',
@@ -304,7 +308,7 @@ test('L4 a seal flag with no value must not start the daemon on a tampered seale
   const s = setup('signerd-arity-noseal-');
   const sealPass = path.join(s.root, 'seal.pass');
   fs.writeFileSync(sealPass, 'a different passphrase for the seal\n', { mode: 0o600 });
-  const { grants } = grantAndTx(s, { cap: 1000, amount: 1000 });
+  const { grants } = grantAndTx(s, { cap: 5000, amount: 1000 });
   const seal = sh(['seal-grants', '--grants', grants, '--seal-passphrase-file', sealPass]);
   assert.strictEqual(seal.status, 0, `seal-grants failed: ${seal.stderr}`);
   // TAMPER: raise the cap on the SEALED file. The HMAC no longer verifies -
