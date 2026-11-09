@@ -27,6 +27,8 @@ function fail(reason, detail) {
   return err;
 }
 
+const { checkSocketPath, socketPathFix } = require('./socketpath');
+
 function decodeRequest(raw) {
   let doc;
   try {
@@ -118,7 +120,20 @@ class Daemon {
   constructor({ socketPath, keystorePath, grantFile, passphrase, ledgerFile, keypair,
     grantSealPassphrase, journalSealPassphrase }) {
     if (typeof socketPath !== 'string' || socketPath.length === 0) throw fail('socket_path_required');
-    if (path.resolve(socketPath).length > 100) throw fail('socket_path_too_long');
+    // The path domain belongs to the KERNEL (char sun_path[108], measured on
+    // this host: 108 bytes bind+connect, 109 EINVAL) - and it measures BYTES
+    // of the string handed to bind(), not characters of the resolved path.
+    // src/socketpath.js is the one source both sides read, so the daemon and
+    // the client cannot disagree about what a usable path is.
+    const socketPathCheck = checkSocketPath(socketPath);
+    if (!socketPathCheck.ok) {
+      const err = fail(socketPathCheck.code, socketPathCheck.message);
+      // The repair rides on the error so the CLI prints ONE source of it
+      // (src/socketpath.js) - a second copy in the printer would be the same
+      // two-surface drift this fix exists to remove.
+      err.fix = socketPathFix(socketPathCheck);
+      throw err;
+    }
     this.socketPath = socketPath;
     this.ledgerFile = ledgerFile;
     this.lockFile = `${ledgerFile}.lock`;
@@ -612,6 +627,18 @@ class Daemon {
 /** Client: connect, send one request, read one response. */
 function request({ socketPath, grant, wire, body, dry, timeoutMs = REQUEST_TIMEOUT_MS }) {
   return new Promise((resolve, reject) => {
+    // Preflight the path DOMAIN before the round trip, from the same module
+    // the daemon's constructor reads (measured 2026-11-09, pre-fix tree:
+    // a 121-byte path reached net.connect and came back as
+    // `EINVAL: connect EINVAL <path> - Local (undefined:undefined)` - a raw
+    // errno with mangled text where the product's refusal voice belongs).
+    const socketPathCheck = checkSocketPath(socketPath);
+    if (!socketPathCheck.ok) {
+      const err = fail(socketPathCheck.code, socketPathCheck.message);
+      err.fix = socketPathFix(socketPathCheck);
+      reject(err);
+      return;
+    }
     const socket = net.connect(socketPath);
     let buffer = Buffer.alloc(0);
     const timer = setTimeout(() => { socket.destroy(); reject(new Error('request_timeout')); }, timeoutMs);

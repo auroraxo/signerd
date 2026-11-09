@@ -937,6 +937,16 @@ main().catch((err) => {
     }
     process.exit(1);
   }
+  // A socket path outside the kernel's domain (`sun_path` is 108 bytes;
+  // measured 2026-11-09: 108 binds, 109 is EINVAL) must reach the operator
+  // with the same voice every other refusal uses - code once, value, repair
+  // - instead of the raw `EINVAL: connect EINVAL ... - Local
+  // (undefined:undefined)` the round trip used to leak.
+  if (err && (err.code === 'socket_path_too_long' || err.code === 'socket_path_required')) {
+    const fix = err.fix || `  fix: use a shorter --socket path (<= ${require('../src/socketpath').SUN_PATH_MAX_BYTES} bytes), e.g. ~/.local/share/signerd/signerd.sock`;
+    process.stderr.write(`${err.code}: ${detailOf(err)}\n${fix}\n`);
+    process.exit(2);
+  }
   process.stderr.write(`${err.code || 'error'}: ${detailOf(err)}\n`);
   process.exit(1);
 });

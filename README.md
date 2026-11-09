@@ -961,6 +961,41 @@ All 5 caught, the control stayed green, and the tree was restored byte-identical
 
 **Limits, stated rather than hidden:** the directory fsync makes the name durable against a crash of *this machine*; it does not protect against a filesystem that lies about `fsync`, and it does not make the delivery atomic across a network filesystem (the temp file and the target share a directory, so the rename stays within one filesystem). A platform that refuses to fsync a directory gets the best-effort path and no guarantee — the same trade the four sibling sites make. The check is at the moment of the delivery, not before the sign.
 
+## Socket-path domain defects (2026-11-09) — three defects in how signerd judged its socket
+
+The socket path is a **capability**: whoever can bind it can impersonate the signing daemon. That is why the daemon validates the socket directory, its mode and its owner (`src/daemon.js`).
+
+It also means the path itself has a domain — and the domain is the one the **kernel** enforces, not an arbitrary guess.
+
+**Measured on this host (Linux, `struct sockaddr_un`):**
+
+* `char sun_path[108]` (see `sys/un.h`). A real bind + connect round trip works at 108 bytes and fails with `EINVAL` at 109 (`tools/measure-socket-path-domain.js` proves this with live round trips at 107, 108 and 109 bytes).
+* The kernel measures **bytes** of the string handed to `bind()`, not characters: 90 characters of mixed ASCII and two-byte UTF-8 (135 bytes total) fail with `EINVAL`, while 105 ASCII bytes work.
+
+**Three defects measured on the published `v0.2.11` tag (`research/socket-path-domain-2026-11-09.json`):**
+
+1. **The check measured characters against the wrong ceiling:** `path.resolve(socketPath).length > 100`.
+   - A legitimate 105-byte path was **refused** (`socket_path_too_long`) although the kernel accepts it — a false refusal of a working setup.
+   - A 90-character / 135-byte path **passed** the check and died later at `bind()` with a raw `EINVAL: listen EINVAL: invalid argument ...` — the daemon's own refusal surface was bypassed.
+   - The check measured the *resolved* path while the kernel judges the string actually passed to `bind()` — two different strings.
+2. **The refusal carried no detail:** `socket_path_too_long: ` — an empty string, no byte count, no limit, no repair line. The house voice (`test/grant-refusal-voice.test.js`) requires every refusal to name its code once, its value, and its repair.
+3. **The client never preflighted the path:** `signerd sign --socket <121 bytes>` reached `net.connect` and printed `EINVAL: connect EINVAL <path> - Local (undefined:undefined)` — a raw errno, a mangled message, and the literal text `(undefined:undefined)`.
+
+**Fix:** `src/socketpath.js` is the single source of truth for both sides.
+- `checkSocketPath` judges the path in **bytes** against `SUN_PATH_MAX_BYTES = 108`.
+- The daemon constructor refuses with code, byte count, limit and repair line before anything is locked or started.
+- The client preflights the path before the round trip and refuses with the **same** code and repair line.
+
+**Measurement (`research/socket-path-domain-2026-11-09.json`, pinned by `test/socket-path-measurement.test.js`):**
+
+* Baseline (`git archive v0.2.11`, the published tag): 3 of 3 cases violated (empty-detail 121-byte refusal + raw errno in client; raw `EINVAL` on 90-char / 135-byte path; false refusal on 105-byte path).
+* This tree: 3 of 3 cases conform, verdict **`fixed`**.
+* Regression ladder: `test/socket-path-domain.test.js` (8 tests: S1–S4 red on `dc75e63`, G1–G3 guards green on both; 8/8 green here).
+* Mutation ladder: `tools/mutation-ladder-socket-path.sh` — 7 mutations caught (character count, ceiling 200, ceiling 100, missing byte count, no client preflight, no daemon check, no client repair line), both controls green, tree restored byte-identically.
+* Preflight cost: **225 ns per call** (measured over 200,000 calls).
+
+**Limits, stated rather than hidden:** `sun_path` is 108 bytes on Linux, but BSD/macOS allocate 104 bytes in `sockaddr_un.sun_path`. On this Linux host the 108-byte limit is what the kernel enforces; running on macOS against a 106-byte path is caught by the kernel at bind time (untested live because no macOS host is reachable; the Darwin integrity checks are documented in the release notes). The check runs on the path as passed, which matches what `net.createServer().listen(path)` hands down to the C library.
+
 ## Next qualification
 
 0. A **third** independent adversarial review of the signing path after the review-#2 fixes land (`src/signer.js`, `src/daemon.js`, `src/keystore.js`, `src/grantfile.js`, `src/ledger.js`), before pointing it at a key with funds: two reviews have run (2026-10-27 hardening diff, 2026-10-29 signing path) and all 12 findings are fixed and regression-tested, but neither was a professional audit and the fixes themselves have not been independently reviewed.

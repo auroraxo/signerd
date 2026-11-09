@@ -1,0 +1,68 @@
+{
+  "tool": "tools/measure-socket-path-domain.js",
+  "measuredAt": "2026-11-09T11:29:43.805Z",
+  "host": {
+    "platform": "linux",
+    "node": "v24.22.1"
+  },
+  "baseline": "v0.2.11 (published tag, extracted with git archive)",
+  "kernelDomain": {
+    "method": "real bind+connect round trip at each byte length",
+    "limits": {
+      "107 bytes": "bind+connect ok",
+      "108 bytes": "bind+connect ok",
+      "109 bytes": "refused: EINVAL"
+    },
+    "unit": "bytes of the string handed to bind(), not characters"
+  },
+  "cases": [
+    {
+      "id": "over-limit-121",
+      "rule": "S1/S2: a path over the kernel limit is refused with code, value and repair",
+      "socketPathBytes": 121,
+      "socketPathChars": 121,
+      "baseline": {
+        "status": 1,
+        "stderr": "EINVAL: connect EINVAL <socket-path> - Local (undefined:undefined)"
+      },
+      "baselineConforms": false,
+      "fixed": {
+        "status": 2,
+        "stderr": "socket_path_too_long: the socket path is 121 bytes; this OS allows at most 108 bytes in a unix socket path\n  fix: use a shorter --socket path (<= 108 bytes), e.g. ~/.local/share/signerd/signerd.sock"
+      },
+      "fixedConforms": true
+    },
+    {
+      "id": "multibyte-90chars-135bytes",
+      "rule": "S3: the unit is BYTES, not characters",
+      "socketPathBytes": 135,
+      "socketPathChars": 90,
+      "baseline": {
+        "status": 1,
+        "stderr": "EINVAL: connect EINVAL <socket-path> - Local (undefined:undefined)"
+      },
+      "baselineConforms": false,
+      "fixed": {
+        "status": 2,
+        "stderr": "socket_path_too_long: the socket path is 135 bytes; this OS allows at most 108 bytes in a unix socket path\n  fix: use a shorter --socket path (<= 108 bytes), e.g. ~/.local/share/signerd/signerd.sock"
+      },
+      "fixedConforms": true
+    },
+    {
+      "id": "inside-domain-105",
+      "rule": "S4: a path the kernel ACCEPTS must not be refused (the old false refusal)",
+      "socketPathBytes": 105,
+      "socketPathChars": 105,
+      "baseline": "refused/crashed: socket_path_too_long:",
+      "baselineConforms": false,
+      "fixed": "daemon started, served ok",
+      "fixedConforms": true
+    }
+  ],
+  "verdict": {
+    "baselineViolations": 3,
+    "fixedConforms": 3,
+    "ofCases": 3,
+    "verdict": "fixed"
+  }
+}
