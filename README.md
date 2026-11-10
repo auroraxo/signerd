@@ -930,6 +930,20 @@ The fix is one source of truth (`src/grantvalues.js`): `MIN_WINDOW_LAMPORTS = 50
 
 **Ladder (`test/grant-cap-domain.test.js`, red on the pre-fix tree, green after) and mutation ladder (`tools/mutation-ladder-grant-caps.sh`, 5/5 caught, tree restored byte-identically). Measurement artifact:** `research/grant-cap-domain-2026-11-09.json`.
 
+## Verification-record pin lag (2026-11-10) — the every-pulse user-zero gate certified a tag nobody installs
+
+> **Fixed on this tree (`v0.2.13`-pin, gate-level).** Unlike the pin-lag defects above — where a FIX lagged the pin a stranger installs — this one is the VERIFICATION RECORD lagging the pin: the suite stayed green while certifying a tag older than the one the README tells a stranger to install. Nothing a stranger installs changed (tests, tools and research do not travel into the tarball), so no new release was cut; the defect is in what this repo may claim it has proven.
+
+The card requires a user-zero run against the published pin every pulse, and `test/user-zero-artifact.test.js` is the gate that pins its evidence. Measured 2026-11-10: that gate named its artifact file **literally** — `user-zero-v0.2.12-2026-11-09.json` — while the README pin had moved to `v0.2.13`. The full suite ran **547/547 green on that tree**: the every-pulse falsification was certifying `v0.2.12`, a tag no stranger installs any more. The existing pin gate (`test/pin-release-sync.test.js`) compares README-pin against the release-tag census; nothing compared the EVIDENCE against the pin — the same lag class, fourth face.
+
+A second face made it actively destructive: `tools/measure-user-zero-d4-dry.js` defaulted to `TAG = 'v0.2.11'` — the tag of its own birth. An interrupted pulse re-running the tool **without arguments** silently overwrote the committed v0.2.11 artifact with a fresh run; a stale 2026-11-09 working-tree diff of exactly that overwrite was found in this repo when this defect was measured.
+
+**The fix (test-first):** a new gate `test/user-zero-pin-sync.test.js` — UZ1 (the pinned tag has its own user-zero artifact, and the artifact's `tag`/`expectedVersion`/`installedVersion` equal the pin), UZ2 (no literal tag name in the artifact gate's code), plus two guards: UZ-G1 the pin extraction refuses zero-or-many pins instead of guessing; UZ-G2 the committed v0.2.12 history stays internally consistent (the fix must not rewrite evidence to pass itself). Ladder measured on a fresh clone of the pre-fix tree (`a00811a`): **UZ1+UZ2 RED, guards GREEN; after the fix 4/4**, and each falsified independently (reintroduce a literal filename → UZ2 red; remove the v0.2.13 artifact → UZ1 red). The gate now resolves its artifact from the README pin, and the measurement tool's default tag/OUT follow the pin with a dated filename — an argumentless re-run into a scratch directory was measured: it installs and certifies `v0.2.13`, exit 0, 7/7.
+
+**The every-pulse run this gate now certifies** was taken against the published `v0.2.13` tag from an empty directory (`npm install github:auroraxo/signerd#v0.2.13`): `research/user-zero-v0.2.13-2026-11-10.json` — 7/7 pass, D4 exit 3 with 855 bytes retained on stdout (journal 0→367), D4' exit 4 with 0 bytes (journal 367→734), dry-run signs nothing (journal 734→734 against a control real-sign 734→1101), delivery fsyncs file→rename→dir, no host paths in the artifact. Suite after the fix: **551/551**.
+
+**Honest limit:** this closes the lag in the RECORD, not the lag risk everywhere else — a future release that ships without re-taking the user-zero run still fails UZ1 loudly (that is the point), but no gate proves the README's prose claims beyond the measured ones stay true for tags older than the pin.
+
 ## Delivery durability defects (2026-11-08) — the delivered signature could be lost by a crash
 
 > **Fixed in `v0.2.11` (and every pin since).** The defect below was measured on the tree that shipped `v0.2.10`; the fix shipped in `v0.2.11` and is still in this pin. On the `v0.2.10` tag the ladder is 1 RED / 2 guards green; on this pin it is 3/3.

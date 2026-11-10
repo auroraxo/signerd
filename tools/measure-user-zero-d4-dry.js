@@ -32,8 +32,26 @@ const os = require('node:os');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 
-const TAG = process.argv[2] || 'v0.2.11';
-const OUT = process.argv[3] || `research/user-zero-${TAG}-2026-11-08.json`;
+// THE DEFAULT TAG IS THE README PIN, NOT THE TAG THIS TOOL WAS BORN ON
+// (measured 2026-11-10): the default was frozen at `v0.2.11`, so an
+// unattended re-run without arguments silently OVERWROTE the committed
+// v0.2.11 artefact with a fresh run (working-tree diff of
+// research/user-zero-v0.2.11-2026-11-08.json, 2026-11-09). The gate and
+// this tool now read the ONE pinned tag from the README; an explicit
+// argv[2] still wins so a tag-ladder run can measure any published tag.
+function pinnedTag() {
+  const readme = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', 'README.md'), 'utf8');
+  const tags = [...new Set((readme.match(/github:auroraxo\/signerd#(v\d+\.\d+\.\d+)/g) || [])
+    .map((s) => s.split('#')[1]))];
+  if (tags.length !== 1) {
+    console.error(JSON.stringify({ verdict: 'HARNESS-FAIL', reason: `README pin not exactly one tag: ${tags.join(', ') || 'none'}` }));
+    process.exit(3);
+  }
+  return tags[0];
+}
+
+const TAG = process.argv[2] || pinnedTag();
+const OUT = process.argv[3] || `research/user-zero-${TAG}-${new Date().toISOString().slice(0, 10)}.json`;
 
 function sh(cmd, args, opts = {}) {
   const r = spawnSync(cmd, args, { encoding: 'utf8', timeout: 120000, ...opts });

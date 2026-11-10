@@ -36,10 +36,39 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const ROOT = path.resolve(__dirname, '..');
-const ARTIFACT = path.join(ROOT, 'research', 'user-zero-v0.2.12-2026-11-09.json');
+
+// THE GATE FOLLOWS THE PIN, NOT A FROZEN FILE NAME (measured 2026-11-10).
+// The literal `user-zero-v0.2.12-2026-11-09.json` this line carried made
+// the suite certify v0.2.12 while the README pin had moved to v0.2.13 —
+// the pin-lag class, fourth face: the VERIFICATION RECORD lagging the
+// shipped surface. `test/user-zero-pin-sync.test.js` (UZ2) forbids a
+// literal tag name here; the artefact is resolved from the README's pin.
+function pinnedTag() {
+  const readme = fs.readFileSync(path.join(ROOT, 'README.md'), 'utf8');
+  const tags = [...new Set((readme.match(/github:auroraxo\/signerd#(v\d+\.\d+\.\d+)/g) || [])
+    .map((s) => s.split('#')[1]))];
+  assert.strictEqual(tags.length, 1,
+    `README must pin exactly one tag; found: ${tags.join(', ') || 'none'}`);
+  return tags[0];
+}
+
+function resolveArtifact() {
+  const pin = pinnedTag();
+  const dir = path.join(ROOT, 'research');
+  const names = fs.readdirSync(dir)
+    .filter((n) => n.startsWith(`user-zero-${pin}-`) && /\.json$/.test(n))
+    .sort();
+  assert.ok(names.length > 0,
+    `no user-zero artefact for the pinned tag ${pin} — run tools/measure-user-zero-d4-dry.js `+
+    `against the pin before expecting this gate to pass`);
+  const name = names[names.length - 1];
+  const a = JSON.parse(fs.readFileSync(path.join(dir, name), 'utf8'));
+  assert.strictEqual(a.tag, pin, `${name} names ${a.tag} while the pin is ${pin}`);
+  return { name, doc: a };
+}
 
 function load() {
-  return JSON.parse(fs.readFileSync(ARTIFACT, 'utf8'));
+  return resolveArtifact().doc;
 }
 
 /**
@@ -118,7 +147,7 @@ test('U3 the dry-run falsification is real: no signature, journal frozen, contro
 });
 
 test('U4 the committed artefact carries no host path', () => {
-  const text = fs.readFileSync(ARTIFACT, 'utf8');
+  const text = fs.readFileSync(path.join(ROOT, 'research', resolveArtifact().name), 'utf8');
   assert.ok(!/\/home\//.test(text), 'no /home/ path');
   assert.ok(!/\/tmp\//.test(text), 'no /tmp/ path');
   assert.ok(!/\/Users\//.test(text), 'no /Users/ path');
