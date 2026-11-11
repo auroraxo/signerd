@@ -12,11 +12,19 @@ const { classifySocketPath } = require('./socketprobe');
 const { claimJournalLock, ownsJournalLock } = require('./journal-lock');
 
 // The request frame cap bounds memory per connection. It must leave room for
-// a message body (<= 4096 chars) embedded as an escaped JSON string: worst
-// case every character escapes to two (\"), so 4096*2 + envelope (~90) =
-// 8282 < 8704. Transaction wires stay far below this (wire <= 1232 bytes ->
-// ~1644 base64 chars).
-const MAX_REQUEST_BYTES = 8704;
+// EVERY body the documented body contract admits (<= 4096 chars), measured in
+// TRANSPORT BYTES after JSON escaping. The old derivation ("worst case every
+// character escapes to two (\"), 4096*2 + ~90 = 8282") was wrong twice over:
+// JSON.stringify does NOT escape non-ASCII (one CJK char is 3 UTF-8 bytes),
+// and one raw control character re-escapes to SIX (\u00XX). True worst case:
+// 4096*6 = 24576 for the body string, plus the grant name (<= 64) and the
+// envelope (~30) -> 24670 < 25600. A frame beyond THIS cap cannot come from a
+// contract-admitting body, so it is refused BY NAME (request_too_large) -
+// measured 2026-11-11 (v0.2.14, tree 1342aea): a legal 4096-char CJK body
+// (frame 12042 B) hit the old 8704 cap and the socket was destroyed WITHOUT a
+// verdict ("silent-destroy"), which the shipped client then mis-reported as
+// its own request_timeout after 12 s.
+const MAX_REQUEST_BYTES = 25_600;
 const REQUEST_TIMEOUT_MS = 10_000;
 // Grant names are request data: never resolve them through Object.prototype.
 const NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
@@ -536,13 +544,34 @@ class Daemon {
     // signed. The timer both bounds a silent client and reaps the half-open
     // connection that remains after we have answered.
     let handled = false;
+    // Set once the frame was refused by name: the buffer must stop growing
+    // then. The pre-fix behaviour was socket.destroy(), which also stopped
+    // the growth - a refusal that keeps concatenating would trade a silent
+    // destroy for an unbounded buffer.
+    let refused = false;
     const timer = setTimeout(() => socket.destroy(), REQUEST_TIMEOUT_MS);
     const reapAfter = (ms) => setTimeout(() => socket.destroy(), ms).unref();
     socket.on('data', (chunk) => {
+      if (refused) return;
       buffer = Buffer.concat([buffer, chunk]);
       if (buffer.length > MAX_REQUEST_BYTES) {
+        // The frame cannot carry a contract-admitting body: refuse it in the
+        // product's voice BEFORE destroying anything. Silent destroy (the
+        // pre-fix behaviour) left the client with no verdict to parse - the
+        // transport became the arbiter the policy was built to be.
         clearTimeout(timer);
-        socket.destroy();
+        refused = true;
+        if (!handled) {
+          handled = true;
+          const verdict = JSON.stringify({
+            ok: false,
+            error: 'request_too_large',
+            detail: `request frame exceeds ${MAX_REQUEST_BYTES} bytes`,
+            fix: `the request frame must stay within ${MAX_REQUEST_BYTES} bytes; a body of <= 4096 characters always does - shrink the body, not the cap`,
+          });
+          try { socket.end(verdict + '\n'); } catch { /* already gone */ }
+          reapAfter(1000);
+        }
         return;
       }
       const newline = buffer.indexOf(0x0a);
@@ -641,7 +670,15 @@ function request({ socketPath, grant, wire, body, dry, timeoutMs = REQUEST_TIMEO
     }
     const socket = net.connect(socketPath);
     let buffer = Buffer.alloc(0);
-    const timer = setTimeout(() => { socket.destroy(); reject(new Error('request_timeout')); }, timeoutMs);
+    let settled = false;
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      socket.destroy();
+      const err = new Error('request_timeout');
+      err.code = 'request_timeout';
+      reject(err);
+    }, timeoutMs);
     socket.on('connect', () => {
       // Exactly one payload per request: a transaction wire (base64) or a
       // message body (JSON text) - never both.
@@ -656,6 +693,8 @@ function request({ socketPath, grant, wire, body, dry, timeoutMs = REQUEST_TIMEO
       const newline = buffer.indexOf(0x0a);
       if (newline === -1) return;
       clearTimeout(timer);
+      if (settled) return;
+      settled = true;
       let response;
       try {
         response = JSON.parse(buffer.subarray(0, newline).toString('utf8'));
@@ -667,7 +706,25 @@ function request({ socketPath, grant, wire, body, dry, timeoutMs = REQUEST_TIMEO
       socket.end();
       resolve(response);
     });
-    socket.on('error', (err) => { clearTimeout(timer); reject(err); });
+    // A close WITHOUT a verdict line is its own named failure. Pre-fix this
+    // path did not exist: the client kept waiting and then blamed its own
+    // clock (measured: request_timeout after 12007 ms for a request the
+    // daemon had already destroyed at the transport layer).
+    socket.on('close', () => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      const err = new Error('connection_closed');
+      err.code = 'connection_closed';
+      err.fix = 'the daemon closed the connection without answering; a frame over the transport cap is refused by name (request_too_large) - check the daemon version and the request frame size';
+      reject(err);
+    });
+    socket.on('error', (err) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      reject(err);
+    });
   });
 }
 
