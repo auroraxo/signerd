@@ -1,0 +1,302 @@
+{
+  "measuredAt": "2026-11-11T15:03:40.175Z",
+  "tool": "measure-expiry-at-creation",
+  "now": "2026-11-11T12:00:00.000Z",
+  "baseline": {
+    "tag": "v0.2.17",
+    "tree": "git archive v0.2.17"
+  },
+  "fixed": {
+    "tree": "working tree"
+  },
+  "verdict": "contract-holds",
+  "defectFacesBaseline": [
+    {
+      "value": "2020-01-01T00:00:00Z",
+      "baselineCreateExit": 0,
+      "baselineCreateWrote": true,
+      "baselineAppendExit": 0,
+      "baselineRuntimeRefused": "expired"
+    },
+    {
+      "value": "2021-06-30T23:59:59Z",
+      "baselineCreateExit": 0,
+      "baselineCreateWrote": true,
+      "baselineAppendExit": 0,
+      "baselineRuntimeRefused": "expired"
+    },
+    {
+      "value": "2026-11-11T11:59:59Z",
+      "baselineCreateExit": 0,
+      "baselineCreateWrote": true,
+      "baselineAppendExit": 0,
+      "baselineRuntimeRefused": "expired"
+    }
+  ],
+  "cases": [
+    {
+      "label": "expiry six years past",
+      "value": "2020-01-01T00:00:00Z",
+      "expect": "defect",
+      "contractHolds": true,
+      "baseline": {
+        "createExit": 0,
+        "createWrote": true,
+        "createCode": "",
+        "appendExit": 0,
+        "appendWrote": true,
+        "appendChangedBytes": true,
+        "appendCode": "",
+        "loadAccepted": true,
+        "loadCode": null,
+        "runtimeAllowed": false,
+        "runtimeRefused": "expired",
+        "library": {
+          "txArgsAccepted": true,
+          "txArgsCode": null,
+          "msgArgsAccepted": true,
+          "msgArgsCode": null
+        }
+      },
+      "fixed": {
+        "createExit": 1,
+        "createWrote": false,
+        "createCode": "grant_expired_at_creation",
+        "appendExit": 1,
+        "appendWrote": true,
+        "appendChangedBytes": false,
+        "appendCode": "grant_expired_at_creation",
+        "loadAccepted": true,
+        "loadCode": null,
+        "runtimeAllowed": false,
+        "runtimeRefused": "expired",
+        "library": {
+          "txArgsAccepted": false,
+          "txArgsCode": "grant_expired_at_creation",
+          "msgArgsAccepted": false,
+          "msgArgsCode": "grant_expired_at_creation"
+        }
+      }
+    },
+    {
+      "label": "expiry far past (append face)",
+      "value": "2021-06-30T23:59:59Z",
+      "expect": "defect",
+      "contractHolds": true,
+      "baseline": {
+        "createExit": 0,
+        "createWrote": true,
+        "createCode": "",
+        "appendExit": 0,
+        "appendWrote": true,
+        "appendChangedBytes": true,
+        "appendCode": "",
+        "loadAccepted": true,
+        "loadCode": null,
+        "runtimeAllowed": false,
+        "runtimeRefused": "expired",
+        "library": {
+          "txArgsAccepted": true,
+          "txArgsCode": null,
+          "msgArgsAccepted": true,
+          "msgArgsCode": null
+        }
+      },
+      "fixed": {
+        "createExit": 1,
+        "createWrote": false,
+        "createCode": "grant_expired_at_creation",
+        "appendExit": 1,
+        "appendWrote": true,
+        "appendChangedBytes": false,
+        "appendCode": "grant_expired_at_creation",
+        "loadAccepted": true,
+        "loadCode": null,
+        "runtimeAllowed": false,
+        "runtimeRefused": "expired",
+        "library": {
+          "txArgsAccepted": false,
+          "txArgsCode": "grant_expired_at_creation",
+          "msgArgsAccepted": false,
+          "msgArgsCode": "grant_expired_at_creation"
+        }
+      }
+    },
+    {
+      "label": "expiry one second before the probe clock",
+      "value": "2026-11-11T11:59:59Z",
+      "expect": "defect",
+      "contractHolds": true,
+      "baseline": {
+        "createExit": 0,
+        "createWrote": true,
+        "createCode": "",
+        "appendExit": 0,
+        "appendWrote": true,
+        "appendChangedBytes": true,
+        "appendCode": "",
+        "loadAccepted": true,
+        "loadCode": null,
+        "runtimeAllowed": false,
+        "runtimeRefused": "expired",
+        "library": {
+          "txArgsAccepted": true,
+          "txArgsCode": null,
+          "msgArgsAccepted": true,
+          "msgArgsCode": null
+        }
+      },
+      "fixed": {
+        "createExit": 1,
+        "createWrote": false,
+        "createCode": "grant_expired_at_creation",
+        "appendExit": 1,
+        "appendWrote": true,
+        "appendChangedBytes": false,
+        "appendCode": "grant_expired_at_creation",
+        "loadAccepted": true,
+        "loadCode": null,
+        "runtimeAllowed": false,
+        "runtimeRefused": "expired",
+        "library": {
+          "txArgsAccepted": false,
+          "txArgsCode": "grant_expired_at_creation",
+          "msgArgsAccepted": false,
+          "msgArgsCode": "grant_expired_at_creation"
+        }
+      }
+    },
+    {
+      "label": "future expiry (the documented example)",
+      "value": "2030-01-01T00:00:00Z",
+      "expect": "guard",
+      "contractHolds": true,
+      "baseline": {
+        "createExit": 0,
+        "createWrote": true,
+        "createCode": "",
+        "appendExit": null,
+        "appendWrote": null,
+        "appendChangedBytes": null,
+        "appendCode": null,
+        "loadAccepted": true,
+        "loadCode": null,
+        "runtimeAllowed": true,
+        "runtimeRefused": null,
+        "library": {
+          "txArgsAccepted": true,
+          "txArgsCode": null,
+          "msgArgsAccepted": true,
+          "msgArgsCode": null
+        }
+      },
+      "fixed": {
+        "createExit": 0,
+        "createWrote": true,
+        "createCode": "",
+        "appendExit": null,
+        "appendWrote": null,
+        "appendChangedBytes": null,
+        "appendCode": null,
+        "loadAccepted": true,
+        "loadCode": null,
+        "runtimeAllowed": true,
+        "runtimeRefused": null,
+        "library": {
+          "txArgsAccepted": true,
+          "txArgsCode": null,
+          "msgArgsAccepted": true,
+          "msgArgsCode": null
+        }
+      }
+    },
+    {
+      "label": "far-future expiry",
+      "value": "2099-01-01T00:00:00Z",
+      "expect": "guard",
+      "contractHolds": true,
+      "baseline": {
+        "createExit": 0,
+        "createWrote": true,
+        "createCode": "",
+        "appendExit": null,
+        "appendWrote": null,
+        "appendChangedBytes": null,
+        "appendCode": null,
+        "loadAccepted": true,
+        "loadCode": null,
+        "runtimeAllowed": true,
+        "runtimeRefused": null,
+        "library": {
+          "txArgsAccepted": true,
+          "txArgsCode": null,
+          "msgArgsAccepted": true,
+          "msgArgsCode": null
+        }
+      },
+      "fixed": {
+        "createExit": 0,
+        "createWrote": true,
+        "createCode": "",
+        "appendExit": null,
+        "appendWrote": null,
+        "appendChangedBytes": null,
+        "appendCode": null,
+        "loadAccepted": true,
+        "loadCode": null,
+        "runtimeAllowed": true,
+        "runtimeRefused": null,
+        "library": {
+          "txArgsAccepted": true,
+          "txArgsCode": null,
+          "msgArgsAccepted": true,
+          "msgArgsCode": null
+        }
+      }
+    },
+    {
+      "label": "impossible day (shape, not liveness)",
+      "value": "2030-02-31T00:00:00Z",
+      "expect": "guard",
+      "contractHolds": true,
+      "baseline": {
+        "createExit": 1,
+        "createWrote": false,
+        "createCode": "grant_field_invalid",
+        "appendExit": null,
+        "appendWrote": null,
+        "appendChangedBytes": null,
+        "appendCode": null,
+        "loadAccepted": false,
+        "loadCode": "grant_field_invalid",
+        "runtimeAllowed": false,
+        "runtimeRefused": "invalid_grant",
+        "library": {
+          "txArgsAccepted": false,
+          "txArgsCode": "grant_field_invalid",
+          "msgArgsAccepted": false,
+          "msgArgsCode": "grant_field_invalid"
+        }
+      },
+      "fixed": {
+        "createExit": 1,
+        "createWrote": false,
+        "createCode": "grant_field_invalid",
+        "appendExit": null,
+        "appendWrote": null,
+        "appendChangedBytes": null,
+        "appendCode": null,
+        "loadAccepted": false,
+        "loadCode": "grant_field_invalid",
+        "runtimeAllowed": false,
+        "runtimeRefused": "invalid_grant",
+        "library": {
+          "txArgsAccepted": false,
+          "txArgsCode": "grant_field_invalid",
+          "msgArgsAccepted": false,
+          "msgArgsCode": "grant_field_invalid"
+        }
+      }
+    }
+  ]
+}
