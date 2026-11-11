@@ -1,0 +1,248 @@
+{
+  "tool": "tools/measure-grant-bootstrap-judge.js",
+  "generatedAt": "2026-11-11",
+  "measuredAt": "2026-11-11T12:18:33.485Z",
+  "preFix": {
+    "ref": "29fc8c5",
+    "faces": {
+      "broken": {
+        "case": "broken",
+        "observed": {
+          "status": 1,
+          "okVerdict": true,
+          "bootstrappedTrue": true,
+          "reason": null,
+          "fileChanged": true,
+          "modeBefore": 384,
+          "modeAfter": 384,
+          "linkIntact": false,
+          "targetChanged": null
+        },
+        "stderr": "{\"ok\":true,\"grantFile\":\"/tmp/signerd-bootjudge-pre-0wwT7r/cfg/grants.json\",\"grant\":\"releases\",\"bootstrapped\":true}\nENOENT: connect ENOENT /tmp/signerd-measure-bootstrap-none.sock\n",
+        "classification": "defect"
+      },
+      "mode-0664": {
+        "case": "mode-0664",
+        "observed": {
+          "status": 1,
+          "okVerdict": true,
+          "bootstrappedTrue": true,
+          "reason": null,
+          "fileChanged": true,
+          "modeBefore": 436,
+          "modeAfter": 384,
+          "linkIntact": false,
+          "targetChanged": null
+        },
+        "stderr": "{\"ok\":true,\"grantFile\":\"/tmp/signerd-bootjudge-pre-qJozjE/cfg/grants.json\",\"grant\":\"releases\",\"bootstrapped\":true}\nENOENT: connect ENOENT /tmp/signerd-measure-bootstrap-none.sock\n",
+        "classification": "defect"
+      },
+      "symlink": {
+        "case": "symlink",
+        "observed": {
+          "status": 1,
+          "okVerdict": true,
+          "bootstrappedTrue": true,
+          "reason": null,
+          "fileChanged": true,
+          "modeBefore": 511,
+          "modeAfter": 384,
+          "linkIntact": false,
+          "targetChanged": true
+        },
+        "stderr": "{\"ok\":true,\"grantFile\":\"/tmp/signerd-bootjudge-pre-QZPokZ/cfg/grants.json\",\"grant\":\"releases\",\"bootstrapped\":true}\nENOENT: connect ENOENT /tmp/signerd-measure-bootstrap-none.sock\n",
+        "classification": "defect"
+      },
+      "exists-broken": {
+        "case": "exists-broken",
+        "observed": {
+          "status": 1,
+          "okVerdict": true,
+          "bootstrappedTrue": false,
+          "reason": null,
+          "fileChanged": false,
+          "modeBefore": 384,
+          "modeAfter": 384,
+          "linkIntact": false,
+          "targetChanged": null
+        },
+        "stderr": "{\"ok\":true,\"grantFile\":\"/tmp/signerd-bootjudge-pre-XMd7NL/cfg/grants.json\",\"grant\":\"releases\",\"bootstrapped\":false}\nENOENT: connect ENOENT /tmp/signerd-measure-bootstrap-none.sock\n",
+        "classification": "defect"
+      }
+    },
+    "guards": {
+      "missing": {
+        "case": "missing",
+        "observed": {
+          "status": 1,
+          "okVerdict": true,
+          "bootstrappedTrue": true,
+          "reason": null,
+          "fileChanged": true,
+          "modeBefore": null,
+          "modeAfter": 384,
+          "linkIntact": false,
+          "targetChanged": null
+        },
+        "stderr": "{\"ok\":true,\"grantFile\":\"/tmp/signerd-bootjudge-pre-VHOnOP/cfg/grants.json\",\"grant\":\"releases\",\"bootstrapped\":true}\nENOENT: connect ENOENT /tmp/signerd-measure-bootstrap-none.sock\n",
+        "classification": "holds"
+      },
+      "valid": {
+        "case": "valid",
+        "observed": {
+          "status": 1,
+          "okVerdict": true,
+          "bootstrappedTrue": true,
+          "reason": null,
+          "fileChanged": true,
+          "modeBefore": 384,
+          "modeAfter": 384,
+          "linkIntact": false,
+          "targetChanged": null
+        },
+        "stderr": "{\"ok\":true,\"grantFile\":\"/tmp/signerd-bootjudge-pre-1SAVTM/cfg/grants.json\",\"grant\":\"releases\",\"bootstrapped\":true}\nENOENT: connect ENOENT /tmp/signerd-measure-bootstrap-none.sock\n",
+        "classification": "holds"
+      },
+      "sealed": {
+        "case": "sealed",
+        "observed": {
+          "status": 1,
+          "okVerdict": false,
+          "bootstrappedTrue": false,
+          "reason": "grant_file_sealed",
+          "fileChanged": false,
+          "modeBefore": 384,
+          "modeAfter": 384,
+          "linkIntact": false,
+          "targetChanged": null
+        },
+        "stderr": "grant_file_sealed: /tmp/signerd-bootjudge-pre-9TMpfE/cfg/grants.json\n",
+        "classification": "holds"
+      }
+    }
+  },
+  "fixed": {
+    "ref": "804a593",
+    "faces": {
+      "broken": {
+        "case": "broken",
+        "observed": {
+          "status": 1,
+          "okVerdict": false,
+          "bootstrappedTrue": false,
+          "reason": "grant_field_invalid",
+          "fileChanged": false,
+          "modeBefore": 384,
+          "modeAfter": 384,
+          "linkIntact": false,
+          "targetChanged": null
+        },
+        "stderr": "grant_field_invalid: broken.format\n  fix: set the field to a value the daemon can honour: real UTC instant, u64 caps, positive whole window seconds\n",
+        "classification": "refused"
+      },
+      "mode-0664": {
+        "case": "mode-0664",
+        "observed": {
+          "status": 1,
+          "okVerdict": false,
+          "bootstrappedTrue": false,
+          "reason": "grant_file_mode",
+          "fileChanged": false,
+          "modeBefore": 436,
+          "modeAfter": 436,
+          "linkIntact": false,
+          "targetChanged": null
+        },
+        "stderr": "grant_file_mode: 664\n",
+        "classification": "refused"
+      },
+      "symlink": {
+        "case": "symlink",
+        "observed": {
+          "status": 1,
+          "okVerdict": false,
+          "bootstrappedTrue": false,
+          "reason": "grant_file_symlink",
+          "fileChanged": false,
+          "modeBefore": 511,
+          "modeAfter": 511,
+          "linkIntact": true,
+          "targetChanged": false
+        },
+        "stderr": "grant_file_symlink: /tmp/signerd-bootjudge-fixed-9PdNHu/cfg/grants.json\n",
+        "classification": "refused"
+      },
+      "exists-broken": {
+        "case": "exists-broken",
+        "observed": {
+          "status": 1,
+          "okVerdict": false,
+          "bootstrappedTrue": false,
+          "reason": "grant_field_invalid",
+          "fileChanged": false,
+          "modeBefore": 384,
+          "modeAfter": 384,
+          "linkIntact": false,
+          "targetChanged": null
+        },
+        "stderr": "grant_field_invalid: releases.format\n  fix: set the field to a value the daemon can honour: real UTC instant, u64 caps, positive whole window seconds\n",
+        "classification": "refused"
+      }
+    },
+    "guards": {
+      "missing": {
+        "case": "missing",
+        "observed": {
+          "status": 1,
+          "okVerdict": true,
+          "bootstrappedTrue": true,
+          "reason": null,
+          "fileChanged": true,
+          "modeBefore": null,
+          "modeAfter": 384,
+          "linkIntact": false,
+          "targetChanged": null
+        },
+        "stderr": "{\"ok\":true,\"grantFile\":\"/tmp/signerd-bootjudge-fixed-C9i7AS/cfg/grants.json\",\"grant\":\"releases\",\"bootstrapped\":true}\nENOENT: connect ENOENT /tmp/signerd-measure-bootstrap-none.sock\n",
+        "classification": "holds"
+      },
+      "valid": {
+        "case": "valid",
+        "observed": {
+          "status": 1,
+          "okVerdict": true,
+          "bootstrappedTrue": true,
+          "reason": null,
+          "fileChanged": true,
+          "modeBefore": 384,
+          "modeAfter": 384,
+          "linkIntact": false,
+          "targetChanged": null
+        },
+        "stderr": "{\"ok\":true,\"grantFile\":\"/tmp/signerd-bootjudge-fixed-LUunMZ/cfg/grants.json\",\"grant\":\"releases\",\"bootstrapped\":true}\nENOENT: connect ENOENT /tmp/signerd-measure-bootstrap-none.sock\n",
+        "classification": "holds"
+      },
+      "sealed": {
+        "case": "sealed",
+        "observed": {
+          "status": 1,
+          "okVerdict": false,
+          "bootstrappedTrue": false,
+          "reason": "grant_file_sealed",
+          "fileChanged": false,
+          "modeBefore": 384,
+          "modeAfter": 384,
+          "linkIntact": false,
+          "targetChanged": null
+        },
+        "stderr": "grant_file_sealed: /tmp/signerd-bootjudge-fixed-CIExr5/cfg/grants.json\n",
+        "classification": "holds"
+      }
+    }
+  },
+  "preFixFaceCount": 4,
+  "fixedFaceCount": 0,
+  "fixedGuardBrokenCount": 0,
+  "preFixGuardBrokenCount": 0,
+  "verdict": "violations-present -> refusals-present"
+}
