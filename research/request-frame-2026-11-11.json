@@ -1,0 +1,157 @@
+{
+  "tool": "measure-request-frame",
+  "date": "2026-11-11",
+  "question": "Does every request frame the documented body contract admits get a named verdict, and is every refused frame refused BY NAME?",
+  "preFix": {
+    "tool": "measure-request-frame",
+    "date": "2026-11-11",
+    "tree": "published-v0.2.14-pre-fix",
+    "maxRequestBytes": 8704,
+    "cases": {
+      "S1": {
+        "desc": "5000 ASCII chars (body-limit refusal, frame < cap)",
+        "frameBytes": 5199,
+        "expect": "request_invalid",
+        "answered": true,
+        "verdict": "request_invalid",
+        "transport": "open",
+        "silent": false,
+        "violation": false
+      },
+      "S2": {
+        "desc": "9000 ASCII chars (old cap < frame < new cap)",
+        "frameBytes": 9199,
+        "expect": "request_invalid",
+        "answered": false,
+        "verdict": null,
+        "transport": "closed-no-answer",
+        "silent": true,
+        "violation": true
+      },
+      "S3": {
+        "desc": "3900 CJK chars (body <= 4096, old cap < frame < new cap)",
+        "frameBytes": 11899,
+        "expect": "message_too_large",
+        "answered": false,
+        "verdict": null,
+        "transport": "closed-no-answer",
+        "silent": true,
+        "violation": true
+      },
+      "S4": {
+        "desc": "26000 ASCII chars (frame > new cap)",
+        "frameBytes": 26199,
+        "expect": "request_too_large",
+        "answered": false,
+        "verdict": null,
+        "transport": "closed-no-answer",
+        "silent": true,
+        "violation": true
+      },
+      "G2": {
+        "desc": "4096+ ASCII chars (body limit, frame < cap)",
+        "frameBytes": 4295,
+        "expect": "request_invalid",
+        "answered": true,
+        "verdict": "request_invalid",
+        "transport": "open",
+        "silent": false,
+        "violation": false
+      },
+      "G1": {
+        "desc": "small ASCII body (guard)",
+        "frameBytes": 201,
+        "expect": "ok",
+        "answered": true,
+        "verdict": "ok",
+        "transport": "open",
+        "silent": false,
+        "violation": false
+      }
+    },
+    "silentCases": 3,
+    "violations": [
+      "S2",
+      "S3",
+      "S4"
+    ],
+    "verdict": "violations-present"
+  },
+  "postFix": {
+    "tool": "measure-request-frame",
+    "date": "2026-11-11",
+    "tree": "worktree",
+    "maxRequestBytes": 25600,
+    "cases": {
+      "S1": {
+        "desc": "5000 ASCII chars (body-limit refusal, frame < cap)",
+        "frameBytes": 5199,
+        "expect": "request_invalid",
+        "answered": true,
+        "verdict": "request_invalid",
+        "transport": "open",
+        "silent": false,
+        "violation": false
+      },
+      "S2": {
+        "desc": "9000 ASCII chars (old cap < frame < new cap)",
+        "frameBytes": 9199,
+        "expect": "request_invalid",
+        "answered": true,
+        "verdict": "request_invalid",
+        "transport": "open",
+        "silent": false,
+        "violation": false
+      },
+      "S3": {
+        "desc": "3900 CJK chars (body <= 4096, old cap < frame < new cap)",
+        "frameBytes": 11899,
+        "expect": "message_too_large",
+        "answered": true,
+        "verdict": "message_too_large",
+        "transport": "open",
+        "silent": false,
+        "violation": false
+      },
+      "S4": {
+        "desc": "26000 ASCII chars (frame > new cap)",
+        "frameBytes": 26199,
+        "expect": "request_too_large",
+        "answered": true,
+        "verdict": "request_too_large",
+        "transport": "open",
+        "silent": false,
+        "violation": false
+      },
+      "G2": {
+        "desc": "4096+ ASCII chars (body limit, frame < cap)",
+        "frameBytes": 4295,
+        "expect": "request_invalid",
+        "answered": true,
+        "verdict": "request_invalid",
+        "transport": "open",
+        "silent": false,
+        "violation": false
+      },
+      "G1": {
+        "desc": "small ASCII body (guard)",
+        "frameBytes": 201,
+        "expect": "ok",
+        "answered": true,
+        "verdict": "ok",
+        "transport": "open",
+        "silent": false,
+        "violation": false
+      }
+    },
+    "silentCases": 0,
+    "violations": [],
+    "verdict": "refusals-present"
+  },
+  "ladder": {
+    "file": "test/request-frame.test.js",
+    "preFix": "4 defect cases fail (D1a CJK body, D1b control re-escape, D2 cap refusal, D3 client close), 2 guards pass",
+    "postFix": "7/7 pass"
+  },
+  "note": "pre-fix tree measured by stashing only src/daemon.js on the same commit (tree label published-v0.2.14-pre-fix, cap 8704); post-fix cap 25600."
+}
