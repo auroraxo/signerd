@@ -295,9 +295,18 @@ function main() {
     preFixGuardBrokenCount: preGuardBroken,
     verdict,
   };
+  // A committed artifact that names the measuring host is a snapshot, not a
+  // measurement: every case directory and the dead socket get replaced with
+  // stable placeholders before anything is written.
+  let serialized = JSON.stringify(report, null, 2);
+  serialized = serialized
+    .replace(/\/tmp\/signerd-bootjudge-(?:pre|fixed)-[A-Za-z0-9]+/g, '<case-dir>')
+    .replace(/\/tmp\/signerd-measure-bootstrap-none\.sock/g, '<dead-socket>')
+    .replace(/\/home\/[^"'\s]*/g, '<host-path>');
+
   if (OUT) {
     fs.mkdirSync(path.dirname(path.resolve(OUT)), { recursive: true });
-    fs.writeFileSync(OUT, `${JSON.stringify(report, null, 2)}\n`, { mode: 0o644 });
+    fs.writeFileSync(OUT, `${serialized}\n`, { mode: 0o644 });
   }
   process.stdout.write(`${JSON.stringify({ verdict, preFixFaceCount: preFaceCount, fixedFaceCount, fixedGuardBrokenCount: fixedGuardBroken, out: OUT })}\n`);
   fs.rmSync(preDir, { recursive: true, force: true });

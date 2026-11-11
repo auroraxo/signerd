@@ -1,7 +1,7 @@
 {
   "tool": "tools/measure-grant-bootstrap-judge.js",
   "generatedAt": "2026-11-11",
-  "measuredAt": "2026-11-11T12:18:33.485Z",
+  "measuredAt": "2026-11-11T12:21:39.899Z",
   "preFix": {
     "ref": "29fc8c5",
     "faces": {
@@ -18,7 +18,7 @@
           "linkIntact": false,
           "targetChanged": null
         },
-        "stderr": "{\"ok\":true,\"grantFile\":\"/tmp/signerd-bootjudge-pre-0wwT7r/cfg/grants.json\",\"grant\":\"releases\",\"bootstrapped\":true}\nENOENT: connect ENOENT /tmp/signerd-measure-bootstrap-none.sock\n",
+        "stderr": "{\"ok\":true,\"grantFile\":\"<case-dir>/cfg/grants.json\",\"grant\":\"releases\",\"bootstrapped\":true}\nENOENT: connect ENOENT <dead-socket>\n",
         "classification": "defect"
       },
       "mode-0664": {
@@ -34,7 +34,7 @@
           "linkIntact": false,
           "targetChanged": null
         },
-        "stderr": "{\"ok\":true,\"grantFile\":\"/tmp/signerd-bootjudge-pre-qJozjE/cfg/grants.json\",\"grant\":\"releases\",\"bootstrapped\":true}\nENOENT: connect ENOENT /tmp/signerd-measure-bootstrap-none.sock\n",
+        "stderr": "{\"ok\":true,\"grantFile\":\"<case-dir>/cfg/grants.json\",\"grant\":\"releases\",\"bootstrapped\":true}\nENOENT: connect ENOENT <dead-socket>\n",
         "classification": "defect"
       },
       "symlink": {
@@ -50,7 +50,7 @@
           "linkIntact": false,
           "targetChanged": true
         },
-        "stderr": "{\"ok\":true,\"grantFile\":\"/tmp/signerd-bootjudge-pre-QZPokZ/cfg/grants.json\",\"grant\":\"releases\",\"bootstrapped\":true}\nENOENT: connect ENOENT /tmp/signerd-measure-bootstrap-none.sock\n",
+        "stderr": "{\"ok\":true,\"grantFile\":\"<case-dir>/cfg/grants.json\",\"grant\":\"releases\",\"bootstrapped\":true}\nENOENT: connect ENOENT <dead-socket>\n",
         "classification": "defect"
       },
       "exists-broken": {
@@ -66,7 +66,7 @@
           "linkIntact": false,
           "targetChanged": null
         },
-        "stderr": "{\"ok\":true,\"grantFile\":\"/tmp/signerd-bootjudge-pre-XMd7NL/cfg/grants.json\",\"grant\":\"releases\",\"bootstrapped\":false}\nENOENT: connect ENOENT /tmp/signerd-measure-bootstrap-none.sock\n",
+        "stderr": "{\"ok\":true,\"grantFile\":\"<case-dir>/cfg/grants.json\",\"grant\":\"releases\",\"bootstrapped\":false}\nENOENT: connect ENOENT <dead-socket>\n",
         "classification": "defect"
       }
     },
@@ -84,7 +84,7 @@
           "linkIntact": false,
           "targetChanged": null
         },
-        "stderr": "{\"ok\":true,\"grantFile\":\"/tmp/signerd-bootjudge-pre-VHOnOP/cfg/grants.json\",\"grant\":\"releases\",\"bootstrapped\":true}\nENOENT: connect ENOENT /tmp/signerd-measure-bootstrap-none.sock\n",
+        "stderr": "{\"ok\":true,\"grantFile\":\"<case-dir>/cfg/grants.json\",\"grant\":\"releases\",\"bootstrapped\":true}\nENOENT: connect ENOENT <dead-socket>\n",
         "classification": "holds"
       },
       "valid": {
@@ -100,7 +100,7 @@
           "linkIntact": false,
           "targetChanged": null
         },
-        "stderr": "{\"ok\":true,\"grantFile\":\"/tmp/signerd-bootjudge-pre-1SAVTM/cfg/grants.json\",\"grant\":\"releases\",\"bootstrapped\":true}\nENOENT: connect ENOENT /tmp/signerd-measure-bootstrap-none.sock\n",
+        "stderr": "{\"ok\":true,\"grantFile\":\"<case-dir>/cfg/grants.json\",\"grant\":\"releases\",\"bootstrapped\":true}\nENOENT: connect ENOENT <dead-socket>\n",
         "classification": "holds"
       },
       "sealed": {
@@ -116,13 +116,13 @@
           "linkIntact": false,
           "targetChanged": null
         },
-        "stderr": "grant_file_sealed: /tmp/signerd-bootjudge-pre-9TMpfE/cfg/grants.json\n",
+        "stderr": "grant_file_sealed: <case-dir>/cfg/grants.json\n",
         "classification": "holds"
       }
     }
   },
   "fixed": {
-    "ref": "804a593",
+    "ref": "97ac758",
     "faces": {
       "broken": {
         "case": "broken",
@@ -169,7 +169,7 @@
           "linkIntact": true,
           "targetChanged": false
         },
-        "stderr": "grant_file_symlink: /tmp/signerd-bootjudge-fixed-9PdNHu/cfg/grants.json\n",
+        "stderr": "grant_file_symlink: <case-dir>/cfg/grants.json\n",
         "classification": "refused"
       },
       "exists-broken": {
@@ -203,7 +203,7 @@
           "linkIntact": false,
           "targetChanged": null
         },
-        "stderr": "{\"ok\":true,\"grantFile\":\"/tmp/signerd-bootjudge-fixed-C9i7AS/cfg/grants.json\",\"grant\":\"releases\",\"bootstrapped\":true}\nENOENT: connect ENOENT /tmp/signerd-measure-bootstrap-none.sock\n",
+        "stderr": "{\"ok\":true,\"grantFile\":\"<case-dir>/cfg/grants.json\",\"grant\":\"releases\",\"bootstrapped\":true}\nENOENT: connect ENOENT <dead-socket>\n",
         "classification": "holds"
       },
       "valid": {
@@ -219,7 +219,7 @@
           "linkIntact": false,
           "targetChanged": null
         },
-        "stderr": "{\"ok\":true,\"grantFile\":\"/tmp/signerd-bootjudge-fixed-LUunMZ/cfg/grants.json\",\"grant\":\"releases\",\"bootstrapped\":true}\nENOENT: connect ENOENT /tmp/signerd-measure-bootstrap-none.sock\n",
+        "stderr": "{\"ok\":true,\"grantFile\":\"<case-dir>/cfg/grants.json\",\"grant\":\"releases\",\"bootstrapped\":true}\nENOENT: connect ENOENT <dead-socket>\n",
         "classification": "holds"
       },
       "sealed": {
@@ -235,7 +235,7 @@
           "linkIntact": false,
           "targetChanged": null
         },
-        "stderr": "grant_file_sealed: /tmp/signerd-bootjudge-fixed-CIExr5/cfg/grants.json\n",
+        "stderr": "grant_file_sealed: <case-dir>/cfg/grants.json\n",
         "classification": "holds"
       }
     }
