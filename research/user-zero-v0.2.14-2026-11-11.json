@@ -1,28 +1,100 @@
 {
-  "measuredAt": "2026-11-11T01:02:58.817Z",
+  "measuredAt": "2026-11-11T01:03:53.738Z",
   "tool": "user-zero-d4-dry",
   "tag": "v0.2.14",
   "path": "npm install github:auroraxo/signerd#v0.2.14 into an empty directory",
   "results": {
     "u1_install_from_empty_dir": {
-      "installStatus": 1,
-      "installedVersion": null,
+      "installStatus": 0,
+      "installedVersion": "0.2.14",
       "expectedVersion": "0.2.14",
-      "pass": false
+      "pass": true
     },
     "u2_delivery_fsycs_parent_dir": {
-      "events": null,
-      "deliveredBytes": null,
-      "pass": false
+      "events": [
+        "fsync(file)",
+        "rename",
+        "fsync(dir)"
+      ],
+      "deliveredBytes": 24,
+      "pass": true
     },
     "u0_setup": {
-      "keygenExit": 1,
-      "grantExit": 1,
-      "keygenError": "node:internal/modules/cjs/loader:1568\n  throw err;\n  ^\n\nError: Cannot find module '<tmp>'\n    at Module._resolveFilename (node:internal/modules/cjs",
-      "grantError": "node:internal/modules/cjs/loader:1568\n  throw err;\n  ^\n\nError: Cannot find module '<tmp>'\n    at Module._resolveFilename (node:internal/modules/cjs",
-      "pass": false
+      "keygenExit": 0,
+      "grantExit": 0,
+      "keygenError": "{\"file\":\"ks.json\",\"publicKey\":\"68JU1KUnSgAfHgtmyk48FVjRXusTEN8ybTutxLFJqEDs\"}\n",
+      "grantError": "{\"ok\":true,\"file\":\"<tmp>\",\"grant\":\"demo\"}\n",
+      "pass": true
+    },
+    "u0b_daemon": {
+      "started": true,
+      "exit": null,
+      "stdout": "",
+      "stderr": "",
+      "pass": true
+    },
+    "u3_d4_out_fails_stdout_retains": {
+      "exit": 3,
+      "stdoutBytes": 854,
+      "stderrHasRecoveryOrOutError": true,
+      "journalGrew": true,
+      "journal": [
+        0,
+        367
+      ],
+      "outFileAbsent": true,
+      "pass": true
+    },
+    "u4_d4_both_channels_lost": {
+      "exit": 4,
+      "stdoutBytes": 0,
+      "stderrHasRecoveryFailed": true,
+      "journalGrew": true,
+      "journal": [
+        367,
+        734
+      ],
+      "pass": true
+    },
+    "u5_dry_is_real": {
+      "dryExit": 0,
+      "dryStderr": null,
+      "realExit": 0,
+      "realStderr": null,
+      "dryHadSignature": false,
+      "journalBefore": 734,
+      "journalAfterDry": 734,
+      "journalAfterReal": 1101,
+      "pass": true
     }
   },
-  "allPass": false,
-  "verdict": "HARNESS-FAIL (setup did not reach a running daemon)"
+  "txBuilds": [
+    {
+      "out": "tx3.json",
+      "exit": 0,
+      "error": "{\"ok\":true,\"out\":\"tx3.json\",\"bytes\":215,\"from\":\"68JU1KUnSgAfHgtmyk48FVjRXusTEN8ybTutxLFJqEDs\",\"to\":\"7gMK2ByAVY74Jbyci1oxTXgfAVVqZxjCMwSo11X11H1J\",\"lamports\":123,\"blockhash\":\"GGx3DLKqrtgv6wYpF6Y36DSXqg"
+    },
+    {
+      "out": "tx4.json",
+      "exit": 0,
+      "error": "{\"ok\":true,\"out\":\"tx4.json\",\"bytes\":215,\"from\":\"68JU1KUnSgAfHgtmyk48FVjRXusTEN8ybTutxLFJqEDs\",\"to\":\"7gMK2ByAVY74Jbyci1oxTXgfAVVqZxjCMwSo11X11H1J\",\"lamports\":124,\"blockhash\":\"HaYwCGFPi3psPQDLRoiVX6kGYq"
+    },
+    {
+      "out": "tx5.json",
+      "exit": 0,
+      "error": "{\"ok\":true,\"out\":\"tx5.json\",\"bytes\":215,\"from\":\"68JU1KUnSgAfHgtmyk48FVjRXusTEN8ybTutxLFJqEDs\",\"to\":\"7gMK2ByAVY74Jbyci1oxTXgfAVVqZxjCMwSo11X11H1J\",\"lamports\":125,\"blockhash\":\"ApiVhZHqxkx4UkLiG42BPWsady"
+    },
+    {
+      "out": "tx6.json",
+      "exit": 0,
+      "error": "{\"ok\":true,\"out\":\"tx6.json\",\"bytes\":215,\"from\":\"68JU1KUnSgAfHgtmyk48FVjRXusTEN8ybTutxLFJqEDs\",\"to\":\"7gMK2ByAVY74Jbyci1oxTXgfAVVqZxjCMwSo11X11H1J\",\"lamports\":126,\"blockhash\":\"5HXPRiZ6yGwJ9edDkNMZc25xC4"
+    }
+  ],
+  "allPass": true,
+  "limits": [
+    "one machine, one account, one network — the stranger path is the same host",
+    "the D4 cases are about the CLI exit contract, not about a filesystem that lies about fsync",
+    "the journal grows by RECORD, so a grown journal means the spend happened, not that the signature survived",
+    "the dry-run falsification covers the documented --dry path only"
+  ]
 }
