@@ -1,0 +1,80 @@
+{
+  "tool": "tools/measure-grant-write-durability.js",
+  "generatedAt": "2026-11-11",
+  "measuredAt": "2026-11-11T07:43:13.447Z",
+  "fixed": {
+    "create": {
+      "dirFsyncCount": 1,
+      "tempFileFsyncCount": 1,
+      "renameSeen": true,
+      "dirFsyncAfterRename": true,
+      "order": [
+        "fsync",
+        "rename",
+        "fsync(dir)"
+      ]
+    },
+    "append": {
+      "dirFsyncCount": 1,
+      "tempFileFsyncCount": 1,
+      "renameSeen": true,
+      "dirFsyncAfterRename": true,
+      "order": [
+        "fsync",
+        "rename",
+        "fsync(dir)"
+      ]
+    },
+    "remove": {
+      "dirFsyncCount": 1,
+      "tempFileFsyncCount": 1,
+      "renameSeen": true,
+      "dirFsyncAfterRename": true,
+      "order": [
+        "fsync",
+        "rename",
+        "fsync(dir)"
+      ]
+    },
+    "removalApplied": "one"
+  },
+  "prefixSha": "2b85a49",
+  "prefix": {
+    "create": {
+      "dirFsyncCount": 0,
+      "tempFileFsyncCount": 0,
+      "renameSeen": false,
+      "dirFsyncAfterRename": false,
+      "order": []
+    },
+    "append": {
+      "dirFsyncCount": 0,
+      "tempFileFsyncCount": 1,
+      "renameSeen": true,
+      "dirFsyncAfterRename": false,
+      "order": [
+        "fsync",
+        "rename"
+      ]
+    },
+    "remove": {
+      "dirFsyncCount": 0,
+      "tempFileFsyncCount": 1,
+      "renameSeen": true,
+      "dirFsyncAfterRename": false,
+      "order": [
+        "fsync",
+        "rename"
+      ]
+    },
+    "removalApplied": "one"
+  },
+  "prefixDefects": [
+    "create: no directory fsync",
+    "create: no temp-file fsync",
+    "append: no directory fsync",
+    "remove: no directory fsync"
+  ],
+  "fixedDefects": [],
+  "verdict": "fixed"
+}

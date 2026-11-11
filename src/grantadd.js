@@ -244,13 +244,13 @@ function writeGrantFile({ file, name, grant }) {
   }
 
   const doc = { version: 1, grants: { [name]: grant } };
-  try {
-    fs.writeFileSync(resolved, JSON.stringify(doc, null, 2) + '\n', { mode: 0o600 });
-    fs.chmodSync(resolved, 0o600); // writeFileSync's mode applies on create only
-  } catch (err) {
-    try { fs.unlinkSync(resolved); } catch { /* never landed */ }
-    throw writeFailed(err, resolved);
-  }
+  // The SAME atomic path as --append and grant-remove: temp file (O_EXCL),
+  // fsync, rename, best-effort parent-directory fsync. Before this, the
+  // create path was a plain truncate-write with NO fsync at all: a crash
+  // could leave grants.json present but torn or empty, and the directory
+  // entry of the new name was never made durable (measured 2026-11-11,
+  // test/grant-write-dir-fsync.test.js).
+  writeAtomic(resolved, doc);
   return { file: resolved, grant: name };
 }
 
@@ -287,12 +287,7 @@ function addGrantToFile({ file, name, grant }) {
   }
   grants[name] = grant;
   const out = { version: 1, grants };
-  try {
-    fs.writeFileSync(resolved, JSON.stringify(out, null, 2) + '\n', { mode: 0o600 });
-    fs.chmodSync(resolved, 0o600);
-  } catch (err) {
-    throw writeFailed(err, resolved);
-  }
+  writeAtomic(resolved, out);
   return { file: resolved, grant: name };
 }
 
@@ -542,10 +537,27 @@ function removeGrantFromFile({ file, name, sealPassphrase }) {
 }
 
 /**
- * Write a whole grant document atomically: temp file in the SAME directory
- * (O_EXCL so the name cannot be a planted symlink), fsync, fchmod 0600
- * (never umask-inherited), rename. On any failure the temp file is removed
- * and the target keeps its previous bytes.
+ * Write a whole grant document atomically and durably: temp file in the SAME
+ * directory (O_EXCL so the name cannot be a planted symlink), fsync, fchmod
+ * 0600 (never umask-inherited), rename, then a best-effort fsync of the
+ * PARENT DIRECTORY.
+ *
+ * The directory fsync is the house convention for every rename-delivered
+ * artifact in this tree (src/ledger.js, src/journalseal.js,
+ * src/journalseal-ops.js, src/migrate.js, src/out-preflight.js): a rename
+ * is a directory operation, and until the directory entry is durable a
+ * crash can lose it — the target reverts to its previous bytes. On the
+ * grant file that means a revocation the CLI reported as done silently
+ * UN-happens, and the daemon — which re-reads this file on every request —
+ * signs again under the scope the operator removed. The temp file's own
+ * fsync makes the DATA durable, not the NAME.
+ *
+ * Best-effort like the siblings: the document IS on disk at this point, so
+ * a platform that cannot fsync an open directory handle must not turn a
+ * landed write into a failed revocation (test D4).
+ *
+ * On any failure BEFORE the rename the temp file is removed and the target
+ * keeps its previous bytes.
  */
 function writeAtomic(target, doc) {
   const dir = path.dirname(target);
@@ -565,6 +577,11 @@ function writeAtomic(target, doc) {
     try { fs.unlinkSync(tmp); } catch { /* never existed */ }
     throw writeFailed(err, target);
   }
+  // Durability of the NAME, after the rename — best effort (see header).
+  try {
+    const dfd = fs.openSync(dir, 'r');
+    try { fs.fsyncSync(dfd); } finally { fs.closeSync(dfd); }
+  } catch { /* platform-dependent; the house convention is best-effort here */ }
 }
 
 module.exports = {
