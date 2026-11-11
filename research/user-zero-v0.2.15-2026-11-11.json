@@ -1,0 +1,100 @@
+{
+  "measuredAt": "2026-11-11T04:33:13.264Z",
+  "tool": "user-zero-d4-dry",
+  "tag": "v0.2.15",
+  "path": "npm install github:auroraxo/signerd#v0.2.15 into an empty directory",
+  "results": {
+    "u1_install_from_empty_dir": {
+      "installStatus": 0,
+      "installedVersion": "0.2.15",
+      "expectedVersion": "0.2.15",
+      "pass": true
+    },
+    "u2_delivery_fsycs_parent_dir": {
+      "events": [
+        "fsync(file)",
+        "rename",
+        "fsync(dir)"
+      ],
+      "deliveredBytes": 24,
+      "pass": true
+    },
+    "u0_setup": {
+      "keygenExit": 0,
+      "grantExit": 0,
+      "keygenError": "{\"file\":\"ks.json\",\"publicKey\":\"CSF8eXFE2suBy6LyviZYR8sELXctHLeKV5qDkLdEkguj\"}\n",
+      "grantError": "{\"ok\":true,\"file\":\"<tmp>\",\"grant\":\"demo\"}\n",
+      "pass": true
+    },
+    "u0b_daemon": {
+      "started": true,
+      "exit": null,
+      "stdout": "",
+      "stderr": "",
+      "pass": true
+    },
+    "u3_d4_out_fails_stdout_retains": {
+      "exit": 3,
+      "stdoutBytes": 855,
+      "stderrHasRecoveryOrOutError": true,
+      "journalGrew": true,
+      "journal": [
+        0,
+        367
+      ],
+      "outFileAbsent": true,
+      "pass": true
+    },
+    "u4_d4_both_channels_lost": {
+      "exit": 4,
+      "stdoutBytes": 0,
+      "stderrHasRecoveryFailed": true,
+      "journalGrew": true,
+      "journal": [
+        367,
+        734
+      ],
+      "pass": true
+    },
+    "u5_dry_is_real": {
+      "dryExit": 0,
+      "dryStderr": null,
+      "realExit": 0,
+      "realStderr": null,
+      "dryHadSignature": false,
+      "journalBefore": 734,
+      "journalAfterDry": 734,
+      "journalAfterReal": 1101,
+      "pass": true
+    }
+  },
+  "txBuilds": [
+    {
+      "out": "tx3.json",
+      "exit": 0,
+      "error": "{\"ok\":true,\"out\":\"tx3.json\",\"bytes\":215,\"from\":\"CSF8eXFE2suBy6LyviZYR8sELXctHLeKV5qDkLdEkguj\",\"to\":\"5VBqFzaLYffukvFxinqJ2HsvzfvsigKpJm7B38EQT5k8\",\"lamports\":123,\"blockhash\":\"3cAXLYvcePAKyk52GPKAsE7b3t"
+    },
+    {
+      "out": "tx4.json",
+      "exit": 0,
+      "error": "{\"ok\":true,\"out\":\"tx4.json\",\"bytes\":215,\"from\":\"CSF8eXFE2suBy6LyviZYR8sELXctHLeKV5qDkLdEkguj\",\"to\":\"5VBqFzaLYffukvFxinqJ2HsvzfvsigKpJm7B38EQT5k8\",\"lamports\":124,\"blockhash\":\"5ZMbYZh1rbmQSAADUYpowtfLeJ"
+    },
+    {
+      "out": "tx5.json",
+      "exit": 0,
+      "error": "{\"ok\":true,\"out\":\"tx5.json\",\"bytes\":215,\"from\":\"CSF8eXFE2suBy6LyviZYR8sELXctHLeKV5qDkLdEkguj\",\"to\":\"5VBqFzaLYffukvFxinqJ2HsvzfvsigKpJm7B38EQT5k8\",\"lamports\":125,\"blockhash\":\"2rnpuE3aFg6gqSTy8qUhSK2zxg"
+    },
+    {
+      "out": "tx6.json",
+      "exit": 0,
+      "error": "{\"ok\":true,\"out\":\"tx6.json\",\"bytes\":215,\"from\":\"CSF8eXFE2suBy6LyviZYR8sELXctHLeKV5qDkLdEkguj\",\"to\":\"5VBqFzaLYffukvFxinqJ2HsvzfvsigKpJm7B38EQT5k8\",\"lamports\":126,\"blockhash\":\"93zYMYHnLKicAmeP5iqxeJSQtr"
+    }
+  ],
+  "allPass": true,
+  "limits": [
+    "one machine, one account, one network — the stranger path is the same host",
+    "the D4 cases are about the CLI exit contract, not about a filesystem that lies about fsync",
+    "the journal grows by RECORD, so a grown journal means the spend happened, not that the signature survived",
+    "the dry-run falsification covers the documented --dry path only"
+  ]
+}
