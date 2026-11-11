@@ -871,6 +871,21 @@ async function main() {
 }
 
 main().catch((err) => {
+  // A grant whose expiry is already in the past when it would be WRITTEN.
+  // Measured 2026-11-11 on the published v0.2.17 tree: grant-add reported
+  // {"ok":true} and wrote the file, and the first request against it came
+  // back {"ok":false,"error":"expired"} — forever, since a past expiry only
+  // moves further away. The refusal names the value and says the fix must
+  // be an instant in the FUTURE; the shape rule (grant_field_invalid) keeps
+  // its own reason for values that are not real instants at all.
+  if (err && err.code === 'grant_expired_at_creation') {
+    const value = detailOf(err);
+    process.stderr.write(
+      `${err.code}: expiresAt ${value} is not in the future\n` +
+      `  fix: set --expires to an instant in the FUTURE, e.g. --expires 2030-01-01T00:00:00Z` +
+      `   # the daemon refuses every request against an already-expired grant (expired)\n`);
+    process.exit(1);
+  }
   // A grant VALUE the daemon cannot honour. The creation path and the
   // loader now judge values by the SAME rules (src/grantvalues.js), so a
   // refusal here means the grant would never sign - it must say what to

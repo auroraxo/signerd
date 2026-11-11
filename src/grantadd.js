@@ -34,7 +34,7 @@ const { validateGrant, loadGrantFile, MAX_GRANTS } = require('./grantfile');
 const { makeSealKeyProvider, sealDocument } = require('./grantseal');
 const {
   isCanonicalPublicKey, isCanonicalBase64PublicKey, isCanonicalExpiry, isU64,
-  isWindowMaxLamports, isWindowSeconds, isMessageCount,
+  isWindowMaxLamports, isWindowSeconds, isMessageCount, isFutureExpiry,
 } = require('./grantvalues');
 
 /** lstat without following the final symlink; null when nothing is there. */
@@ -112,7 +112,13 @@ function validateTxGrantArgs(args) {
   out.windowMaxLamports = args.windowMaxLamports;
   if (!isWindowSeconds(args.windowSeconds)) throw fail('grant_field_invalid', 'windowSeconds');
   out.windowSeconds = args.windowSeconds;
-  if (typeof args.expiresAt !== 'string' || !isCanonicalExpiry(args.expiresAt)) throw fail('grant_field_invalid', 'expiresAt');
+  // SHAPE first (the 2026-11-08 contract: a real instant, no Feb 31), then
+  // MEANING (2026-11-11: an expiry already in the past can never sign —
+  // the runtime rule `now >= expiry -> expired` makes it dead on arrival).
+  if (typeof args.expiresAt !== 'string' || !isCanonicalExpiry(args.expiresAt)) {
+    throw fail('grant_field_invalid', 'expiresAt');
+  }
+  if (!isFutureExpiry(args.expiresAt)) throw fail('grant_expired_at_creation', args.expiresAt);
   out.expiresAt = args.expiresAt;
   return out;
 }
@@ -145,7 +151,11 @@ function validateMessageGrantArgs(args) {
     throw fail('grant_field_invalid', 'maxBytes');
   }
   out.maxBytes = args.maxBytes;
+  // SHAPE first, then MEANING (see validateTxGrantArgs, 2026-11-11): the
+  // message envelope needs the same liveness rule — a bootstrap writing an
+  // already-expired grant reports ok:true and the first sign dies `expired`.
   if (typeof args.expiresAt !== 'string' || !isCanonicalExpiry(args.expiresAt)) throw fail('grant_field_invalid', 'expiresAt');
+  if (!isFutureExpiry(args.expiresAt)) throw fail('grant_expired_at_creation', args.expiresAt);
   out.expiresAt = args.expiresAt;
   if (!isMessageCount(args.windowMaxMessages)) {
     throw fail('grant_field_invalid', 'windowMaxMessages');
@@ -163,6 +173,30 @@ function validateMessageGrantArgs(args) {
     out.claimKeys = args.claimKeys;
   }
   return out;
+}
+
+/**
+ * LIVENESS GUARD for every write path (2026-11-11, measured on the
+ * published v0.2.17 tree: `grant-add --expires 2020-01-01T00:00:00Z`
+ * exited 0 and wrote a scope the daemon refuses with `expired` on every
+ * request, forever).
+ *
+ * The rule lives in src/grantvalues.js (isFutureExpiry) and applies ONLY
+ * here, at the creation paths — never in the loader: every live grant
+ * expires someday, and refusing a FILE at load time would brick the
+ * daemon the morning after a grant's deadline, for all scopes in it.
+ * Only the moment of WRITING can tell "would never sign" apart from
+ * "has not yet expired to sign".
+ *
+ * It runs AFTER validateGrant (the shape judge, which keeps its own
+ * reasons: a Feb-31 expiry is grant_field_invalid, not this code).
+ */
+function assertFreshGrant(grant) {
+  if (grant && typeof grant === 'object' &&
+      typeof grant.expiresAt === 'string' && grant.expiresAt.length > 0 &&
+      isCanonicalExpiry(grant.expiresAt) && !isFutureExpiry(grant.expiresAt)) {
+    throw fail('grant_expired_at_creation', grant.expiresAt);
+  }
 }
 
 /**
@@ -212,6 +246,7 @@ function writeGrantFile({ file, name, grant }) {
   const resolved = path.resolve(file);
   // The product's validator is the judge of the grant shape.
   validateGrant(name, grant);
+  assertFreshGrant(grant);
 
   // A SYMLINK at the grant path is refused outright, never followed. The
   // loader refuses it too (O_NOFOLLOW), so writing through one would create
@@ -289,6 +324,7 @@ function writeGrantFile({ file, name, grant }) {
 function addGrantToFile({ file, name, grant }) {
   const resolved = path.resolve(file);
   validateGrant(name, grant);
+  assertFreshGrant(grant);
   if (!fs.existsSync(resolved)) {
     return writeGrantFile({ file: resolved, name, grant });
   }
@@ -391,6 +427,7 @@ const MAX_GRANTS_LOCAL = MAX_GRANTS; // single source of truth: src/grantfile.js
  */
 function extendGrantFile({ file, name, grant, sealPassphrase }) {
   validateGrant(name, grant);
+  assertFreshGrant(grant);
   const resolved = path.resolve(file);
 
   // Never follow a symlink here either: the loader refuses one at load time

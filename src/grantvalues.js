@@ -180,6 +180,43 @@ function isMessageCount(value) {
   return Number.isSafeInteger(count) && count > 0 && count <= MAX_SAFE;
 }
 
+/**
+ * An expiry the daemon can still honour: a canonical instant that lies in
+ * the FUTURE.
+ *
+ * WHY (measured 2026-11-11 on the published v0.2.17 tree,
+ * tools/measure-expiry-at-creation.js): `expiresAt` was judged by its SHAPE
+ * alone at the creation path and the loader, while the runtime rule is
+ * `nowMs >= expiry -> refused('expired')` (src/policy.js, src/ledger.js).
+ * So `grant-add --expires 2020-01-01T00:00:00Z` exited 0 with
+ * {"ok":true,...} and wrote a scope that can NEVER sign: every request
+ * came back {"ok":false,"error":"expired"}, on the file and on the
+ * --append path into a live file. A mistyped year (2020 for 2030) or a
+ * copy of an old example manufactures a dead scope, and the ok:true is the
+ * lie.
+ *
+ * This is the SAME existence claim the window caps got on 2026-11-09
+ * (isWindowMaxLamports: a cap below the base fee can never be met): what
+ * the creation path writes must be a scope the daemon can honour at least
+ * once. A past expiry is the stronger case of the two — a window refills,
+ * a past expiry only moves further away.
+ *
+ * WHAT THIS DOES NOT COVER: the LOADER does not apply this rule. A grant
+ * that expires is a normal thing, and refusing the whole FILE at load
+ * time would brick the daemon the morning after a grant's deadline — for
+ * every other scope in it too. The creation path is the only place where
+ * "would never sign" can be told apart from "has not yet expired to
+ * sign". The runtime keeps refusing per request with `expired`.
+ */
+function isFutureExpiry(value, now = Date.now()) {
+  if (typeof value !== 'string' || !isCanonicalExpiry(value)) return false;
+  const expiry = Date.parse(value);
+  if (!Number.isFinite(expiry)) return false;
+  // The runtime's rule is `nowMs >= expiry -> expired`, so an instant EQUAL
+  // to now is already dead on arrival and must refuse here too.
+  return expiry > now;
+}
+
 module.exports = {
   MAX_U64,
   MAX_SAFE,
@@ -194,4 +231,5 @@ module.exports = {
   isWindowMaxLamports,
   isWindowSeconds,
   isMessageCount,
+  isFutureExpiry,
 };
