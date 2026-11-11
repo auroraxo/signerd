@@ -1,0 +1,28 @@
+{
+  "measuredAt": "2026-11-11T01:02:58.817Z",
+  "tool": "user-zero-d4-dry",
+  "tag": "v0.2.14",
+  "path": "npm install github:auroraxo/signerd#v0.2.14 into an empty directory",
+  "results": {
+    "u1_install_from_empty_dir": {
+      "installStatus": 1,
+      "installedVersion": null,
+      "expectedVersion": "0.2.14",
+      "pass": false
+    },
+    "u2_delivery_fsycs_parent_dir": {
+      "events": null,
+      "deliveredBytes": null,
+      "pass": false
+    },
+    "u0_setup": {
+      "keygenExit": 1,
+      "grantExit": 1,
+      "keygenError": "node:internal/modules/cjs/loader:1568\n  throw err;\n  ^\n\nError: Cannot find module '<tmp>'\n    at Module._resolveFilename (node:internal/modules/cjs",
+      "grantError": "node:internal/modules/cjs/loader:1568\n  throw err;\n  ^\n\nError: Cannot find module '<tmp>'\n    at Module._resolveFilename (node:internal/modules/cjs",
+      "pass": false
+    }
+  },
+  "allPass": false,
+  "verdict": "HARNESS-FAIL (setup did not reach a running daemon)"
+}
