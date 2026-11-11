@@ -893,11 +893,31 @@ main().catch((err) => {
       // `<name>.format` / `<name>.windowSeconds`.
       key: 'a base58 Ed25519 public key of exactly 32 bytes (signer and destination)',
       format: 'a value the daemon can honour: real UTC instant, u64 caps, positive whole window seconds',
+      // `<name>.pubkey` — the message grant's pinned key. Canonical means:
+      // re-encoding the 32 decoded bytes reproduces the exact string; 3 of
+      // 64 final data chars do NOT (they spell the same key and the daemon
+      // refused them at start with grant_key_mismatch, measured 2026-11-11).
+      pubkey: "the daemon's own public key in CANONICAL standard-padded base64 (43 chars + '=') — re-derive it with `signerd sign-message --add-grant` or fix the final data char so re-encoding reproduces the string",
     };
     const fix = FIX[field] || FIX[String(field).split('.').pop()] || 'a value the daemon can honour (see the grant-add usage)';
     process.stderr.write(
       `${err.code}: ${field}\n` +
       `  fix: set the field to ${fix}\n`);
+    process.exit(1);
+  }
+  // The daemon refused to start because a grant pins a public key this
+  // keystore is not. Measured 2026-11-11: with the shape-only pubkey rule,
+  // a NON-canonical base64 spelling (same 32 bytes, different last char)
+  // loaded cleanly and then died at start with a bare
+  // `grant_key_mismatch: releases` — no repair, while every other refusal
+  // in this CLI names one. The most common cause is exactly that spelling,
+  // so the repair says how to get the canonical one.
+  if (err && err.code === 'grant_key_mismatch') {
+    process.stderr.write(
+      `${err.code}: ${detailOf(err)}\n` +
+      `  fix: the grant pins a pubkey this keystore's key is not — re-derive it:\n` +
+      `         signerd sign-message --add-grant ...   # pins the keystore's OWN canonical base64 key\n` +
+      `  fix: if the key is right but the spelling differs: standard-padded base64 must RE-ENCODE to the exact string (for a 32-byte key the final data char is one of the 16 with two zero low bits)\n`);
     process.exit(1);
   }
   // Name the repair, not just the verdict (same rule as the passphrase

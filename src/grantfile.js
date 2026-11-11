@@ -5,8 +5,8 @@ const path = require('node:path');
 const { readUnderLease } = require('./lease');
 const { verifySealMac, parseSeal } = require('./grantseal');
 const {
-  isCanonicalPublicKey, isCanonicalExpiry, isU64, isWindowMaxLamports, isWindowSeconds,
-  isMessageCount,
+  isCanonicalPublicKey, isCanonicalBase64PublicKey, isCanonicalExpiry, isU64,
+  isWindowMaxLamports, isWindowSeconds, isMessageCount,
 } = require('./grantvalues');
 
 const REQUIRED_FIELDS = [
@@ -28,9 +28,6 @@ const MESSAGE_OPTIONAL = ['claimKeys'];
 const RESERVED = new Set(['__proto__', 'constructor', 'prototype']);
 const NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 const MAX_GRANTS = 1000;
-
-// A 32-byte Ed25519 public key in base64: 43 chars plus one '=' pad.
-const PUBKEY_B64 = /^[A-Za-z0-9+/]{43}=$/;
 
 function fail(reason, detail) {
   const err = new Error(detail === undefined ? reason : `${reason}: ${detail}`);
@@ -73,8 +70,7 @@ function validateGrant(name, grant) {
         !/^[A-Za-z0-9][A-Za-z0-9._/-]{0,199}$/.test(grant.subject)) {
       throw fail('grant_field_invalid', `${name}.scope`);
     }
-    if (!PUBKEY_B64.test(grant.pubkey) ||
-        Buffer.from(grant.pubkey, 'base64').length !== 32) {
+    if (!isCanonicalBase64PublicKey(grant.pubkey)) {
       throw fail('grant_field_invalid', `${name}.pubkey`);
     }
     if (!isU64(grant.maxBytes) || Number(grant.maxBytes) < 1 ||

@@ -3,7 +3,7 @@
 const crypto = require('node:crypto');
 const { canonicalReceiptBytes } = require('./receipt-identity');
 const { ownField, readClock } = require('./policy');
-const { isCanonicalExpiry } = require('./grantvalues');
+const { isCanonicalExpiry, isCanonicalBase64PublicKey } = require('./grantvalues');
 
 // The message-grant envelope: policy for signing a MESSAGE (an
 // openreceipts/v1 receipt body) instead of a Solana transaction wire.
@@ -210,7 +210,7 @@ function evaluateMessage(body, grant, now = new Date()) {
   const maxBytesField = ownField(grant, 'maxBytes');
   if (kind !== 'message' || issuer === null || !NAME.test(issuer) ||
       type === null || !NAME.test(type) || subject === null || !SUBJECT.test(subject) ||
-      pubkey === null || !/^[A-Za-z0-9+/]{43}=$/.test(pubkey) ||
+      pubkey === null || !isCanonicalBase64PublicKey(pubkey) ||
       !maxBytesField.ok || typeof maxBytesField.value !== 'string' ||
       !/^(0|[1-9][0-9]*)$/.test(maxBytesField.value)) {
     return refused('invalid_grant');

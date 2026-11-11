@@ -33,8 +33,8 @@ const path = require('node:path');
 const { validateGrant, loadGrantFile, MAX_GRANTS } = require('./grantfile');
 const { makeSealKeyProvider, sealDocument } = require('./grantseal');
 const {
-  isCanonicalPublicKey, isCanonicalExpiry, isU64, isWindowMaxLamports, isWindowSeconds,
-  isMessageCount,
+  isCanonicalPublicKey, isCanonicalBase64PublicKey, isCanonicalExpiry, isU64,
+  isWindowMaxLamports, isWindowSeconds, isMessageCount,
 } = require('./grantvalues');
 
 /** lstat without following the final symlink; null when nothing is there. */
@@ -131,7 +131,13 @@ function validateMessageGrantArgs(args) {
     if (typeof value !== 'string' || value.length === 0) throw fail('grant_field_invalid', field);
     out[field] = value;
   }
-  if (typeof args.pubkey !== 'string' || !/^[A-Za-z0-9+/]{43}=$/.test(args.pubkey)) {
+  // The pinned key must be the daemon's own public key in CANONICAL
+  // standard-padded base64: the same round-trip rule as every other value in
+  // src/grantvalues.js. A shape-only regex accepted 3 non-canonical
+  // spellings per key that the daemon then refused at start with
+  // grant_key_mismatch (measured 2026-11-11) — a file the creation path
+  // writes but the product can never run.
+  if (!isCanonicalBase64PublicKey(args.pubkey)) {
     throw fail('grant_field_invalid', 'pubkey');
   }
   out.pubkey = args.pubkey;

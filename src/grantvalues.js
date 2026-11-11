@@ -54,6 +54,13 @@ const MAX_SAFE = Number.MAX_SAFE_INTEGER;
 const EXPIRES_SHAPE = /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d{1,3})?Z$/;
 // Digits only, no leading zeros (except "0" itself).
 const DECIMAL = /^(0|[1-9][0-9]*)$/;
+// The SHAPE of an openreceipts Ed25519 public key in standard-padded base64:
+// 43 alphabet chars plus one '=' pad. Necessary but NOT sufficient — the
+// last data char's two low bits are always zero for a 32-byte key, so 3 of
+// every 64 spellings at that position are NON-canonical (they decode to the
+// same bytes but re-encode differently). isCanonicalBase64PublicKey applies
+// the round trip.
+const PUBKEY_B64_SHAPE = /^[A-Za-z0-9+/]{43}=$/;
 
 /**
  * A canonical base58 public key: it decodes to exactly 32 bytes AND
@@ -138,6 +145,28 @@ function isWindowMaxLamports(value) {
 }
 
 /**
+ * A canonical standard-padded base64 key: it decodes to exactly 32 bytes AND
+ * re-encodes to the very same string. The same round-trip rule as
+ * isCanonicalPublicKey (base58), applied to the openreceipts envelope's
+ * base64 `pubkey` spelling.
+ *
+ * WHY THE ROUND TRIP (measured live 2026-11-11, grant-key-mismatch repro):
+ * base64 of a 32-byte key ends in a data char whose two low bits are always
+ * zero, so 3 of every 64 alphabet characters there spell the SAME key —
+ * Buffer.from(...,'base64').equals() cannot tell them apart, the shape
+ * regex `/^[A-Za-z0-9+/]{43}=$/` accepts all four spellings, and the exact
+ * string comparison `grant.pubkey !== messagePublicKey(keypair)` refuses the
+ * other three at daemon start (grant_key_mismatch). A spelling that means
+ * something else than it looks like must not survive creation or load.
+ */
+function isCanonicalBase64PublicKey(value) {
+  if (typeof value !== 'string' || !PUBKEY_B64_SHAPE.test(value)) return false;
+  const decoded = Buffer.from(value, 'base64');
+  if (decoded.length !== 32) return false;
+  return decoded.toString('base64') === value;
+}
+
+/**
  * A count of messages (the message window counts receipts, not lamports):
  * a POSITIVE safe integer in [1, MAX_SAFE_INTEGER]. A cap of 0 can never
  * be reached: the ledger checks `signed + 1 > window.max` BEFORE the first
@@ -157,7 +186,9 @@ module.exports = {
   MIN_WINDOW_LAMPORTS,
   EXPIRES_SHAPE,
   DECIMAL,
+  PUBKEY_B64_SHAPE,
   isCanonicalPublicKey,
+  isCanonicalBase64PublicKey,
   isCanonicalExpiry,
   isU64,
   isWindowMaxLamports,
