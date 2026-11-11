@@ -25,6 +25,12 @@
 set -euo pipefail
 
 DAY="${DAY:-$(date -u +%F)}"
+export DAY
+# Clock contract (measured, src/policy-message.js: issued_at must be no more
+# than 24h in the future, inclusive at +24h). This harness stamps every body
+# at ${DAY}T21:00:00Z, so it may only be run for DAY = today (UTC) or a past
+# day, or for tomorrow AFTER 21:00Z-24h on that evening. Run it on its own UTC
+# day. Guarded below so a wrong DAY fails here, before the daemon starts.
 SIGNERD="$HOME/github_repos/signerd"
 OPENRECEIPTS="$HOME/github_repos/openreceipts"
 ISSUER_KEY="$HOME/.openreceipts/auroraxo.key"
@@ -39,6 +45,18 @@ trap cleanup EXIT
 chmod 700 "$WORK"
 
 echo "== 0. preconditions (day $DAY) =="
+node -e '
+const fs = require("node:fs");
+const day = process.env.DAY;
+if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) { console.error("DAY must be YYYY-MM-DD (UTC)"); process.exit(1); }
+const issued = Date.parse(`${day}T21:00:00Z`);
+if (Number.isNaN(issued)) { console.error(`DAY ${day} is not a real date`); process.exit(1); }
+const bound = Date.now() + 24 * 60 * 60 * 1000;
+if (issued > bound) {
+  console.error(`DAY=${day} stamps issued_at ${day}T21:00:00Z, beyond the measured +24h future bound (now ${new Date().toISOString()}). Run on your own UTC day.`);
+  process.exit(1);
+}
+' || exit 1
 test -f "$ISSUER_KEY" || { echo "no issuer key at $ISSUER_KEY"; exit 1; }
 test -f "$PINNED" || { echo "no pinned key"; exit 1; }
 test -x tools/leasecheck || npm run build >/dev/null
