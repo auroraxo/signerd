@@ -258,6 +258,33 @@ function writeGrantFile({ file, name, grant }) {
  * Add a grant to an EXISTING grant file (used by the message bootstrap):
  * the file is re-read, one grant is added, and the file is written back with
  * the same rules. A sealed file is still refused.
+ *
+ * THE JUDGE IS THE PRODUCT'S LOADER — the same rule extendGrantFile and
+ * removeGrantFromFile keep, and the reason this function changed on
+ * 2026-11-11 (measured, probes /tmp/pulseT*, /tmp/pulseU*):
+ *
+ *   B1 a file whose existing tx grant carries windowMaxLamports:"1" (a cap
+ *      the daemon can never honour) was EXTENDED anyway, and the command
+ *      reported {"ok":true,...,"bootstrapped":true}; `run` then died with
+ *      `grant_field_invalid: broken.format`. The bootstrap manufactured a
+ *      state the product refuses — the keygen-loop lesson, on the grant file.
+ *   B2 a file with mode 0664 (group-writable: content provenance already
+ *      lost) was rewritten at 0600, while `verify-grants` and
+ *      `grant-add --append` both REFUSE that file with `grant_file_mode:
+ *      664`. Tightening the mode cannot restore provenance, and the silent
+ *      repair clobbers the operator's own hygiene signal.
+ *   B3 a SYMLINK at the grant path was followed/replaced (the defect
+ *      grant-add measured on 2026-11-05), while the loader refuses one.
+ *   B4 a broken file that ALREADY held the grant name short-circuited to
+ *      {"ok":true,...,"bootstrapped":false} — a success verdict for a
+ *      dead-on-arrival file. The append path judges FIRST and only then
+ *      answers grant_exists; the bootstrap must keep that order.
+ *
+ * So: nothing is written until the whole file has been accepted by
+ * loadGrantFile (src/grantfile.js) — directory mode and ownership, the
+ * kernel read lease, file owner and mode, schema, and every existing grant.
+ * The name check comes AFTER the judgement, so a refusal always names the
+ * real reason.
  */
 function addGrantToFile({ file, name, grant }) {
   const resolved = path.resolve(file);
@@ -265,26 +292,42 @@ function addGrantToFile({ file, name, grant }) {
   if (!fs.existsSync(resolved)) {
     return writeGrantFile({ file: resolved, name, grant });
   }
+  // Never follow a symlink: the loader refuses one (O_NOFOLLOW), so writing
+  // through one would touch a path the operator never named.
+  const link = lstatOrNull(resolved);
+  if (link !== null && link.isSymbolicLink()) throw fail('grant_file_symlink', resolved);
+
+  // Seal presence needs the raw document: loadGrantFile only VERIFIES a
+  // seal when a key provider is given and would otherwise ignore it — the
+  // one outcome this path must never produce is an unsealed write over a
+  // sealed file.
+  let raw;
+  try {
+    raw = fs.readFileSync(resolved, 'utf8');
+  } catch (err) {
+    throw fail('grant_file_unreadable', err.code);
+  }
   let doc;
   try {
-    doc = JSON.parse(fs.readFileSync(resolved, 'utf8'));
+    doc = JSON.parse(raw);
   } catch {
     throw fail('grant_file_invalid');
   }
-  if (doc === null || typeof doc !== 'object' || doc.version !== 1 ||
-      typeof doc.grants !== 'object' || doc.grants === null || Array.isArray(doc.grants)) {
-    throw fail('grant_file_invalid');
-  }
-  if (Object.getOwnPropertyDescriptor(doc, 'seal') !== undefined) {
-    throw fail('grant_file_sealed', resolved);
-  }
-  if (Object.getOwnPropertyNames(doc.grants).includes(name)) {
-    throw fail('grant_exists', name);
-  }
+  const sealed = doc !== null && typeof doc === 'object' &&
+    Object.getOwnPropertyDescriptor(doc, 'seal') !== undefined;
+  if (sealed) throw fail('grant_file_sealed', resolved);
+
+  // THE JUDGE: the product's own loader. Everything about the existing file
+  // must pass before a single byte is written.
+  const loaded = loadGrantFile(resolved);
+  const existing = Object.getOwnPropertyNames(loaded.grants);
+  if (existing.includes(name)) throw fail('grant_exists', name);
+  if (existing.length + 1 > MAX_GRANTS_LOCAL) throw fail('grant_file_invalid', 'too many grants');
+
+  // The survivors are copied through byte-identically (the grant objects the
+  // loader parsed): a bootstrap is not a chance to rewrite a grant's content.
   const grants = {};
-  for (const existing of Object.getOwnPropertyNames(doc.grants)) {
-    grants[existing] = doc.grants[existing];
-  }
+  for (const key of existing) grants[key] = loaded.grants[key];
   grants[name] = grant;
   const out = { version: 1, grants };
   writeAtomic(resolved, out);
