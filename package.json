@@ -1,6 +1,6 @@
 {
   "name": "signerd",
-  "version": "0.2.18",
+  "version": "0.2.19",
   "description": "Refusal-first prototype: Unix-socket signing daemon, grant file, encrypted keystore. Not a reviewed wallet.",
   "main": "src/daemon.js",
   "bin": {
