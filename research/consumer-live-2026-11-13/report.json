@@ -1,0 +1,35 @@
+{
+  "generatedAt": "2026-11-12T22:14:24.069Z",
+  "day": "2026-11-13",
+  "what": "receipt signed through a signerd daemon via receipt.py --via-signerd; issuer key held only by the daemon",
+  "clientKeyMaterial": "none — OPENRECEIPTS_HOME never created",
+  "verifiedAgainst": "openreceipts/keys/auroraxo.pub (pinned, both verifiers)",
+  "checks": {
+    "both_verifiers_accept": true,
+    "site_pubkey_equals_pinned": true,
+    "overdrawn_window_refused": "window_cap, no file written",
+    "replay_after_restart_refused": "replay, no file written",
+    "empty_seal_passphrase_refused": "seal_passphrase_required, daemon did not start",
+    "dry_preview_allowed": true,
+    "dry_wrote_no_signature": true,
+    "dry_journaled_bytes": 0,
+    "dry_out_untouched": true,
+    "real_sign_after_dry_succeeded": true,
+    "receipt": {
+      "pubkey": "z74vce0VgGTpPP7Nu/G+O9IVDgcKg/lceC/2GAvwzi8=",
+      "receipt": {
+        "claims": {
+          "message-grant": "live",
+          "via": "signerd"
+        },
+        "issued_at": "2026-11-13T21:00:00+00:00",
+        "issuer": "auroraxo",
+        "note": "receipt signed through the signerd daemon, no key in the client",
+        "schema": "openreceipts/v1",
+        "subject": "auroraxo/signerd",
+        "type": "release"
+      },
+      "sig": "opLflhIvPji3CplwkkLBpLKprk0rh80yEh9UX2nHgbwiEsqbj/LAXuzz+J0HBOsHEXOniYzURBatytILOOoOBA=="
+    }
+  }
+}
