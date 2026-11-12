@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-12T21:04:37.891Z",
+  "generatedAt": "2026-11-12T21:57:01.312Z",
   "what": "is the bare name `signerd` publishable on npm / crates.io / pypi right now?",
   "instrument": "tools/measure-publish-readiness.mjs",
   "targets": [

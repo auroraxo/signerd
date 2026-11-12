@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-12T21:04:38.443Z",
+  "generatedAt": "2026-11-12T21:59:55.080Z",
   "what": "does any package registry carry a package that references signerd (exact name or description mention)?",
   "instrument": "tools/measure-registry-presence.mjs",
   "targets": [
@@ -119,6 +119,18 @@
         {
           "name": "@zanii/signerd",
           "description": "Keep an agent's private key out of the agent's process. A local daemon unseals the key, signs receipts, owns the timestamp and the chain head; agents record thr",
+          "maintainers": [
+            {
+              "email": "info@zanii.agency",
+              "username": "zanii"
+            }
+          ],
+          "publisher": [
+            {
+              "email": "info@zanii.agency",
+              "username": "zanii"
+            }
+          ],
           "class": "name-mention",
           "own": false,
           "referenceClass": "name-collision"
@@ -126,9 +138,21 @@
         {
           "name": "signerd",
           "description": "Refusal-first prototype: Unix-socket signing daemon, grant file, encrypted keystore. Not a reviewed wallet.",
+          "maintainers": [
+            {
+              "email": "gregor.sprint@gmail.com",
+              "username": "sprintberlin"
+            }
+          ],
+          "publisher": [
+            {
+              "email": "gregor.sprint@gmail.com",
+              "username": "sprintberlin"
+            }
+          ],
           "class": "exact-name",
-          "own": false,
-          "referenceClass": "name-collision"
+          "own": true,
+          "referenceClass": "own"
         }
       ]
     }
@@ -140,11 +164,6 @@
       "name": "@zanii/signerd",
       "registry": "npm",
       "class": "name-mention"
-    },
-    {
-      "name": "signerd",
-      "registry": "npm",
-      "class": "exact-name"
     }
   ],
   "coverage": {

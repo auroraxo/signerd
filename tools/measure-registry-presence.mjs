@@ -195,17 +195,32 @@ function npmExact(name) {
   };
 }
 
+// The SEARCH surface's hit construction, exported so the ownership rule can
+// be pinned WHERE it is applied (measured 2026-11-12, post-publish: the
+// exact surface said own:true and the search surface said name-collision
+// for the SAME package, because this construction hardcoded own:false and
+// dropped the identities before classification).
+export function buildNpmSearchHits(objects, q) {
+  return (objects ?? [])
+    .map((o) => ({
+      name: o.package.name,
+      description: String(o.package.description ?? '').slice(0, 160),
+      // OWNERSHIP: search hits carry maintainers/publisher. The identities
+      // are kept and the same isOwnPackage rule judges them; a hit whose
+      // maintainer is the npm account we publish from is OWN on every
+      // surface, not only on the exact one.
+      maintainers: o.package.maintainers ?? [],
+      publisher: o.package.publisher ? [o.package.publisher] : [],
+      class: classifyRegistryHit({ name: o.package.name, description: o.package.description }, q),
+    }))
+    .filter((h) => h.class !== 'noise')
+    .map((h) => ({ ...h, own: isOwnPackage(h) }));
+}
+
 function npmSearch(q) {
   const r = fetchJson(`https://registry.npmjs.org/-/v1/search?text=${encodeURIComponent(q)}&size=250`);
   const hits = r.status === 200
-    ? (r.json.objects ?? [])
-        .map((o) => ({
-          name: o.package.name,
-          description: String(o.package.description ?? '').slice(0, 160),
-          class: classifyRegistryHit({ name: o.package.name, description: o.package.description }, q),
-        }))
-        .filter((h) => h.class !== 'noise')
-        .map((h) => ({ ...h, own: false }))
+    ? buildNpmSearchHits(r.json.objects ?? [], q)
     : [];
   return {
     registry: 'npm', kind: 'search', name: `npm search text=${q}`,

@@ -192,6 +192,40 @@ test('O3 GUARD: the @zanii prior art keeps its collision class', () => {
   assert.equal(rpMod.isOwnPackage({ maintainers: [{ name: 'zanii' }] }), false);
 });
 
+test('O5 REGRESSION: the npm SEARCH surface judged our own package a collision', () => {
+  // Measured 2026-11-12, post-publish, with the exact-surface repair live:
+  // research/registry-presence-2026-11-12.json carries the SAME package
+  // twice — the exact surface says own:true, the search surface said
+  // name-collision, because the search construction hardcoded own:false
+  // and dropped the maintainer identities before classification. One
+  // package, two verdicts: our own published artifact counted against us
+  // on the sweep channel.
+  //
+  // THIS test runs the REAL construction (buildNpmSearchHits) over the
+  // live API object shape (maintainers spelled as [{ email, username }],
+  // measured at registry.npmjs.org/-/v1/search?text=signerd) — not just
+  // the pure rule: the pure rule alone passes on the pre-fix tree
+  // (measured), which is exactly why the instrument is the SURFACE, not
+  // the classifier.
+  const objects = [
+    { package: { name: 'signerd', description: 'Refusal-first prototype: Unix-socket signing daemon.',
+      maintainers: [{ email: 'gregor.sprint@gmail.com', username: 'sprintberlin' }],
+      publisher: { email: 'gregor.sprint@gmail.com', username: 'sprintberlin' } } },
+    { package: { name: '@zanii/signerd', description: "Keep an agent's private key out of the agent's process.",
+      maintainers: [{ email: 'info@zanii.agency', username: 'zanii' }],
+      publisher: { email: 'info@zanii.agency', username: 'zanii' } } },
+  ];
+  const hits = rpMod.buildNpmSearchHits(objects, 'signerd');
+  const ours = hits.find((h) => h.name === 'signerd');
+  const zanii = hits.find((h) => h.name === '@zanii/signerd');
+  assert.ok(ours && zanii, 'both hits classified');
+  assert.equal(ours.own, true, 'our own published package is own on the SEARCH surface');
+  assert.equal(rpMod.classifyHitReference(ours, ['auroraxo/signerd']), 'own');
+  // GUARD: the collision neighbour keeps its class through the same construction
+  assert.equal(zanii.own, false);
+  assert.equal(rpMod.classifyHitReference(zanii, ['auroraxo/signerd']), 'name-collision');
+});
+
 test('O4 GUARD: 404 stays free, transport stays unmeasured', () => {
   assert.equal(prMod.classifyAvailability(404, [], ''), 'free');
   assert.equal(prMod.classifyAvailability(500, [], ''), 'unmeasured');
