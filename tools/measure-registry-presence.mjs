@@ -30,7 +30,20 @@ import { writeFileSync, mkdirSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 
 const UA = 'signerd-research/0.1 (github.com/auroraxo/signerd)';
-const OWN_IDS = ['auroraxo'];
+// OWNERSHIP, measured 2026-11-12: the npm package WE published at 16:55Z
+// carries the maintainer `sprintberlin` (the account `npm whoami` resolves
+// to from this machine's token) while the GitHub account is `auroraxo`.
+// With only `auroraxo` in this list, our OWN published package read as a
+// foreign `name-collision` — the flattering-in-the-wrong-direction error
+// this repo keeps hunting: a hit that points at MY project counted as
+// someone else's. The npm id is an OWN id here.
+//
+// A repository URL field is DELIBERATELY not an ownership signal: a foreign
+// package that links to `github.com/auroraxo/signerd` is a consumer
+// (referenceClass=foreign-reference, test G5b), not our package. Only the
+// MAINTAINER / OWNER identities decide ownership. The @zanii collision
+// keeps its class (maintainer zanii).
+const OWN_IDS = ['auroraxo', 'sprintberlin'];
 const TARGET = 'signerd';
 // What counts as pointing at MY project - anything else carrying the name is
 // a collision (independent prior art), not foreign use.
@@ -79,7 +92,12 @@ export function isOwnPackage(pkg) {
 // been a false positive in the direction that flatters.
 export function classifyHitReference(hit, myMarkers) {
   const haystack = JSON.stringify(hit).toLowerCase();
-  if (isOwnPackage(hit)) return 'own';
+  // `own` is the computed ownership flag the surfaces attach (exact hits);
+  // a raw package object (owners/maintainers/repoUrl) is judged directly.
+  // Measured 2026-11-12: with only the auroraxo id in OWN_IDS, OUR OWN
+  // published package (maintainer sprintberlin) fell through both paths
+  // and was classed name-collision.
+  if (hit.own === true || isOwnPackage(hit)) return 'own';
   const linked = myMarkers.some((m) => haystack.includes(m.toLowerCase()));
   if (linked) return 'foreign-reference';
   if (hit.class === 'exact-name' || hit.class === 'name-mention') return 'name-collision';
@@ -160,15 +178,19 @@ function cratesSearch(q) {
 function npmExact(name) {
   const r = fetchJson(`https://registry.npmjs.org/${name}`);
   const maintainers = r.status === 200 ? (r.json.maintainers ?? []) : [];
+  const repoUrl = r.status === 200
+    ? (r.json.versions?.[r.json['dist-tags']?.latest]?.repository?.url ?? r.json.repository?.url ?? '')
+    : '';
   return {
     registry: 'npm', kind: 'exact', name,
     endpoint: `registry.npmjs.org/${name}`,
     status: r.status, status_class: classifyNpmStatus(r.status),
     exists: r.status === 200,
     maintainers: maintainers.map((m) => m.name),
+    repoUrl: String(repoUrl).slice(0, 160),
     description: r.status === 200 ? String(r.json.description ?? '').slice(0, 160) : '',
     hits: r.status === 200
-      ? [{ name: r.json.name ?? name, class: 'exact-name', own: isOwnPackage({ maintainers }) }]
+      ? [{ name: r.json.name ?? name, class: 'exact-name', own: isOwnPackage({ maintainers, repoUrl }) }]
       : [],
   };
 }

@@ -34,7 +34,17 @@ import { writeFileSync, mkdirSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 
 const UA = 'signerd-research/0.1 (github.com/auroraxo/signerd)';
-const OWN_IDS = ['auroraxo'];
+// OWNERSHIP, measured 2026-11-12: `npm view signerd maintainers` on the
+// package WE published at 16:55Z names `sprintberlin` — the npm account
+// `npm whoami` resolves to from this machine's token — while the GitHub
+// account is `auroraxo`. A probe that recognized only `auroraxo` read OUR
+// OWN published package as a foreign `taken-collision`: the dangerous
+// direction (a 200 we hold misreported as someone else's name). The npm
+// id is therefore an OWN id here, and the repository URL is a second,
+// independent ownership signal. The @zanii/signerd collision keeps its
+// class: its maintainer is `zanii` and it carries no auroraxo repo.
+const OWN_IDS = ['auroraxo', 'sprintberlin'];
+const OWN_REPO_MARKERS = ['github.com/auroraxo'];
 const TARGET = 'signerd';
 
 // --- pure, exported for tests -------------------------------------------
@@ -68,12 +78,16 @@ export function classifyNpmStatus(status) {
 // The dangerous direction this file exists to prevent: a 200 (name taken)
 // must NEVER be reported as "free". Ownership is checked so that our own
 // future republication is recognized, and a collision is never misread.
+// A repository URL under github.com/auroraxo is OWN even when the npm
+// account differs (measured 2026-11-12: maintainer sprintberlin, repo
+// auroraxo/signerd — both ours, one identity family).
 // Returns 'free' | 'taken-ours' | 'taken-collision'.
-export function classifyAvailability(status, maintainers = []) {
+export function classifyAvailability(status, maintainers = [], repoUrl = '') {
   if (status === 404) return 'free';
   if (status !== 200) return 'unmeasured';
   const people = maintainers.map((m) => String(m.name ?? m.username ?? m.login ?? '')).filter(Boolean);
-  const ours = people.some((p) => OWN_IDS.includes(p));
+  const ours = people.some((p) => OWN_IDS.includes(p))
+    || OWN_REPO_MARKERS.some((r) => String(repoUrl || '').toLowerCase().includes(r));
   return ours ? 'taken-ours' : 'taken-collision';
 }
 
@@ -114,12 +128,16 @@ function fetchJson(url, { userAgent = true } = {}) {
 function npmExact(name) {
   const r = fetchJson(`https://registry.npmjs.org/${name}`);
   const maintainers = r.status === 200 ? (r.json.maintainers ?? []) : [];
+  const repoUrl = r.status === 200
+    ? (r.json.versions?.[r.json['dist-tags']?.latest]?.repository?.url ?? r.json.repository?.url ?? '')
+    : '';
   return {
     registry: 'npm', kind: 'exact', name,
     endpoint: `registry.npmjs.org/${name}`,
     status: r.status, status_class: classifyNpmStatus(r.status),
-    availability: classifyAvailability(r.status, maintainers),
+    availability: classifyAvailability(r.status, maintainers, repoUrl),
     maintainers: maintainers.map((m) => m.name),
+    repoUrl: String(repoUrl).slice(0, 160),
   };
 }
 
