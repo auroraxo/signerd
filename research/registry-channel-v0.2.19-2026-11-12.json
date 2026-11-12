@@ -1,0 +1,30 @@
+{
+  "tool": "measure-registry-channel",
+  "package": "signerd",
+  "registry": "npm",
+  "registryEndpoint": "registry.npmjs.org/signerd",
+  "registryReadmeSource": "package.readme",
+  "registryMeta": {
+    "latest": "0.2.19",
+    "maintainers": [
+      "sprintberlin"
+    ],
+    "repository": "git+https://github.com/auroraxo/signerd.git",
+    "versions": 3,
+    "publishedAt": "2026-11-12T21:49:33.476Z"
+  },
+  "readmeBytes": 65536,
+  "denials": [],
+  "registryInstallClaims": [
+    "signerd"
+  ],
+  "verdict": "registry-consistent",
+  "reason": null,
+  "verdictBasis": "the registry README is judged against the registry OWN testimony (the package exists); a denial is a contradiction, never a stylistic issue",
+  "limits": [
+    "the registry README is what a consumer installing from the registry sees; the working tree is NOT read here (it can differ from what was published)",
+    "a denial is detected by CLAIM shape, not by an exact sentence; a new phrasing of the same claim is a false negative until the rule is extended",
+    "the probe judges consistency, not truth of adoption: a published package can still have zero outside users",
+    "exit 3 (no verdict) whenever the registry does not answer; a network failure is never recorded as an absence"
+  ]
+}

@@ -1,0 +1,47 @@
+{
+  "tool": "registry-install-user-zero (manual run, recorded)",
+  "measuredAt": "2026-11-12T21:58Z",
+  "channel": "npm install signerd (registry, NO git clone)",
+  "packageVersion": "0.2.19",
+  "environment": "empty directory: npm init -y && npm install signerd",
+  "results": {
+    "R1_install": {
+      "pass": true,
+      "note": "npm install signerd into an empty app resolved to 0.2.19 (dist-tag latest, propagated ~3 min after publish); `signerd --help` ran from the installed copy."
+    },
+    "R2_keygen": {
+      "pass": true,
+      "note": "keygen --keystore --passphrase-file wrote the keystore (publicKey G5MhUCV6…); refuses a 0664 passphrase file with the chmod 600 repair line (contract observed live)."
+    },
+    "R3_grant_add": {
+      "pass": true,
+      "note": "grant-add created the 0600 grant file; future expiry accepted; the first (mistyped) destination was later refused by the daemon, not silently trusted."
+    },
+    "R4_daemon_run": {
+      "pass": true,
+      "note": "run bound the socket at 0600; missing --ledger refused with usage before any daemon started."
+    },
+    "R5_real_signature": {
+      "pass": true,
+      "note": "sign (tx build-tx -> sign --out) produced a 215-byte signed wire and seq 1; reported signature bytes equal the wire signature."
+    },
+    "R6_dry_replay_refused": {
+      "pass": true,
+      "note": "a --dry and a second real sign of the already-spent tx were both refused replay; the ledger grew ONLY on the first real signature (0 -> 366 bytes, dry stayed 366)."
+    },
+    "R7_ed25519_verification": {
+      "pass": true,
+      "note": "the signed wire verified Ed25519 (numSignatures|signature|message layout, @noble/curves) against the keystore public key; a one-byte message tamper failed that same verification."
+    },
+    "R8_policy_refusals_on_the_path": {
+      "pass": true,
+      "note": "two refusals were observed en route and are product behaviour, not defects: a self-transfer (from==to) hit the envelope decider (refused envelope); a grant pinned to a different destination refused destination. Both named, both machine-readable, nothing signed."
+    }
+  },
+  "verdict": "registry-channel-works-7-of-7",
+  "limits": [
+    "one machine, one account; placeholder blockhash — nothing confirmed on chain",
+    "the every-pulse D4/Dry user-zero artifact for this pin is research/user-zero-v0.2.19-2026-11-12.json (git-tag channel); this file records the REGISTRY channel a stranger actually uses",
+    "bs58 v4 decode returns Uint8Array — buffers converted before compare, recorded because a raw .equals() on decode output is a false negative"
+  ]
+}
