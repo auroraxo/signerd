@@ -1,0 +1,202 @@
+{
+  "schema": "signerd/seal-grants-judge/v1",
+  "measuredAt": "2026-11-13T15:09:13.890Z",
+  "prefix": "98bcfa0",
+  "verdict": "seal-grants-judge-holds",
+  "defectCases": [
+    "broken-grant",
+    "typo-field",
+    "reserved-name",
+    "symlink"
+  ],
+  "guardCases": [
+    "valid",
+    "reseal",
+    "out-copy"
+  ],
+  "prefixTree": {
+    "defects": {
+      "broken-grant": {
+        "case": "broken-grant",
+        "loaderRefused": true,
+        "loaderReason": "grant_field_invalid",
+        "status": 0,
+        "okVerdict": true,
+        "reason": null,
+        "fileUnchanged": false,
+        "wroteThroughSymlink": false,
+        "sealed": true,
+        "stderrHead": ""
+      },
+      "typo-field": {
+        "case": "typo-field",
+        "loaderRefused": true,
+        "loaderReason": "grant_unknown_field",
+        "status": 0,
+        "okVerdict": true,
+        "reason": null,
+        "fileUnchanged": false,
+        "wroteThroughSymlink": false,
+        "sealed": true,
+        "stderrHead": ""
+      },
+      "reserved-name": {
+        "case": "reserved-name",
+        "loaderRefused": true,
+        "loaderReason": "grant_name_invalid",
+        "status": 0,
+        "okVerdict": true,
+        "reason": null,
+        "fileUnchanged": false,
+        "wroteThroughSymlink": false,
+        "sealed": true,
+        "stderrHead": ""
+      },
+      "symlink": {
+        "case": "symlink",
+        "loaderRefused": false,
+        "loaderReason": null,
+        "status": 0,
+        "okVerdict": true,
+        "reason": null,
+        "fileUnchanged": true,
+        "wroteThroughSymlink": false,
+        "sealed": true,
+        "stderrHead": ""
+      }
+    },
+    "guards": {
+      "valid": {
+        "case": "valid",
+        "loaderRefused": false,
+        "loaderReason": null,
+        "status": 0,
+        "okVerdict": true,
+        "reason": null,
+        "fileUnchanged": false,
+        "wroteThroughSymlink": false,
+        "sealed": true,
+        "stderrHead": ""
+      },
+      "reseal": {
+        "case": "reseal",
+        "loaderRefused": false,
+        "loaderReason": null,
+        "status": 0,
+        "okVerdict": true,
+        "reason": null,
+        "fileUnchanged": false,
+        "wroteThroughSymlink": false,
+        "sealed": true,
+        "stderrHead": ""
+      },
+      "out-copy": {
+        "case": "out-copy",
+        "loaderRefused": false,
+        "loaderReason": null,
+        "status": 0,
+        "okVerdict": true,
+        "reason": null,
+        "fileUnchanged": true,
+        "wroteThroughSymlink": false,
+        "sealed": false,
+        "stderrHead": ""
+      }
+    }
+  },
+  "fixedTree": {
+    "defects": {
+      "broken-grant": {
+        "case": "broken-grant",
+        "loaderRefused": true,
+        "loaderReason": "grant_field_invalid",
+        "status": 1,
+        "okVerdict": false,
+        "reason": "grant_field_invalid",
+        "fileUnchanged": true,
+        "wroteThroughSymlink": false,
+        "sealed": false,
+        "stderrHead": "grant_field_invalid: releases.format |   fix: set the field to a value the daemon can honour: real UTC instant, u64 caps, positive whole window seconds"
+      },
+      "typo-field": {
+        "case": "typo-field",
+        "loaderRefused": true,
+        "loaderReason": "grant_unknown_field",
+        "status": 1,
+        "okVerdict": false,
+        "reason": "grant_unknown_field",
+        "fileUnchanged": true,
+        "wroteThroughSymlink": false,
+        "sealed": false,
+        "stderrHead": "grant_unknown_field: releases.maxLamport | "
+      },
+      "reserved-name": {
+        "case": "reserved-name",
+        "loaderRefused": true,
+        "loaderReason": "grant_name_invalid",
+        "status": 1,
+        "okVerdict": false,
+        "reason": "grant_name_invalid",
+        "fileUnchanged": true,
+        "wroteThroughSymlink": false,
+        "sealed": false,
+        "stderrHead": "grant_name_invalid: __proto__ | "
+      },
+      "symlink": {
+        "case": "symlink",
+        "loaderRefused": false,
+        "loaderReason": null,
+        "status": 1,
+        "okVerdict": false,
+        "reason": "grant_file_symlink",
+        "fileUnchanged": true,
+        "wroteThroughSymlink": false,
+        "sealed": false,
+        "stderrHead": "grant_file_symlink: <case>/cfg/grants.json is a symlink |   fix: point --grants at the real file, or remove the link   # a symlink is never followed here"
+      }
+    },
+    "guards": {
+      "valid": {
+        "case": "valid",
+        "loaderRefused": false,
+        "loaderReason": null,
+        "status": 0,
+        "okVerdict": true,
+        "reason": null,
+        "fileUnchanged": false,
+        "wroteThroughSymlink": false,
+        "sealed": true,
+        "stderrHead": ""
+      },
+      "reseal": {
+        "case": "reseal",
+        "loaderRefused": false,
+        "loaderReason": null,
+        "status": 0,
+        "okVerdict": true,
+        "reason": null,
+        "fileUnchanged": false,
+        "wroteThroughSymlink": false,
+        "sealed": true,
+        "stderrHead": ""
+      },
+      "out-copy": {
+        "case": "out-copy",
+        "loaderRefused": false,
+        "loaderReason": null,
+        "status": 0,
+        "okVerdict": true,
+        "reason": null,
+        "fileUnchanged": true,
+        "wroteThroughSymlink": false,
+        "sealed": false,
+        "stderrHead": ""
+      }
+    }
+  },
+  "checks": {
+    "prefixShowsAllDefectFaces": true,
+    "fixedTreeRefusesEveryDefectFace": true,
+    "guardsHoldOnFixedTree": true
+  }
+}

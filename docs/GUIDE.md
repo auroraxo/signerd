@@ -351,3 +351,38 @@ is verified independently under Node's OpenSSL ed25519 against the public key.
 
 The v0 daemon still only speaks the narrow legacy System-transfer envelope of `src/policy.js`: one instruction, three accounts, one signer, no ALT, no CPI, no Token-2022, no authority change.
 
+### Recent fixes and lessons
+
+**2026-11-13: `seal-grants` judges with the product's own loader.**
+
+`seal-grants` was the one write path to the grant file that did **not** run through the
+product's loader (`src/grantfile.js`) — the judge `grant-add --append`, `grant-remove` and
+the `sign-message --add-grant` bootstrap (fixed for the same class on 2026-11-11) all
+consult. Measured live on the tree at `98bcfa0` (= published v0.2.20): a document with a
+cap below the 5000-lamport base fee, a typo'd field (`maxLamport`), a reserved name
+(`__proto__`) or a symlink at the grant path was sealed with `exit 0` and `{"ok":true}` —
+making an unloadable document **authentic** while `status`, `grant-remove` and `run` refuse
+the same file. The `__proto__` face also vanished from the printed summary (`grants:[]`),
+so the "what was sealed" line the command exists to print was wrong on exactly the file an
+operator most needed to see.
+
+`seal-grants` now runs the file through `loadGrantFile` **before** computing a seal: a
+symlink is refused by name (`grant_file_symlink`, with the repair `grant-add` names), and
+everything the loader refuses — directory mode and ownership, the read lease, file owner
+and mode, schema, unknown fields, reserved names, value semantics — is refused before a
+byte is written, with the loader's own reason and repair line. The sealed payload is built
+from the loader's validated grants. Guards: sealing a valid file, re-sealing an already
+sealed file (the documented "edit by hand, then re-seal" repair) and `seal-grants --out`
+to another path all still work.
+
+Pinned by `test/seal-grants-judge.test.js` (7 cases: 4 red on the pre-fix tree, 3 guards
+green on both), the two-tree measurement `tools/measure-seal-grants-judge.js` →
+`research/seal-grants-judge-2026-11-13.json` (verdict `seal-grants-judge-holds`, prefix
+shows all 4 faces, fixed tree refuses all 4, guards hold) with its pin
+`test/seal-grants-judge-measurement.test.js` (P1–P6), and
+`tools/mutation-ladder-seal-grants-judge.sh` (4/4 mutations caught, control green, tree
+byte-identical). Limits: this closes the *seal* path only — `seal-grants` still trusts the
+file content it is handed (sealing a forged file makes the forgery valid; it prints what
+it sealed for that reason), and the loader judges the file at the instant of the read,
+same TOCTOU window as every other path here.
+

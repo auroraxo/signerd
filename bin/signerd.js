@@ -118,6 +118,16 @@ function parseArgs(argv) {
   return parseArgv(argv);
 }
 
+/** lstat without following the final symlink; null when nothing is there. */
+function lstatOrNull(target) {
+  try {
+    return fs.lstatSync(target);
+  } catch (err) {
+    if (err && err.code === 'ENOENT') return null;
+    return null;
+  }
+}
+
 function requireArg(args, name) {
   const value = args[name];
   if (typeof value !== 'string' || value.length === 0) {
@@ -807,22 +817,56 @@ async function main() {
 
   if (command === 'seal-grants') {
     const { sealDocument } = require('../src/grantseal');
+    const { loadGrantFile } = require('../src/grantfile');
     const file = requireArg(args, 'grants');
     const passphrase = readPassphrase(args, 'seal-passphrase-file');
-    const raw = fs.readFileSync(file, 'utf8');
-    let doc;
+
+    // Never follow a symlink: the loader refuses one (O_NOFOLLOW), and
+    // writing through one would touch a path the operator never named
+    // (the same rule addGrantToFile keeps).
+    const resolved = path.resolve(file);
+    const link = lstatOrNull(resolved);
+    if (link !== null && link.isSymbolicLink()) {
+      process.stderr.write(
+        `grant_file_symlink: ${file} is a symlink\n` +
+        `  fix: point --grants at the real file, or remove the link   # a symlink is never followed here\n`);
+      process.exit(1);
+    }
+
+    // THE JUDGE: the product's own loader (src/grantfile.js). Everything
+    // about the existing file must pass before a seal is computed or
+    // written: directory mode and ownership, the kernel read lease, file
+    // owner and mode, schema, every existing grant (names, values, caps,
+    // canonical expiry, reserved names). Sealing an unloadable file would
+    // make the defect authentic (measured 2026-11-13).
+    //
+    // loadGrantFile is run WITHOUT a seal key: if the file is ALREADY
+    // sealed (the documented "edit by hand, then re-seal" repair), the
+    // legacy path skips seal verification and judges the payload — exactly
+    // what re-sealing needs.
+    let loaded;
     try {
-      doc = JSON.parse(raw);
-    } catch {
-      process.stderr.write('grant_file_invalid: not JSON\n');
-      process.exit(1);
+      loaded = loadGrantFile(file);
+    } catch (err) {
+      if (err && err.code === 'grant_file_mode') {
+        process.stderr.write(
+          `${err.code}: ${detailOf(err)}\n` +
+          `  fix: chmod 600 ${file}   # a grant file another user can write must not be sealed\n`);
+        process.exit(1);
+      }
+      if (err && err.code === 'grant_file_dir_mode') {
+        process.stderr.write(
+          `${err.code}: ${detailOf(err)}\n` +
+          `  fix: chmod 700 ${path.dirname(resolved)}   # a stranger could swap the file there\n`);
+        process.exit(1);
+      }
+      throw err;
     }
-    if (doc === null || typeof doc !== 'object' || Array.isArray(doc) ||
-        doc.version !== 1 || typeof doc.grants !== 'object' || doc.grants === null ||
-        Array.isArray(doc.grants)) {
-      process.stderr.write('grant_file_invalid: expected {version:1, grants:{...}}\n');
-      process.exit(1);
-    }
+
+    // Build the document directly from the loader's validated grants so the
+    // payload sealed carries only what the loader accepted (no prototype
+    // pollution, no extra fields).
+    const doc = { version: 1, grants: loaded.grants };
     const sealed = sealDocument(doc, passphrase);
     const out = typeof args.out === 'string' ? args.out : file;
     requireWritableOut(out);
@@ -833,13 +877,16 @@ async function main() {
     }
     // The operator must see WHAT was sealed: sealing a forged file makes the
     // forgery valid, so the names and the caps are printed.
-    const summary = Object.keys(sealed.grants).sort().map((name) => ({
-      name,
-      signer: sealed.grants[name].signer,
-      destination: sealed.grants[name].destination,
-      maxLamports: sealed.grants[name].maxLamports,
-      expiresAt: sealed.grants[name].expiresAt,
-    }));
+    const summary = loaded.names.map((name) => {
+      const g = loaded.grants[name];
+      return {
+        name,
+        signer: g.signer,
+        destination: g.destination,
+        maxLamports: g.maxLamports,
+        expiresAt: g.expiresAt,
+      };
+    });
     process.stdout.write(JSON.stringify({ ok: true, out, grants: summary }) + '\n');
     return;
   }
