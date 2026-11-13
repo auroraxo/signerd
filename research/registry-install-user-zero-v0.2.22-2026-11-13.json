@@ -1,0 +1,43 @@
+{
+ "tool": "registry-install user-zero (recorded, R1-R5)",
+ "measuredAt": "2026-11-13T20:22:18.530Z",
+ "channel": "npm install signerd (registry, NO git clone)",
+ "packageVersion": "0.2.22",
+ "environment": "empty directory: package.json + npm install signerd",
+ "results": {
+  "R1_install": {
+   "pass": true,
+   "version": "0.2.22",
+   "helpExit": 2
+  },
+  "R2_ordinary_path": {
+   "pass": true,
+   "keystoreMode": "600",
+   "grantExists": true
+  },
+  "R3_overwrite_through_symlink": {
+   "pass": true,
+   "exit": 1,
+   "named": true,
+   "victimIntact": true
+  },
+  "R4_dangling_symlink": {
+   "pass": true,
+   "exit": 1,
+   "named": true,
+   "createdOutside": false
+  },
+  "R5_load_through_symlink": {
+   "pass": true,
+   "readerExit": 2,
+   "loader": "LINK-REFUSED:keystore_symlink",
+   "realFileStillLoads": true
+  }
+ },
+ "verdict": "registry-works-5-of-5",
+ "limits": [
+  "one machine, one account; no on-chain confirmation",
+  "the every-pulse D4/Dry user-zero artifact for this pin is research/user-zero-v0.2.22-2026-11-13.json (git-tag channel); this file records the REGISTRY channel a stranger actually uses",
+  "R3-R5 measure the NEW keystore-symlink fix on the installed package (this is the first pin shipping it); the loader judges at the instant of the read (same TOCTOU window as every other path)"
+ ]
+}
