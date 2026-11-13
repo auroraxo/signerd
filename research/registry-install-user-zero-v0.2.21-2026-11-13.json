@@ -1,0 +1,78 @@
+{
+ "tool": "registry-install-user-zero (recorded, R1-R9)",
+ "measuredAt": "2026-11-13T15:58:57.186Z",
+ "channel": "npm install signerd (registry, NO git clone)",
+ "packageVersion": "0.2.21",
+ "environment": "empty directory: npm init -y && npm install signerd",
+ "results": {
+  "R1_install": {
+   "pass": true,
+   "note": "npm install signerd into an empty app resolved to 0.2.21 (dist-tag latest); signerd --help ran from the installed copy (usage on stderr, exit 2 by the usage contract)."
+  },
+  "R2_keygen": {
+   "pass": true,
+   "note": "keygen wrote the keystore (owner-only); a 0664 passphrase file was refused with the chmod 600 repair line (contract observed live)."
+  },
+  "R3_grant_add": {
+   "pass": true,
+   "note": "grant-add created the grant file at mode 600; future expiry accepted."
+  },
+  "R4_daemon_run": {
+   "pass": true,
+   "note": "missing --ledger refused with usage before any daemon started; the real run bound the socket at 0600 (mode 600)."
+  },
+  "R5_real_signature": {
+   "pass": true,
+   "note": "build-tx + sign produced a 215-byte signed wire (exit 0); ledger 0 -> 365 -> 365 bytes, grew only on the real sign.",
+   "signedBytes": 215
+  },
+  "R6_dry_replay_refused": {
+   "pass": true,
+   "note": "a --dry and a second real sign of the already-spent tx were both refused replay (exit 1 / 1); the ledger grew ONLY on the first real signature (0 -> 365, frozen through dry + replay at 365)"
+  },
+  "R7_ed25519_verification": {
+   "pass": true,
+   "note": "the signed wire verified Ed25519 (numSignatures|signature|message layout, @noble/curves) against the keystore public key (wire 215 bytes, message 150 bytes); a one-byte message tamper failed that same verification."
+  },
+  "R8_policy_refusals_on_the_path": {
+   "pass": true,
+   "note": "a destination the grant does not pin was refused (destination, machine-readable, nothing signed)."
+  },
+  "R9_seal_grants_judges_on_registry_install": {
+   "pass": true,
+   "note": "seal-grants on the installed 0.2.21 package refused all four defect faces with the loader reason and left every file unsealed (the v0.2.21 fix, measured on npm).",
+   "faces": [
+    {
+     "name": "cap-under-floor",
+     "exit": 1,
+     "output": "grant_field_invalid: releases.format",
+     "sealed": false
+    },
+    {
+     "name": "unknown-field",
+     "exit": 1,
+     "output": "grant_unknown_field: releases.maxLamport",
+     "sealed": false
+    },
+    {
+     "name": "reserved-name",
+     "exit": 1,
+     "output": "grant_name_invalid: __proto__",
+     "sealed": false
+    },
+    {
+     "name": "symlink",
+     "exit": 1,
+     "output": "grant_file_symlink: link.json is a symlink",
+     "sealed": false
+    }
+   ]
+  }
+ },
+ "verdict": "registry-works-9-of-9",
+ "limits": [
+  "one machine, one account; placeholder blockhash — nothing confirmed on chain",
+  "the every-pulse D4/Dry user-zero artifact for this pin is research/user-zero-v0.2.21-2026-11-13.json (git-tag channel); this file records the REGISTRY channel a stranger actually uses",
+  "R9 seals defective documents in a temp dir; the loader judges at the instant of the read (same TOCTOU window as every other path)"
+ ]
+}
