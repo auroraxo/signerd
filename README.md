@@ -40,7 +40,7 @@ npm install -g signerd
 The same tree from a release tag:
 
 ```bash
-npm install github:auroraxo/signerd#v0.2.21
+npm install github:auroraxo/signerd#v0.2.22
 ```
 
 You need Node.js and a C compiler (`cc`) once: the daemon builds a small
