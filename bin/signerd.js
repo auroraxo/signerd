@@ -918,6 +918,22 @@ async function main() {
 }
 
 main().catch((err) => {
+  // A keystore path that is a SYMLINK. Measured 2026-11-13 against the
+  // PUBLISHED v0.2.21 tree (tools/measure-keystore-symlink.js): keygen with
+  // --overwrite wrote THROUGH the link and destroyed the file it pointed at;
+  // a DANGLING link made the key document appear outside the directory the
+  // operator named; and the loader and the public-key reader accepted a
+  // link and reported the mode of whatever it landed on. The grant path has
+  // refused a link by name since v0.2.20 (grant_file_symlink); the keystore
+  // path now carries the same rule. The refusal names the repair, like every
+  // other refusal in this CLI.
+  if (err && err.code === 'keystore_symlink') {
+    process.stderr.write(
+      `${err.code}: the keystore path is a symlink\n` +
+      `  fix: remove the link and run again (e.g. rm <the link>), or point --keystore at the intended real file\n` +
+      `   # a link lets a stranger point the keystore at any file on the machine\n`);
+    process.exit(1);
+  }
   // A grant whose expiry is already in the past when it would be WRITTEN.
   // Measured 2026-11-11 on the published v0.2.17 tree: grant-add reported
   // {"ok":true} and wrote the file, and the first request against it came

@@ -23,12 +23,72 @@ function deriveKey(passphrase, salt) {
 }
 
 /**
+ * A symlink at the keystore path is refused by NAME, never followed — the
+ * rule the grant path has carried since v0.2.20 (grant_file_symlink), now
+ * swept onto the keystore. Measured 2026-11-13 against the PUBLISHED v0.2.21
+ * tree (tools/measure-keystore-symlink.js): every write followed a link
+ * (keygen --overwrite through a link destroyed the victim; a DANGLING link
+ * created the secret document outside the directory the operator named),
+ * and the loader and the public-key reader both accepted one, reporting the
+ * mode of whatever the link LANDED on rather than the path in use. A
+ * keystore is the file the daemon signs with: judging its permissions on a
+ * different file than the one named is exactly the swap this family of
+ * rules exists to refuse.
+ */
+function assertNotSymlink(file, reason = 'keystore_symlink') {
+  let st = null;
+  try {
+    st = fs.lstatSync(file);
+  } catch (err) {
+    if (err.code === 'ENOENT') return; // nothing there: no link to refuse
+    throw fail('keystore_unreadable', err.code);
+  }
+  if (st.isSymbolicLink()) throw fail(reason, `${file} is a symlink — the keystore path must be a real file (a link lets a stranger point it at any file on the machine; fix: remove the link and re-run, or point --keystore at the intended path)`);
+}
+
+/**
+ * The keystore write, ATOMICALLY: same-directory temp (O_EXCL, 0600), fsync,
+ * rename, then a best-effort directory fsync — the house convention for every
+ * durable document (src/grantadd.js, src/out-preflight.js, src/journalseal.js).
+ * Measured 2026-11-13 (K7 of the same sweep): the previous in-place
+ * writeFileSync truncated the target BEFORE the content existed, so an
+ * interrupted replacement could leave a 0-byte or torn keystore in place of a
+ * working one. With a rename the operator either keeps the OLD complete
+ * document or gets the NEW complete one; the temp is removed on any failure.
+ */
+function writeKeystoreAtomic(file, text) {
+  const dir = path.dirname(file);
+  const tmp = path.join(dir,
+    `.${path.basename(file)}.tmp-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
+  let fd;
+  try {
+    fd = fs.openSync(tmp, fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL, 0o600);
+    fs.writeFileSync(fd, text);
+    fs.fsyncSync(fd);
+    fs.fchmodSync(fd, 0o600); // mode applies at create, but never trust the umask
+    fs.closeSync(fd);
+    fd = undefined;
+    fs.renameSync(tmp, file);
+  } catch (err) {
+    if (fd !== undefined) { try { fs.closeSync(fd); } catch { /* already closed */ } }
+    try { fs.unlinkSync(tmp); } catch { /* never existed or already removed */ }
+    throw fail('keystore_write_failed', `${file}: ${err && err.code ? err.code : err}`);
+  }
+  // Durability of the NAME, after the rename — best effort (house convention).
+  try {
+    const dfd = fs.openSync(dir, 'r');
+    try { fs.fsyncSync(dfd); } finally { fs.closeSync(dfd); }
+  } catch { /* platform-dependent */ }
+}
+
+/**
  * Create an encrypted keystore file at `file` (mode 0600).
  * Format: { v, publicKey (base58, public), kdf, cipher: {iv, tag}, secret (base64) }
  * The secret key never appears in plaintext on disk.
  */
 function createKeystore({ file, passphrase, overwrite = false }) {
   if (typeof file !== 'string' || file.length === 0) throw fail('keystore_path_required');
+  assertNotSymlink(file);
   if (fs.existsSync(file) && !overwrite) throw fail('keystore_exists');
   return writeKeystore({ file, passphrase, secretKey: Keypair.generate().secretKey, overwrite: true });
 }
@@ -43,6 +103,7 @@ function createKeystore({ file, passphrase, overwrite = false }) {
  */
 function writeKeystore({ file, passphrase, secretKey, overwrite = false }) {
   if (typeof file !== 'string' || file.length === 0) throw fail('keystore_path_required');
+  assertNotSymlink(file);
   if (fs.existsSync(file) && !overwrite) throw fail('keystore_exists');
   const secret = Buffer.from(secretKey);
   if (secret.length !== 64) { secret.fill(0); throw fail('secret_key_invalid'); }
@@ -103,8 +164,7 @@ function writeKeystore({ file, passphrase, secretKey, overwrite = false }) {
   // here. Writing a keystore into a directory we did not create stays
   // possible on purpose: the loader is the judge of that state, and the
   // review #6 tests pin exactly that separation.
-  fs.writeFileSync(file, JSON.stringify(doc, null, 2) + '\n', { mode: 0o600 });
-  fs.chmodSync(file, 0o600); // writeFileSync's mode applies on create only
+  writeKeystoreAtomic(path.resolve(file), JSON.stringify(doc, null, 2) + '\n');
   key.fill(0);
   return { file, publicKey: doc.publicKey };
 }
@@ -152,6 +212,7 @@ function parseSecretFile(raw) {
 function importKeystore({ file, passphrase, from, overwrite = false }) {
   if (typeof from !== 'string' || from.length === 0) throw fail('import_source_required');
   if (path.resolve(from) === path.resolve(file)) throw fail('import_source_is_target');
+  assertNotSymlink(file);
   let raw;
   try {
     raw = fs.readFileSync(from);
@@ -179,6 +240,7 @@ function importKeystore({ file, passphrase, from, overwrite = false }) {
  */
 function loadKeystore({ file, passphrase }) {
   if (typeof file !== 'string' || file.length === 0) throw fail('keystore_path_required');
+  assertNotSymlink(file);
   let raw;
   try {
     raw = fs.readFileSync(file);
@@ -274,6 +336,7 @@ function loadKeystore({ file, passphrase }) {
  */
 function readKeystorePublicKey({ file }) {
   const resolved = path.resolve(file);
+  assertNotSymlink(resolved);
   let raw;
   try {
     raw = fs.readFileSync(resolved, 'utf8');
