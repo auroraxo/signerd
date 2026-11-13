@@ -30,6 +30,13 @@ With signerd:
 npm install signerd
 ```
 
+That installs it into the current project. The examples below call `signerd`
+directly, so either prefix them with `npx`, or install it globally:
+
+```bash
+npm install -g signerd
+```
+
 The same tree from a release tag:
 
 ```bash
@@ -121,7 +128,8 @@ if (answer.ok) {
 Already have a key? `signerd import` encrypts an existing `id.json` and leaves
 the original untouched. To replace a keystore on purpose, add `--overwrite`
 (the old key is gone afterwards). The complete walkthrough, including signing
-and the refusal ladder, is in [docs/GUIDE.md](docs/GUIDE.md).
+and the refusal ladder, is in
+[docs/GUIDE.md](https://github.com/auroraxo/signerd/blob/main/docs/GUIDE.md).
 
 ### Sealed mode (optional)
 
@@ -199,14 +207,13 @@ package had 269 downloads last week. Verdict:
 
 ## Learn more
 
-- [docs/GUIDE.md](docs/GUIDE.md): the full walkthrough
-- [docs/README-full-history-2026-11-13.md](docs/README-full-history-2026-11-13.md):
-  the complete engineering record: reviews, measurements, defects found and
-  fixed
-- [research/](research/): raw measurement artifacts behind every number
+- [docs/GUIDE.md](https://github.com/auroraxo/signerd/blob/main/docs/GUIDE.md): the full walkthrough
+- [Engineering record](https://github.com/auroraxo/signerd/blob/main/docs/README-full-history-2026-11-13.md):
+  reviews, measurements, defects found and fixed
+- [research/](https://github.com/auroraxo/signerd/tree/main/research): raw measurement artifacts behind every number
 
 Issues and questions are welcome.
 
 ## License
 
-MIT, see [LICENSE](LICENSE).
+MIT, see [LICENSE](https://github.com/auroraxo/signerd/blob/main/LICENSE).
