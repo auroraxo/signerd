@@ -333,6 +333,31 @@ async function main() {
     const file = requireArg(args, 'keystore');
     const from = requireArg(args, 'from');
     const passphrase = readPassphrase(args);
+    // The SOURCE file is an OPERATOR input like every other one, and the
+    // 2026-11-14 sweep of --passphrase-file / --tx / --body never reached
+    // it. MEASURED on the published v0.2.23 tree: a missing, a directory
+    // and an unreadable source all came back as a bare errno
+    // ("import_source_unreadable: ENOENT / EISDIR / EACCES") with exit 1
+    // and no repair - the reason named nothing the operator can act on
+    // (was the file missing, a directory, or forbidden?), and exit 1 is
+    // reserved for "the daemon or the policy refused" while a mistyped path
+    // is a USAGE refusal (exit 2). Same rule as the three swept families:
+    // the face names itself, the repair is spelled out, exit 2.
+    // A link to a regular file is read THROUGH - the link is not the
+    // defect - so this path follows the final symlink.
+    const sourceProbe = readOperatorFile(from, { follow: true });
+    if (!sourceProbe.ok) {
+      operatorFileRefusal(
+        `import_source_${sourceProbe.reason}`, from, sourceProbe,
+        sourceProbe.reason === 'missing'
+          ? `point --from at the plaintext key file you want to adopt (e.g. ~/.config/solana/id.json)`
+          : sourceProbe.reason === 'not_a_file'
+            ? '--from must be a regular file holding the plaintext key (id.json, base58 or 64 raw bytes)'
+            : `--from exists but cannot be read — check the mode (chmod 600 ${from})`);
+    }
+    // The preflight read the plaintext key into memory; wipe that copy
+    // (the library wipes its own). A secret must not linger.
+    sourceProbe.bytes.fill(0);
     try {
       const out = importKeystore({ file, passphrase, from, overwrite: args.overwrite === true });
       process.stdout.write(JSON.stringify(out) + '\n');
@@ -352,6 +377,15 @@ async function main() {
           `  fix: signerd import --keystore <other-file> --from ${from} ...   # adopt into a DIFFERENT keystore, or\n` +
           `  fix: add --overwrite   # replace ${file} with the imported key (the old key is gone)\n`);
         process.exit(1);
+      }
+      // The source changed between the preflight and the read (a rare
+      // race, but a real one): the library's errno detail must not reach
+      // the operator either. Name the face, keep the usage exit code.
+      if (err && err.code === 'import_source_unreadable') {
+        process.stderr.write(
+          `import_source_unreadable: cannot read ${from}\n` +
+          `  fix: --from must be a regular file that exists and is readable (chmod 600 ${from})\n`);
+        process.exit(2);
       }
       throw err;
     }

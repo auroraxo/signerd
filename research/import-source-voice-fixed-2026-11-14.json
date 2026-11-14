@@ -1,0 +1,36 @@
+{
+  "measuredAt": "2026-11-14T20:29:54.714Z",
+  "cli": "signerd.js",
+  "faces": 3,
+  "verdict": "refusals-present",
+  "violations": 0,
+  "rows": [
+    {
+      "id": "import_source_missing",
+      "firstLine": "import_source_missing: cannot read <tmp> (missing)",
+      "named": true,
+      "hasFix": true,
+      "exit": 2,
+      "rawErrno": false,
+      "ok": true
+    },
+    {
+      "id": "import_source_not_a_file",
+      "firstLine": "import_source_not_a_file: cannot read <tmp> (not_a_file)",
+      "named": true,
+      "hasFix": true,
+      "exit": 2,
+      "rawErrno": false,
+      "ok": true
+    },
+    {
+      "id": "import_source_unreadable",
+      "firstLine": "import_source_unreadable: cannot read <tmp> (unreadable)",
+      "named": true,
+      "hasFix": true,
+      "exit": 2,
+      "rawErrno": false,
+      "ok": true
+    }
+  ]
+}

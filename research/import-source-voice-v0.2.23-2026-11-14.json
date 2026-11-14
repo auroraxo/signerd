@@ -1,0 +1,36 @@
+{
+  "measuredAt": "2026-11-14T20:29:53.861Z",
+  "cli": "signerd.js",
+  "faces": 3,
+  "verdict": "violations-present",
+  "violations": 3,
+  "rows": [
+    {
+      "id": "import_source_missing",
+      "firstLine": "import_source_unreadable: ENOENT",
+      "named": false,
+      "hasFix": false,
+      "exit": 1,
+      "rawErrno": true,
+      "ok": false
+    },
+    {
+      "id": "import_source_not_a_file",
+      "firstLine": "import_source_unreadable: EISDIR",
+      "named": false,
+      "hasFix": false,
+      "exit": 1,
+      "rawErrno": true,
+      "ok": false
+    },
+    {
+      "id": "import_source_unreadable",
+      "firstLine": "import_source_unreadable: EACCES",
+      "named": true,
+      "hasFix": false,
+      "exit": 1,
+      "rawErrno": true,
+      "ok": false
+    }
+  ]
+}
