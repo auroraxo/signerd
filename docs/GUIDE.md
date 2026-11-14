@@ -386,3 +386,57 @@ file content it is handed (sealing a forged file makes the forgery valid; it pri
 it sealed for that reason), and the loader judges the file at the instant of the read,
 same TOCTOU window as every other path here.
 
+
+**2026-11-14: an input file the CLI cannot read is refused by name, not by errno.**
+
+The three OPERATOR-INPUT read paths — `--passphrase-file` (and its three seal siblings),
+`--tx` and `--body` — did not honour the exit-code contract above. A path that could not
+be read escaped the CLI as a raw Node errno:
+
+```
+signerd run --passphrase-file <missing>   -> ENOENT: no such file or directory, lstat '...'   exit 1
+signerd run --passphrase-file <mode 000>  -> EACCES: permission denied, open '...'            exit 1
+signerd sign --tx <a directory>           -> EISDIR: illegal operation on a directory, read  exit 1
+signerd sign --tx <mode 000>              -> EACCES: permission denied, open '...'            exit 1
+signerd sign-message --body <missing|a directory|mode 000> -> ENOENT / EISDIR / EACCES        exit 1
+signerd run --passphrase-file <a directory> -> "passphrase-file must be a regular file"       exit 2
+                                                 (right code, but NO machine-readable reason
+                                                  and NO repair line)
+```
+
+Measured on the PUBLISHED v0.2.22 tree (`npm pack signerd@0.2.22`): 8 of the 9 faces
+below violated, `research/input-voice-v0.2.22-2026-11-14.json` records each one. Three
+things were wrong with most of them: a raw errno is not a **reason** the operator can act
+on; the **exit code lied** (1 is reserved for "the daemon or the policy refused", while a
+mistyped path is a usage refusal); and the **house rule** — every refusal names a repair —
+did not hold. The ninth face (the passphrase directory above) already had exit 2 but still
+had no code and no repair, so it was fixed into the same voice rather than left as a
+one-off message. The `--tx` *missing* case had already been given
+the product's voice on 2026-11-05 (`tx_missing` + a `build-tx` repair); the rest of the
+class was simply never swept.
+
+`src/input-file.js` is now the one place that classifies a failed read into exactly three
+reasons — `missing`, `not_a_file`, `unreadable` — so the same failure always gets the same
+name, and each caller supplies the repair that fits its input:
+
+| input | refusal | repair it names |
+|---|---|---|
+| `--passphrase-file` | `passphrase_file_missing` / `passphrase_file_not_a_file` / `passphrase_file_unreadable` | create it owner-only, or point the flag at a regular file |
+| `--tx` | `tx_missing` (unchanged since 2026-11-05) / `tx_not_a_file` / `tx_unreadable` | `build-tx` writes the unsigned bytes; the file must be readable |
+| `--body` | `body_missing` / `body_not_a_file` / `body_unreadable` | point `--body` at a readable JSON file |
+
+All of them exit **2** (a usage refusal — no signature was made, no budget was charged,
+the journal is untouched). Two rules are deliberately unchanged: the passphrase path keeps
+its R6-6 ordering (type, mode, owner and directory judged **before** the content is read),
+and `--tx` / `--body` still read **through** a symlink to a regular file — the link is not
+the defect, and refusing it would break a documented flow.
+
+Pinned by `test/input-voice.test.js` (11 cases: 8 red on the pre-fix tree, 3 guards green
+on both), the two-tree measurement `tools/measure-input-voice.js` →
+`research/input-voice-v0.2.22-2026-11-14.json` (verdict `violations-present`, 8 of 9 faces
+violating) and `research/input-voice-fixed-2026-11-14.json` (verdict `refusals-present`, 0
+of 9), and `tools/mutation-ladder-input-voice.sh` (8/8 mutations caught, control green,
+tree byte-identical). Limits: the refusal names the *class* of the failure, not the errno
+(an `EACCES` and an `EIO` are both `unreadable`); the classification happens at the instant
+of the read, so a path that changes right after it is still the TOCTOU window every other
+path here has.

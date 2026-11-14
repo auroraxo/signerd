@@ -1,0 +1,90 @@
+{
+  "measuredAt": "2026-11-14T06:37:56.631Z",
+  "cli": "/tmp/signerd-prefix-voice/pkg/bin/signerd.js",
+  "verdict": "violations-present",
+  "faces": 9,
+  "violations": 8,
+  "rows": [
+    {
+      "id": "passphrase_file_missing",
+      "exit": 1,
+      "named": false,
+      "hasFix": false,
+      "rawErrno": true,
+      "ok": false,
+      "firstLine": "ENOENT: no such file or directory, lstat '<tmp>/no-such.pass'"
+    },
+    {
+      "id": "passphrase_file_not_a_file",
+      "exit": 2,
+      "named": false,
+      "hasFix": false,
+      "rawErrno": false,
+      "ok": false,
+      "firstLine": "passphrase-file must be a regular file"
+    },
+    {
+      "id": "tx_missing",
+      "exit": 2,
+      "named": true,
+      "hasFix": true,
+      "rawErrno": false,
+      "ok": true,
+      "firstLine": "tx_missing: no transaction file at <tmp>/no-tx.bin"
+    },
+    {
+      "id": "tx_not_a_file",
+      "exit": 1,
+      "named": false,
+      "hasFix": false,
+      "rawErrno": true,
+      "ok": false,
+      "firstLine": "EISDIR: illegal operation on a directory, read"
+    },
+    {
+      "id": "body_missing",
+      "exit": 1,
+      "named": false,
+      "hasFix": false,
+      "rawErrno": true,
+      "ok": false,
+      "firstLine": "ENOENT: no such file or directory, open '<tmp>/no-such.json'"
+    },
+    {
+      "id": "body_not_a_file",
+      "exit": 1,
+      "named": false,
+      "hasFix": false,
+      "rawErrno": true,
+      "ok": false,
+      "firstLine": "EISDIR: illegal operation on a directory, read"
+    },
+    {
+      "id": "passphrase_file_unreadable",
+      "exit": 1,
+      "named": false,
+      "hasFix": false,
+      "rawErrno": true,
+      "ok": false,
+      "firstLine": "EACCES: permission denied, open '<tmp>/locked.pass'"
+    },
+    {
+      "id": "tx_unreadable",
+      "exit": 1,
+      "named": false,
+      "hasFix": false,
+      "rawErrno": true,
+      "ok": false,
+      "firstLine": "EACCES: permission denied, open '<tmp>/locked.bin'"
+    },
+    {
+      "id": "body_unreadable",
+      "exit": 1,
+      "named": false,
+      "hasFix": false,
+      "rawErrno": true,
+      "ok": false,
+      "firstLine": "EACCES: permission denied, open '<tmp>/locked.json'"
+    }
+  ]
+}

@@ -10,6 +10,7 @@ const { writeStderrSync } = require('../src/stdout');
 // Strip the leading `${code}: ` from a `fail()` message so a refusal prints
 // its code EXACTLY ONCE (measured doubled on 2026-11-07, see src/lease.js).
 const { detailOf } = require('../src/lease');
+const { readOperatorFile, classifyReadError } = require('../src/input-file');
 
 /**
  * Refuse an unwritable --out BEFORE anything is read, requested or signed.
@@ -28,6 +29,37 @@ function requireWritableOut(outPath) {
   const fix = outPreflightFix(check);
   process.stderr.write(`${check.code}: ${check.message}\n${fix}\n`);
   process.exit(2);
+}
+
+/**
+ * Refuse an operator input file that cannot be read, with the product's
+ * voice: a named reason, the value, a fix, exit 2.
+ *
+ * MEASURED 2026-11-14 against the PUBLISHED v0.2.22 tree: a typo'd or
+ * unreadable passphrase/tx/body path escaped the CLI as a raw Node errno
+ * ("ENOENT: no such file or directory, lstat '...'", "EACCES: permission
+ * denied, open '...'", "EISDIR: illegal operation on a directory, read")
+ * with exit 1. Exit 1 is reserved for "the daemon or the policy refused";
+ * a path the operator mistyped is a USAGE refusal. The reason itself is
+ * shared by every caller (src/input-file.js) so the same failure always
+ * gets the same name.
+ */
+function operatorFileRefusal(code, pathValue, probe, fix) {
+  process.stderr.write(
+    `${code}: cannot read ${pathValue} (${probe.reason})\n` +
+    `  fix: ${fix}\n`);
+  process.exit(2);
+}
+
+/** The passphrase family: --passphrase-file and its three seal siblings. */
+function passphraseReadRefusal(flag, file, probe) {
+  const code = `${flag.replace(/-/g, '_')}_${probe.reason}`;
+  const fix = probe.reason === 'missing'
+    ? `point --${flag} at an existing owner-only file (mode 0600); create it with e.g. printf 'your passphrase\\n' > ${file} && chmod 600 ${file}`
+    : probe.reason === 'not_a_file'
+      ? `--${flag} must be a regular file, not a directory or a link`
+      : `--${flag} exists but cannot be read — check the mode (chmod 600 ${file}) and that you are the owner`;
+  operatorFileRefusal(code, file, probe, fix);
 }
 
 const USAGE = `signerd — scoped signing daemon for Solana (early prototype)
@@ -150,10 +182,23 @@ function readPassphrase(args, flag = 'passphrase-file') {
     process.exit(2);
   }
   const file = requireArg(args, flag);
-  const lstat = fs.lstatSync(file); // a symlink at this path is refused (ELOOP)
+  // MEASURED 2026-11-14 (published v0.2.22): a passphrase path that does not
+  // exist (the usual typo) or cannot be opened crashed out of the CLI as a
+  // bare `ENOENT: ... lstat '...'` / `EACCES: ... open '...'` with exit 1.
+  // A path the operator mistyped is a USAGE refusal - it gets the same voice
+  // as every other refusal: named reason, the value, a fix, exit 2.
+  // Only the two SYSCALLS are wrapped; the R6-6 ordering below (type, mode,
+  // owner, directory judged BEFORE the content is read) is untouched.
+  let lstat;
+  try {
+    lstat = fs.lstatSync(file); // a symlink at this path is refused (ELOOP)
+  } catch (err) {
+    passphraseReadRefusal(flag, file, { reason: classifyReadError(err), detail: err.code });
+  }
   if (!lstat.isFile()) {
-    process.stderr.write(`${flag} must be a regular file\n`);
-    process.exit(2);
+    // A directory (or a link) at the passphrase path: the same named voice
+    // as the missing/unreadable faces - one class, one naming rule.
+    passphraseReadRefusal(flag, file, { reason: 'not_a_file', detail: 'not a regular file' });
   }
   const mode = lstat.mode & 0o777;
   if ((mode & 0o077) !== 0) {
@@ -186,7 +231,16 @@ function readPassphrase(args, flag = 'passphrase-file') {
     process.stderr.write(`${flag} directory must be owned by the operator (uid ${dirStat.uid})\n`);
     process.exit(2);
   }
-  return fs.readFileSync(file, 'utf8').replace(/\r?\n$/, '');
+  let text;
+  try {
+    text = fs.readFileSync(file, 'utf8');
+  } catch (err) {
+    // mode 000 passes the mode check (no group/other bits) and then fails
+    // HERE on the read - measured 2026-11-14 as a bare `EACCES: ...
+    // open '...'` with exit 1. Same voice as every other input refusal.
+    passphraseReadRefusal(flag, file, { reason: classifyReadError(err), detail: err.code });
+  }
+  return text.replace(/\r?\n$/, '');
 }
 
 async function main() {
@@ -369,10 +423,16 @@ async function main() {
     // journal, the budget and the replay set untouched (P1/P2).
     requireWritableOut(args.out);
     let wire;
-    try {
-      wire = fs.readFileSync(txPath);
-    } catch (err) {
-      if (err && err.code === 'ENOENT') {
+    // The --tx file is an OPERATOR input: read it through the same named
+    // refusal as every other input (MEASURED 2026-11-14 on the published
+    // v0.2.22 tree: a --tx path that was a directory or unreadable escaped
+    // as a bare `EISDIR: ...` / `EACCES: ...` with exit 1; only the
+    // MISSING case had been given the product's voice on 2026-11-05).
+    // A link to a regular file is still read THROUGH - the link is not the
+    // defect - so this path follows the final symlink.
+    const txProbe = readOperatorFile(txPath, { follow: true });
+    if (!txProbe.ok) {
+      if (txProbe.reason === 'missing') {
         // Measured 2026-11-05: the quickstart's `sign --tx tx.bin` step died
         // on a bare errno — tx.bin is never created by the documented steps.
         // Name the repair, same rule as the passphrase and grant-file refusals.
@@ -382,8 +442,13 @@ async function main() {
           `--lamports <n> --out ${txPath}  (public key only, no passphrase)\n`);
         process.exit(2);
       }
-      throw err;
+      operatorFileRefusal(
+        `tx_${txProbe.reason}`, txPath, txProbe,
+        txProbe.reason === 'not_a_file'
+          ? '--tx must be a regular file holding the unsigned transaction bytes'
+          : `--tx exists but cannot be read — check the mode (chmod 600 ${txPath})`);
     }
+    wire = txProbe.bytes;
     const response = await request({ socketPath, grant, wire, dry: args.dry === true ? true : undefined });
     if (response.ok && !response.dry && typeof args.out === 'string') {
       // DELIVERY. The daemon has already signed: the budget is spent and the
@@ -672,7 +737,22 @@ async function main() {
     // Preflight BEFORE the socket round trip (P3): an unwritable --out must
     // not sign, journal, or charge rolling-window budget.
     requireWritableOut(args.out);
-    const bodyText = fs.readFileSync(requireArg(args, 'body'), 'utf8');
+    const bodyPath = requireArg(args, 'body');
+    // The --body file is an OPERATOR input too: the same named refusal
+    // (MEASURED 2026-11-14 on the published v0.2.22 tree: a missing, a
+    // directory or an unreadable body escaped as a bare ENOENT / EISDIR /
+    // EACCES with exit 1). A link to a regular file is read THROUGH.
+    const bodyProbe = readOperatorFile(bodyPath, { follow: true });
+    if (!bodyProbe.ok) {
+      operatorFileRefusal(
+        `body_${bodyProbe.reason}`, bodyPath, bodyProbe,
+        bodyProbe.reason === 'missing'
+          ? `point --body at an existing JSON file holding the receipt body`
+          : bodyProbe.reason === 'not_a_file'
+            ? '--body must be a regular file holding the receipt body as JSON text'
+            : `--body exists but cannot be read — check the mode (chmod 600 ${bodyPath})`);
+    }
+    const bodyText = bodyProbe.bytes.toString('utf8');
     // Shape check BEFORE the round trip: the body must be a JSON object (a
     // bare number or string would only fail at the policy layer).
     try {

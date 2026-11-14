@@ -1,0 +1,90 @@
+{
+  "measuredAt": "2026-11-14T06:42:31.420Z",
+  "cli": "./bin/signerd.js",
+  "verdict": "refusals-present",
+  "faces": 9,
+  "violations": 0,
+  "rows": [
+    {
+      "id": "passphrase_file_missing",
+      "exit": 2,
+      "named": true,
+      "hasFix": true,
+      "rawErrno": false,
+      "ok": true,
+      "firstLine": "passphrase_file_missing: cannot read <tmp>/no-such.pass (missing)"
+    },
+    {
+      "id": "passphrase_file_not_a_file",
+      "exit": 2,
+      "named": true,
+      "hasFix": true,
+      "rawErrno": false,
+      "ok": true,
+      "firstLine": "passphrase_file_not_a_file: cannot read <tmp>/a-directory (not_a_file)"
+    },
+    {
+      "id": "tx_missing",
+      "exit": 2,
+      "named": true,
+      "hasFix": true,
+      "rawErrno": false,
+      "ok": true,
+      "firstLine": "tx_missing: no transaction file at <tmp>/no-tx.bin"
+    },
+    {
+      "id": "tx_not_a_file",
+      "exit": 2,
+      "named": true,
+      "hasFix": true,
+      "rawErrno": false,
+      "ok": true,
+      "firstLine": "tx_not_a_file: cannot read <tmp>/a-directory (not_a_file)"
+    },
+    {
+      "id": "body_missing",
+      "exit": 2,
+      "named": true,
+      "hasFix": true,
+      "rawErrno": false,
+      "ok": true,
+      "firstLine": "body_missing: cannot read <tmp>/no-such.json (missing)"
+    },
+    {
+      "id": "body_not_a_file",
+      "exit": 2,
+      "named": true,
+      "hasFix": true,
+      "rawErrno": false,
+      "ok": true,
+      "firstLine": "body_not_a_file: cannot read <tmp>/a-directory (not_a_file)"
+    },
+    {
+      "id": "passphrase_file_unreadable",
+      "exit": 2,
+      "named": true,
+      "hasFix": true,
+      "rawErrno": false,
+      "ok": true,
+      "firstLine": "passphrase_file_unreadable: cannot read <tmp>/locked.pass (unreadable)"
+    },
+    {
+      "id": "tx_unreadable",
+      "exit": 2,
+      "named": true,
+      "hasFix": true,
+      "rawErrno": false,
+      "ok": true,
+      "firstLine": "tx_unreadable: cannot read <tmp>/locked.bin (unreadable)"
+    },
+    {
+      "id": "body_unreadable",
+      "exit": 2,
+      "named": true,
+      "hasFix": true,
+      "rawErrno": false,
+      "ok": true,
+      "firstLine": "body_unreadable: cannot read <tmp>/locked.json (unreadable)"
+    }
+  ]
+}
