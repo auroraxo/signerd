@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 'use strict';
-// REGISTRY-INSTALL user-zero for the v0.2.22 pin: npm install signerd from an
+// REGISTRY-INSTALL user-zero for the CURRENT pin: npm install signerd from an
 // EMPTY directory (no git clone — the channel a stranger actually uses), then
-// the v0.2.22 keystore symlink fix measured on the INSTALLED copy (R10-R12),
-// plus the ordinary path (R1-R2) as false-positive guards.
+// the shipped fixes measured on the INSTALLED copy, plus the ordinary path
+// (R1-R2) as false-positive guards.
 //
-//   R1  install resolves to 0.2.22 (dist-tag latest) and the CLI runs;
+//   R1  install resolves to the README PIN (dist-tag latest) and the CLI runs;
 //   R2  keygen -> grant-add -> sign end to end on the installed copy
 //       (the happy path is unchanged by the fix);
 //   R3  keygen --overwrite through a symlink: refused keystore_symlink,
@@ -13,7 +13,18 @@
 //   R4  keygen onto a DANGLING symlink: refused, nothing created outside
 //       the named directory (was: key document created through the link);
 //   R5  loadKeystore through a symlink: refused (was: accepted, mode judged
-//       on whatever the link landed on).
+//       on whatever the link landed on);
+//   R6  an operator INPUT that cannot be read is refused by NAME with a
+//       repair and exit 2 on the INSTALLED copy — the v0.2.23 fix. The
+//       published v0.2.22 tarball answered a mistyped passphrase path with a
+//       bare `ENOENT: no such file or directory, lstat '...'` and exit 1
+//       (research/input-voice-v0.2.22-2026-11-14.json).
+//
+// THE PIN IS READ FROM THE README, NEVER FROZEN (measured 2026-11-14): the
+// first run after this publish failed R1 while the registry served the NEW
+// version correctly — the harness was asserting '0.2.22' about itself, not
+// measuring the product. Same class as the frozen measure-user-zero-d4-dry.js
+// default fixed 2026-11-10.
 //
 // NO HOST PATHS: basenames and byte counts only.
 
@@ -28,6 +39,21 @@ function run(cmd, args, opts = {}) {
   const r = spawnSync(cmd, args, { encoding: 'utf8', timeout: 120000, ...opts });
   return { status: r.status, stdout: (r.stdout || '').slice(0, 4000), stderr: (r.stderr || '').slice(0, 4000) };
 }
+
+// THE PIN COMES FROM THE README, NOT FROM A FROZEN STRING (2026-11-14).
+function pinnedVersion() {
+  const readme = fs.readFileSync(path.join(__dirname, '..', 'README.md'), 'utf8');
+  const tags = [...new Set((readme.match(/github:auroraxo\/signerd#(v\d+\.\d+\.\d+)/g) || [])
+    .map((t) => t.split('#')[1]))];
+  if (tags.length !== 1) {
+    console.error(JSON.stringify({ verdict: 'HARNESS-FAIL',
+      reason: 'README pin is not exactly one tag: ' + (tags.join(', ') || 'none') }));
+    process.exit(3);
+  }
+  return tags[0].replace(/^v/, '');
+}
+
+const PIN = pinnedVersion();
 
 const app = fs.mkdtempSync(path.join(os.tmpdir(), 'signerd-registry-uz-'));
 const cfg = path.join(app, '.config', 'signerd');
@@ -49,8 +75,9 @@ step('R1_install', () => {
   const manifest = JSON.parse(fs.readFileSync(path.join(app, 'node_modules', 'signerd', 'package.json'), 'utf8'));
   const h = run(bin, ['--help'], { cwd: app });
   return {
-    pass: manifest.version === '0.2.22' && (h.status === 2 || h.status === 0),
+    pass: manifest.version === PIN && (h.status === 2 || h.status === 0),
     version: manifest.version,
+    expected: PIN,
     helpExit: h.status,
   };
 });
@@ -109,22 +136,47 @@ step('R5_load_through_symlink', () => {
   };
 });
 
+step('R6_unreadable_input_refused_by_name', () => {
+  // The v0.2.23 fix on the channel a stranger actually uses. On the published
+  // v0.2.22 tarball the first face answered with a bare errno and exit 1.
+  const missing = path.join(app, 'no-such.pass');
+  const r = run(bin, ['run', '--keystore', ks, '--passphrase-file', missing,
+    '--grants', grants, '--ledger', ledger, '--socket', socket], { cwd: app });
+  const named = /^passphrase_file_missing:/m.test(r.stderr);
+  const hasFix = /fix:/.test(r.stderr);
+  const noRawErrno = !/^ENOENT:/m.test(r.stderr) && !/no such file or directory/.test(r.stderr);
+  const bodyMissing = path.join(app, 'no-such-body.json');
+  const b = run(bin, ['sign-message', '--socket', socket, '--grant', 'ops', '--body', bodyMissing], { cwd: app });
+  const bodyNamed = /^body_missing:/m.test(b.stderr);
+  return {
+    pass: r.status === 2 && named && hasFix && noRawErrno && b.status === 2 && bodyNamed,
+    passphraseExit: r.status,
+    passphraseNamed: named,
+    passphraseHasFix: hasFix,
+    passphraseNoRawErrno: noRawErrno,
+    bodyExit: b.status,
+    bodyNamed,
+  };
+});
+
 const failures = Object.entries(results).filter(([, v]) => v.pass === false);
 const artifact = {
-  tool: 'registry-install user-zero (recorded, R1-R5)',
+  tool: 'registry-install user-zero (recorded, R1-R6)',
   measuredAt: new Date().toISOString(),
   channel: 'npm install signerd (registry, NO git clone)',
-  packageVersion: '0.2.22',
+  packageVersion: PIN,
   environment: 'empty directory: package.json + npm install signerd',
   results,
-  verdict: failures.length === 0 ? 'registry-works-5-of-5' : `registry-fails-${failures.length}`,
+  verdict: failures.length === 0 ? 'registry-works-6-of-6' : `registry-fails-${failures.length}`,
   limits: [
     'one machine, one account; no on-chain confirmation',
-    'the every-pulse D4/Dry user-zero artifact for this pin is research/user-zero-v0.2.22-2026-11-13.json (git-tag channel); this file records the REGISTRY channel a stranger actually uses',
-    'R3-R5 measure the NEW keystore-symlink fix on the installed package (this is the first pin shipping it); the loader judges at the instant of the read (same TOCTOU window as every other path)',
+    `the every-pulse D4/Dry user-zero artifact for this pin is research/user-zero-v${PIN}-2026-11-14.json (git-tag channel); this file records the REGISTRY channel a stranger actually uses`,
+    'R3-R5 measure the keystore-symlink fix on the installed package; the loader judges at the instant of the read (same TOCTOU window as every other path)',
+    'R6 measures the operator-input refusal voice on the installed package; the refusal names the CLASS of the failure, not the errno (EACCES and EIO both read unreadable)',
+    'the pin is read from the README, never frozen: a frozen version string made the harness report the PRODUCT as broken right after a publish (measured 2026-11-14)',
   ],
 };
-const out = path.join(__dirname, '..', 'research', 'registry-install-user-zero-v0.2.22-2026-11-13.json');
+const out = path.join(__dirname, '..', 'research', `registry-install-user-zero-v${PIN}-2026-11-14.json`);
 fs.writeFileSync(out, JSON.stringify(artifact, null, 1) + '\n');
 console.log(JSON.stringify({ verdict: artifact.verdict, failures: failures.map(([k]) => k) }));
 process.exit(failures.length === 0 ? 0 : 1);

@@ -1,0 +1,55 @@
+{
+ "tool": "registry-install user-zero (recorded, R1-R6)",
+ "measuredAt": "2026-11-14T07:12:22.975Z",
+ "channel": "npm install signerd (registry, NO git clone)",
+ "packageVersion": "0.2.23",
+ "environment": "empty directory: package.json + npm install signerd",
+ "results": {
+  "R1_install": {
+   "pass": true,
+   "version": "0.2.23",
+   "expected": "0.2.23",
+   "helpExit": 2
+  },
+  "R2_ordinary_path": {
+   "pass": true,
+   "keystoreMode": "600",
+   "grantExists": true
+  },
+  "R3_overwrite_through_symlink": {
+   "pass": true,
+   "exit": 1,
+   "named": true,
+   "victimIntact": true
+  },
+  "R4_dangling_symlink": {
+   "pass": true,
+   "exit": 1,
+   "named": true,
+   "createdOutside": false
+  },
+  "R5_load_through_symlink": {
+   "pass": true,
+   "readerExit": 2,
+   "loader": "LINK-REFUSED:keystore_symlink",
+   "realFileStillLoads": true
+  },
+  "R6_unreadable_input_refused_by_name": {
+   "pass": true,
+   "passphraseExit": 2,
+   "passphraseNamed": true,
+   "passphraseHasFix": true,
+   "passphraseNoRawErrno": true,
+   "bodyExit": 2,
+   "bodyNamed": true
+  }
+ },
+ "verdict": "registry-works-6-of-6",
+ "limits": [
+  "one machine, one account; no on-chain confirmation",
+  "the every-pulse D4/Dry user-zero artifact for this pin is research/user-zero-v0.2.23-2026-11-14.json (git-tag channel); this file records the REGISTRY channel a stranger actually uses",
+  "R3-R5 measure the keystore-symlink fix on the installed package; the loader judges at the instant of the read (same TOCTOU window as every other path)",
+  "R6 measures the operator-input refusal voice on the installed package; the refusal names the CLASS of the failure, not the errno (EACCES and EIO both read unreadable)",
+  "the pin is read from the README, never frozen: a frozen version string made the harness report the PRODUCT as broken right after a publish (measured 2026-11-14)"
+ ]
+}
