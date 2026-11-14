@@ -1,6 +1,6 @@
 {
  "tool": "registry-install user-zero (recorded, R1-R5)",
- "measuredAt": "2026-11-13T20:22:18.530Z",
+ "measuredAt": "2026-11-14T06:50:32.377Z",
  "channel": "npm install signerd (registry, NO git clone)",
  "packageVersion": "0.2.22",
  "environment": "empty directory: package.json + npm install signerd",
