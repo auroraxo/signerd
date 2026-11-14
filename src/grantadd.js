@@ -1,4 +1,28 @@
 'use strict';
+
+const { canonicalReceiptBytes } = require('./receipt-identity');
+const { MAX_MESSAGE_BYTES } = require('./policy-message');
+
+/**
+ * The cap the one-flag message bootstrap writes (measured 2026-11-14).
+ *
+ * BEFORE this existed the bootstrap hardcoded '700' — the README example's
+ * cap — no matter what body it was bootstrapping from (bin/signerd.js,
+ * research/bootstrap-cap-lag-2026-11-14.json): a body with two claims at the
+ * 256-char ceiling plus a 256-char note is 937 canonical bytes, the file was
+ * written with maxBytes 700, and the FIRST sign of that body was refused
+ * `message_too_large`. The scope was created FOR that body and could not
+ * sign it — the same class as the expired-expiry and uncanonical-pubkey
+ * defects: a creation path writing a value the product's own judge refuses.
+ *
+ * The rule: the cap covers the body it was bootstrapped from, and never
+ * widens the envelope's own hard ceiling. A small body keeps the documented
+ * 700 default, so the README's example cap still engages observably.
+ */
+function bootstrapMaxBytes(body) {
+  const canonical = canonicalReceiptBytes(body).length;
+  return String(Math.min(MAX_MESSAGE_BYTES, Math.max(700, canonical)));
+}
 // Create a grant file — the step the documented quickstart was missing
 // (measured 2026-11-05).
 //
@@ -667,6 +691,7 @@ function writeAtomic(target, doc) {
 module.exports = {
   buildTxGrant,
   buildMessageGrant,
+  bootstrapMaxBytes,
   validateTxGrantArgs,
   validateMessageGrantArgs,
   writeGrantFile,

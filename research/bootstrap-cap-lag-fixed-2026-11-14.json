@@ -1,0 +1,33 @@
+{
+  "measuredAt": "2026-11-14T22:04:36.238Z",
+  "what": "does sign-message --add-grant write a grant that refuses the body it bootstraps from?",
+  "bootstrap": {
+    "stderr": "{\"ok\":true,\"grantFile\":\"<tmp>\",\"grant\":\"releases\",\"bootstrapped\":true}"
+  },
+  "face": {
+    "writtenMaxBytes": "937",
+    "bodyCanonicalBytes": 937,
+    "withinEnvelopeCap": true,
+    "firstSignError": null
+  },
+  "bootstrapFlags": {
+    "maxBytes": "937",
+    "claimKeys": "a,b"
+  },
+  "body": {
+    "canonicalBytes": 937,
+    "withinEnvelopeCap": true
+  },
+  "firstSign": {
+    "ok": true,
+    "kind": "message",
+    "signature": "aF9JN/RhSu4xCcBz80HT7262xjwQFQmGYZOSu6AO1TA8ZEWqdMUfRc/hLUDLf1ohoOOgPbTsX5wSqMKsLhOiDQ==",
+    "pubkey": "vU0QSAzourCOAZ49DYEiRKvrCYVz9c8ZzG3yNmu4JPw=",
+    "messageSha256": "5e0e4607591f86fef3733127f8699354c18185aacf736f5d3b2e54b7d8c3a508",
+    "seq": 1,
+    "windowMessages": "1",
+    "windowRemainingMessages": "4"
+  },
+  "verdict": "grant-cap-ok",
+  "summary": "the bootstrap's maxBytes 937 covers the body it bootstraps from (937 bytes)"
+}

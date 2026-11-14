@@ -1,0 +1,31 @@
+{
+  "measuredAt": "2026-11-14T22:04:34.691Z",
+  "what": "does sign-message --add-grant write a grant that refuses the body it bootstraps from?",
+  "bootstrap": {
+    "stderr": "{\"ok\":true,\"grantFile\":\"<tmp>\",\"grant\":\"releases\",\"bootstrapped\":true}"
+  },
+  "face": {
+    "writtenMaxBytes": "700",
+    "bodyCanonicalBytes": 937,
+    "withinEnvelopeCap": true,
+    "firstSignError": "message_too_large"
+  },
+  "bootstrapFlags": {
+    "maxBytes": "700",
+    "claimKeys": "a,b"
+  },
+  "body": {
+    "canonicalBytes": 937,
+    "withinEnvelopeCap": true
+  },
+  "firstSign": {
+    "ok": false,
+    "error": "message_too_large",
+    "detail": {
+      "allowed": false,
+      "refused": "message_too_large"
+    }
+  },
+  "verdict": "grant-cap-lag",
+  "summary": "--add-grant wrote maxBytes 700, the body it bootstraps from is 937 canonical bytes (inside the envelope's 3072), and the first sign is refused message_too_large"
+}

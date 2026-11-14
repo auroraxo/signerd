@@ -807,7 +807,7 @@ async function main() {
     // never rewritten.
     if (args['add-grant'] === true) {
       const { readKeystorePublicKey } = require('../src/keystore');
-      const { addGrantToFile, buildMessageGrant } = require('../src/grantadd');
+      const { addGrantToFile, buildMessageGrant, bootstrapMaxBytes } = require('../src/grantadd');
       const bs58 = require('bs58');
       // The PUBLIC key is cleartext keystore metadata (the format's own
       // contract), so no passphrase is needed to bootstrap a grant that pins
@@ -825,9 +825,12 @@ async function main() {
         type: bodyObj.type,
         subject: bodyObj.subject,
         pubkey: pubkeyB64,
-        // 700: the README's own example cap — a cap the operator can observe
-        // engaging, not the envelope's hard ceiling; widen it in the file.
-        maxBytes: '700',
+        // 700 is the README's own example cap for a SMALL body. A body
+        // larger than that gets a cap that covers it (measured 2026-11-14:
+        // a 937-byte body got a 700-byte cap and was refused
+        // message_too_large by the scope created FOR it). The envelope's own
+        // hard ceiling is never widened.
+        maxBytes: bootstrapMaxBytes(bodyObj),
         expiresAt: new Date(Date.now() + 24 * 3600_000).toISOString().replace(/\.\d{3}Z$/, 'Z'),
         windowMaxMessages: '5',
         windowSeconds: '3600',
