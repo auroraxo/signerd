@@ -1,0 +1,130 @@
+{
+  "schema": "signerd/seal-grants-summary/v1",
+  "tool": "measure-seal-grants-summary.js",
+  "measuredAt": "2026-11-15T21:24:01.877Z",
+  "prefix": "812135f",
+  "fixedTree": "working tree",
+  "verdict": "seal-grants-summary-holds",
+  "instrumentSound": true,
+  "faces": [
+    "tx-window",
+    "message-scope"
+  ],
+  "prefixShowsDefect": [
+    "tx-window",
+    "message-scope"
+  ],
+  "fixedShowsDefect": [],
+  "fixedDrift": [],
+  "guardsHold": true,
+  "prefixTree": {
+    "defects": {
+      "tx-window": {
+        "case": "tx-window",
+        "exit": 0,
+        "ok": true,
+        "summaryFields": [
+          "signer",
+          "destination",
+          "maxLamports",
+          "expiresAt"
+        ],
+        "missingFields": [
+          "windowMaxLamports",
+          "windowSeconds"
+        ],
+        "contradictingFields": [],
+        "showsWindowBudget": false,
+        "showsMessageScope": false,
+        "driftFree": false
+      },
+      "message-scope": {
+        "case": "message-scope",
+        "exit": 0,
+        "ok": true,
+        "summaryFields": [
+          "expiresAt"
+        ],
+        "missingFields": [
+          "kind",
+          "issuer",
+          "type",
+          "subject",
+          "pubkey",
+          "maxBytes",
+          "windowMaxMessages",
+          "windowSeconds"
+        ],
+        "contradictingFields": [],
+        "showsWindowBudget": false,
+        "showsMessageScope": false,
+        "driftFree": false
+      }
+    },
+    "guards": {
+      "valid": {
+        "exit": 0,
+        "ok": true,
+        "named": true,
+        "keepsSigner": true,
+        "keepsDestination": true,
+        "keepsMaxLamports": true,
+        "keepsExpiresAt": true
+      }
+    }
+  },
+  "fixedTreeResults": {
+    "defects": {
+      "tx-window": {
+        "case": "tx-window",
+        "exit": 0,
+        "ok": true,
+        "summaryFields": [
+          "signer",
+          "destination",
+          "maxLamports",
+          "expiresAt",
+          "windowMaxLamports",
+          "windowSeconds"
+        ],
+        "missingFields": [],
+        "contradictingFields": [],
+        "showsWindowBudget": true,
+        "showsMessageScope": false,
+        "driftFree": true
+      },
+      "message-scope": {
+        "case": "message-scope",
+        "exit": 0,
+        "ok": true,
+        "summaryFields": [
+          "kind",
+          "issuer",
+          "type",
+          "subject",
+          "pubkey",
+          "maxBytes",
+          "expiresAt",
+          "windowMaxMessages",
+          "windowSeconds"
+        ],
+        "missingFields": [],
+        "contradictingFields": [],
+        "showsWindowBudget": false,
+        "showsMessageScope": true,
+        "driftFree": true
+      }
+    },
+    "guards": {
+      "valid": {
+        "exit": 0,
+        "ok": true,
+        "named": true,
+        "keepsSigner": true,
+        "keepsDestination": true,
+        "keepsMaxLamports": true,
+        "keepsExpiresAt": true
+      }
+    }
+  }
+}

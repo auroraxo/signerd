@@ -218,5 +218,34 @@ function loadGrantFile(file, options = {}) {
   return { grants, names: Object.keys(grants).sort() };
 }
 
-module.exports = { loadGrantFile, validateGrant, MAX_GRANTS };
+/**
+ * WHAT THE OPERATOR SEES after a seal: every field the loader accepted for
+ * this grant, in schema order. `seal-grants` prints one of these per grant
+ * because sealing a forged file makes the forgery valid — but it used to
+ * print a HAND-PICKED SUBSET (`name, signer, destination, maxLamports,
+ * expiresAt`): a message grant's whole scope (issuer/type/subject/pubkey/
+ * maxBytes/window) came out as `{name, expiresAt}` alone, and a tx grant's
+ * rolling window budget — the cap that actually bounds the spend — was
+ * invisible (measured 2026-11-15, research/seal-grants-summary-2026-11-15).
+ * The lists below ARE the schema, so this summary cannot lag a field the
+ * loader accepts.
+ */
+function grantSummary(name, grant) {
+  const summary = { name };
+  const isMessage = Object.getOwnPropertyDescriptor(grant, 'kind') !== undefined;
+  const fields = isMessage ? MESSAGE_FIELDS : REQUIRED_FIELDS;
+  for (const field of fields) {
+    const descriptor = Object.getOwnPropertyDescriptor(grant, field);
+    if (descriptor !== undefined && 'value' in descriptor) {
+      summary[field] = descriptor.value;
+    }
+  }
+  if (isMessage) {
+    const optional = Object.getOwnPropertyDescriptor(grant, 'claimKeys');
+    if (optional !== undefined && 'value' in optional) summary.claimKeys = optional.value;
+  }
+  return summary;
+}
+
+module.exports = { loadGrantFile, validateGrant, grantSummary, MAX_GRANTS };
 ;

@@ -387,6 +387,37 @@ it sealed for that reason), and the loader judges the file at the instant of the
 same TOCTOU window as every other path here.
 
 
+**2026-11-15: the seal summary shows the scope it just certified.**
+
+`seal-grants` prints what it sealed — sealing a forged file makes the forgery valid, so
+the line the command exists for is the operator's only view of the scope they are about
+to make authentic. It printed a HAND-PICKED SUBSET of the fields: `{name, signer,
+destination, maxLamports, expiresAt}` for every grant. Two faces of the same defect,
+measured live on the published v0.2.26 tree (`812135f`):
+
+* **tx grants hid the rolling window budget.** `windowMaxLamports` is the cap that
+  actually bounds the spend of the window and `windowSeconds` its width; a grant sealed
+  with `windowMaxLamports: 18446744073709551615` (the u64 maximum — no budget at all)
+  printed a summary with no budget field anywhere.
+* **message grants hid their entire scope.** A message grant's schema is disjoint
+  (kind/issuer/type/subject/pubkey/maxBytes/windowMaxMessages/windowSeconds); the summary
+  was `{name, expiresAt}` — the issuer, the type, the subject, the pinned pubkey, the
+  byte ceiling and the message count were all absent. The reason the command exists ("it
+  prints what it sealed") did not hold for a whole class of grants.
+
+The summary is now built from the loader's OWN field lists (`grantSummary()` in
+`src/grantfile.js`): the same lists `validateGrant` checks, in schema order, so it
+cannot lag a field the loader accepts. It is printed by the same command, before the
+exit, and S3 pins it against the file that was written — every printed value equals the
+sealed document's value, and every sealed field appears in the summary.
+
+Limits, stated up front: the summary is the *sealed* document's content — a forged file
+still seals into a valid forgery (the content-trust limit, unchanged); the summary
+cannot show what a future request will do with the file (the daemon judges per request);
+and the check runs at the moment of the seal — the same TOCTOU window as every other
+path here.
+
+
 **2026-11-14: an input file the CLI cannot read is refused by name, not by errno.**
 
 The three OPERATOR-INPUT read paths — `--passphrase-file` (and its three seal siblings),

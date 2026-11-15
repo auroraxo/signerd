@@ -961,7 +961,7 @@ async function main() {
 
   if (command === 'seal-grants') {
     const { sealDocument } = require('../src/grantseal');
-    const { loadGrantFile } = require('../src/grantfile');
+    const { loadGrantFile, grantSummary } = require('../src/grantfile');
     const file = requireArg(args, 'grants');
     const passphrase = readPassphrase(args, 'seal-passphrase-file');
 
@@ -1020,17 +1020,11 @@ async function main() {
       process.exit(1);
     }
     // The operator must see WHAT was sealed: sealing a forged file makes the
-    // forgery valid, so the names and the caps are printed.
-    const summary = loaded.names.map((name) => {
-      const g = loaded.grants[name];
-      return {
-        name,
-        signer: g.signer,
-        destination: g.destination,
-        maxLamports: g.maxLamports,
-        expiresAt: g.expiresAt,
-      };
-    });
+    // forgery valid, so the names and the caps are printed. The summary is
+    // the loader's OWN field lists (grantSummary), not a hand-picked
+    // subset — the old list hid a message grant's entire scope and the tx
+    // grant's rolling window budget (measured 2026-11-15).
+    const summary = loaded.names.map((name) => grantSummary(name, loaded.grants[name]));
     process.stdout.write(JSON.stringify({ ok: true, out, grants: summary }) + '\n');
     return;
   }
