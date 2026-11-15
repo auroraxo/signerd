@@ -1,0 +1,171 @@
+{
+  "ref": "6ab3718",
+  "verdict": "bootstrap-body-judged",
+  "defectCount": 0,
+  "defectCases": [],
+  "cases": [
+    {
+      "case": "control",
+      "control": true,
+      "bootstrap": {
+        "code": 1,
+        "ok": true,
+        "bootstrapped": true,
+        "reason": null,
+        "stderr": "{\"ok\":true,\"grantFile\":\"<workdir>.json\",\"grant\":\"g_control\",\"bootstrapped\":true}\nENOENT: connect ENOENT <socket>\n"
+      },
+      "grantWritten": true,
+      "firstSign": {
+        "ok": true,
+        "error": null,
+        "raw": null
+      }
+    },
+    {
+      "case": "missing-issued-at",
+      "what": "the body has no issued_at",
+      "envelopeReason": "envelope",
+      "defectFace": true,
+      "bootstrap": {
+        "code": 2,
+        "ok": false,
+        "bootstrapped": false,
+        "reason": "bootstrap_body_refused",
+        "stderr": "bootstrap_body_refused: envelope\n  fix: the body must carry exactly schema, issuer, type, subject, claims and issued_at (plus an optional note), and issued_at must be a real moment\n"
+      },
+      "grantWritten": false,
+      "firstSign": {
+        "ok": false,
+        "error": null,
+        "skipped": "no scope written"
+      },
+      "defect": false
+    },
+    {
+      "case": "claim-value-too-long",
+      "what": "a claim value of 257 characters",
+      "envelopeReason": "claims",
+      "defectFace": true,
+      "bootstrap": {
+        "code": 2,
+        "ok": false,
+        "bootstrapped": false,
+        "reason": "bootstrap_body_refused",
+        "stderr": "bootstrap_body_refused: claims\n  fix: every claim needs a name and a text of at most 256 characters, and a body carries at most 32 claims\n"
+      },
+      "grantWritten": false,
+      "firstSign": {
+        "ok": false,
+        "error": null,
+        "skipped": "no scope written"
+      },
+      "defect": false
+    },
+    {
+      "case": "too-many-claims",
+      "what": "33 claims (the ceiling is 32)",
+      "envelopeReason": "claims",
+      "defectFace": true,
+      "bootstrap": {
+        "code": 2,
+        "ok": false,
+        "bootstrapped": false,
+        "reason": "bootstrap_body_refused",
+        "stderr": "bootstrap_body_refused: claims\n  fix: every claim needs a name and a text of at most 256 characters, and a body carries at most 32 claims\n"
+      },
+      "grantWritten": false,
+      "firstSign": {
+        "ok": false,
+        "error": null,
+        "skipped": "no scope written"
+      },
+      "defect": false
+    },
+    {
+      "case": "unknown-top-level-key",
+      "what": "the body carries an unknown key",
+      "envelopeReason": "envelope",
+      "defectFace": true,
+      "bootstrap": {
+        "code": 2,
+        "ok": false,
+        "bootstrapped": false,
+        "reason": "bootstrap_body_refused",
+        "stderr": "bootstrap_body_refused: envelope\n  fix: the body must carry exactly schema, issuer, type, subject, claims and issued_at (plus an optional note), and issued_at must be a real moment\n"
+      },
+      "grantWritten": false,
+      "firstSign": {
+        "ok": false,
+        "error": null,
+        "skipped": "no scope written"
+      },
+      "defect": false
+    },
+    {
+      "case": "claims-not-an-object",
+      "what": "claims is a string",
+      "envelopeReason": "claims",
+      "defectFace": true,
+      "bootstrap": {
+        "code": 2,
+        "ok": false,
+        "bootstrapped": false,
+        "reason": "bootstrap_body_refused",
+        "stderr": "bootstrap_body_refused: claims\n  fix: every claim needs a name and a text of at most 256 characters, and a body carries at most 32 claims\n"
+      },
+      "grantWritten": false,
+      "firstSign": {
+        "ok": false,
+        "error": null,
+        "skipped": "no scope written"
+      },
+      "defect": false
+    },
+    {
+      "case": "issued-at-in-future",
+      "what": "issued_at is a year in the future",
+      "envelopeReason": "issued_at_in_future",
+      "defectFace": true,
+      "bootstrap": {
+        "code": 2,
+        "ok": false,
+        "bootstrapped": false,
+        "reason": "bootstrap_body_refused",
+        "stderr": "bootstrap_body_refused: issued_at_in_future\n  fix: issued_at may not lie more than 24 hours in the future\n"
+      },
+      "grantWritten": false,
+      "firstSign": {
+        "ok": false,
+        "error": null,
+        "skipped": "no scope written"
+      },
+      "defect": false
+    },
+    {
+      "case": "wrong-schema",
+      "what": "the schema is not openreceipts/v1",
+      "envelopeReason": "invalid_schema",
+      "defectFace": true,
+      "bootstrap": {
+        "code": 2,
+        "ok": false,
+        "bootstrapped": false,
+        "reason": "bootstrap_body_refused",
+        "stderr": "bootstrap_body_refused: invalid_schema\n  fix: the body must use the schema openreceipts/v1\n"
+      },
+      "grantWritten": false,
+      "firstSign": {
+        "ok": false,
+        "error": null,
+        "skipped": "no scope written"
+      },
+      "defect": false
+    }
+  ],
+  "measuredAt": "2026-11-15T07:33:09.558Z",
+  "what": "does sign-message --add-grant judge the body it bootstraps from?",
+  "tree": {
+    "role": "fixed",
+    "ref": "6ab3718"
+  }
+}

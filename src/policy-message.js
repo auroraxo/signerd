@@ -302,6 +302,54 @@ function evaluateMessage(body, grant, now = new Date()) {
   return { allowed: true, messageBytes, messageSha256 };
 }
 
+/**
+ * Judge a receipt BODY for the one-flag bootstrap (`sign-message
+ * --add-grant`): may a scope be written FOR this body?
+ *
+ * WHY (measured 2026-11-15, tools/measure-bootstrap-body-judge.js, artifact
+ * research/bootstrap-body-judge-v0.2.25-2026-11-15.json): the bootstrap
+ * takes issuer/type/subject/claimKeys out of the --body file and writes a
+ * scope from them, but it never asked the ENVELOPE whether that body would
+ * be signed at all. On the published v0.2.25 tree, seven of ten body faces
+ * were blessed with {"ok":true,...,"bootstrapped":true} and a written scope,
+ * and the FIRST sign of that very body was refused (envelope / claims /
+ * issued_at_in_future / invalid_schema). The scope was created FOR that
+ * body and could not sign it - the same class as the expired-expiry, the
+ * uncanonical-pubkey and the cap-lag defects.
+ *
+ * The judge is the product's OWN envelope rule (evaluateMessage), not a
+ * second copy of it: one rule, one place.
+ *
+ * The SIZE CEILING is deliberately NOT part of this verdict: the cap the
+ * bootstrap writes (maxBytes) covers the body and is clamped to the
+ * envelope's own ceiling, and a body beyond that ceiling still gets its
+ * scope - the ENVELOPE refuses the body at sign time, exactly as before
+ * (the cap-lag ladder pins this). What this judge refuses are the bodies
+ * that can never be signed by ANY scope: a missing issued_at, an unknown
+ * key, a claim value over 256 characters, more than 32 claims, claims that
+ * are not an object, a foreign schema, an issued_at from the future.
+ *
+ * Returns { allowed: true } or { allowed: false, refused: <envelope reason> }.
+ */
+function judgeBootstrapBody(body, grant, now = new Date()) {
+  if (body === null || typeof body !== 'object' || Array.isArray(body)) {
+    return { allowed: false, refused: 'invalid_body' };
+  }
+  const bytes = canonicalReceiptBytes(body);
+  // Beyond the envelope's own ceiling: the scope is still written (the cap
+  // is clamped to the ceiling) and the ENVELOPE refuses the body at sign
+  // time. That is the documented behaviour since the cap-lag fix.
+  if (bytes.length > MAX_MESSAGE_BYTES) {
+    return { allowed: true, beyondEnvelopeCeiling: true, messageBytes: bytes.length };
+  }
+  // The cap the bootstrap writes covers the body (bootstrapMaxBytes), so
+  // the size check inside evaluateMessage passes here and the verdict is
+  // about the SHAPE of the body.
+  const verdict = evaluateMessage(body, grant, now);
+  if (verdict.allowed === true) return { allowed: true, messageBytes: bytes.length };
+  return { allowed: false, refused: verdict.refused };
+}
+
 module.exports = {
-  evaluateMessage, MAX_MESSAGE_BYTES, MESSAGE_SCHEMA,
+  evaluateMessage, judgeBootstrapBody, MAX_MESSAGE_BYTES, MESSAGE_SCHEMA,
 };

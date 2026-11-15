@@ -808,6 +808,7 @@ async function main() {
     if (args['add-grant'] === true) {
       const { readKeystorePublicKey } = require('../src/keystore');
       const { addGrantToFile, buildMessageGrant, bootstrapMaxBytes } = require('../src/grantadd');
+      const { judgeBootstrapBody } = require('../src/policy-message');
       const bs58 = require('bs58');
       // The PUBLIC key is cleartext keystore metadata (the format's own
       // contract), so no passphrase is needed to bootstrap a grant that pins
@@ -839,6 +840,32 @@ async function main() {
       const grantsPath = typeof args.grants === 'string'
         ? args.grants
         : path.join(path.dirname(path.resolve(keystorePath)), 'grants.json');
+      // THE BODY IS JUDGED BEFORE THE SCOPE IS WRITTEN (measured
+      // 2026-11-15, tools/measure-bootstrap-body-judge.js): the bootstrap
+      // used to write a scope for a body the product's own envelope judge
+      // refuses (a missing issued_at, a too-long claim value, too many
+      // claims, an unknown key, a foreign schema, an issued_at in the
+      // future) - and the FIRST sign of that very body then failed. A
+      // creation path must never write a scope its own judge refuses.
+      // The verdict comes from the product's OWN rule (evaluateMessage), so
+      // there is one rule in one place, and the refusal names that rule's
+      // own reason. No grant file is written and nothing is left behind.
+      const verdict = judgeBootstrapBody(bodyObj, messageGrant, new Date());
+      if (verdict.allowed !== true) {
+        const reason = verdict.refused || 'envelope';
+        const fix = {
+          envelope: 'the body must carry exactly schema, issuer, type, subject, claims and issued_at (plus an optional note), and issued_at must be a real moment',
+          claims: 'every claim needs a name and a text of at most 256 characters, and a body carries at most 32 claims',
+          invalid_schema: 'the body must use the schema openreceipts/v1',
+          issued_at_in_future: 'issued_at may not lie more than 24 hours in the future',
+          invalid_grant: 'the body does not match the scope it would be signed with',
+          expired: 'the scope it would be signed with is expired',
+        }[reason] || 'the body is not one this product can sign';
+        process.stderr.write(
+          `bootstrap_body_refused: ${reason}\n` +
+          `  fix: ${fix}\n`);
+        process.exit(2);
+      }
       // Report on stderr: stdout stays a single-JSON response channel.
       // An EXISTING grant under this name is left alone (addGrantToFile
       // refuses to overwrite; a sealed file is refused, never rewritten).

@@ -1,0 +1,179 @@
+{
+  "ref": "6ab3718",
+  "verdict": "bootstrap-body-not-judged",
+  "defectCount": 7,
+  "defectCases": [
+    "missing-issued-at",
+    "claim-value-too-long",
+    "too-many-claims",
+    "unknown-top-level-key",
+    "claims-not-an-object",
+    "issued-at-in-future",
+    "wrong-schema"
+  ],
+  "cases": [
+    {
+      "case": "control",
+      "control": true,
+      "bootstrap": {
+        "code": 1,
+        "ok": true,
+        "bootstrapped": true,
+        "reason": null,
+        "stderr": "{\"ok\":true,\"grantFile\":\"<workdir>.json\",\"grant\":\"g_control\",\"bootstrapped\":true}\nENOENT: connect ENOENT <socket>\n"
+      },
+      "grantWritten": true,
+      "firstSign": {
+        "ok": true,
+        "error": null,
+        "raw": null
+      }
+    },
+    {
+      "case": "missing-issued-at",
+      "what": "the body has no issued_at",
+      "envelopeReason": "envelope",
+      "defectFace": true,
+      "bootstrap": {
+        "code": 1,
+        "ok": true,
+        "bootstrapped": true,
+        "reason": null,
+        "stderr": "{\"ok\":true,\"grantFile\":\"<workdir>.json\",\"grant\":\"g_missing_issued_at\",\"bootstrapped\":true}\nENOENT: connect ENOENT <socket>\n"
+      },
+      "grantWritten": true,
+      "firstSign": {
+        "ok": false,
+        "error": "envelope",
+        "raw": null
+      },
+      "defect": true
+    },
+    {
+      "case": "claim-value-too-long",
+      "what": "a claim value of 257 characters",
+      "envelopeReason": "claims",
+      "defectFace": true,
+      "bootstrap": {
+        "code": 1,
+        "ok": true,
+        "bootstrapped": true,
+        "reason": null,
+        "stderr": "{\"ok\":true,\"grantFile\":\"<workdir>.json\",\"grant\":\"g_claim_value_too_long\",\"bootstrapped\":true}\nENOENT: connect ENOENT <socket>\n"
+      },
+      "grantWritten": true,
+      "firstSign": {
+        "ok": false,
+        "error": "claims",
+        "raw": null
+      },
+      "defect": true
+    },
+    {
+      "case": "too-many-claims",
+      "what": "33 claims (the ceiling is 32)",
+      "envelopeReason": "claims",
+      "defectFace": true,
+      "bootstrap": {
+        "code": 1,
+        "ok": true,
+        "bootstrapped": true,
+        "reason": null,
+        "stderr": "{\"ok\":true,\"grantFile\":\"<workdir>.json\",\"grant\":\"g_too_many_claims\",\"bootstrapped\":true}\nENOENT: connect ENOENT <socket>\n"
+      },
+      "grantWritten": true,
+      "firstSign": {
+        "ok": false,
+        "error": "claims",
+        "raw": null
+      },
+      "defect": true
+    },
+    {
+      "case": "unknown-top-level-key",
+      "what": "the body carries an unknown key",
+      "envelopeReason": "envelope",
+      "defectFace": true,
+      "bootstrap": {
+        "code": 1,
+        "ok": true,
+        "bootstrapped": true,
+        "reason": null,
+        "stderr": "{\"ok\":true,\"grantFile\":\"<workdir>.json\",\"grant\":\"g_unknown_top_level_key\",\"bootstrapped\":true}\nENOENT: connect ENOENT <socket>\n"
+      },
+      "grantWritten": true,
+      "firstSign": {
+        "ok": false,
+        "error": "envelope",
+        "raw": null
+      },
+      "defect": true
+    },
+    {
+      "case": "claims-not-an-object",
+      "what": "claims is a string",
+      "envelopeReason": "claims",
+      "defectFace": true,
+      "bootstrap": {
+        "code": 1,
+        "ok": true,
+        "bootstrapped": true,
+        "reason": null,
+        "stderr": "{\"ok\":true,\"grantFile\":\"<workdir>.json\",\"grant\":\"g_claims_not_an_object\",\"bootstrapped\":true}\nENOENT: connect ENOENT <socket>\n"
+      },
+      "grantWritten": true,
+      "firstSign": {
+        "ok": false,
+        "error": "claims",
+        "raw": null
+      },
+      "defect": true
+    },
+    {
+      "case": "issued-at-in-future",
+      "what": "issued_at is a year in the future",
+      "envelopeReason": "issued_at_in_future",
+      "defectFace": true,
+      "bootstrap": {
+        "code": 1,
+        "ok": true,
+        "bootstrapped": true,
+        "reason": null,
+        "stderr": "{\"ok\":true,\"grantFile\":\"<workdir>.json\",\"grant\":\"g_issued_at_in_future\",\"bootstrapped\":true}\nENOENT: connect ENOENT <socket>\n"
+      },
+      "grantWritten": true,
+      "firstSign": {
+        "ok": false,
+        "error": "issued_at_in_future",
+        "raw": null
+      },
+      "defect": true
+    },
+    {
+      "case": "wrong-schema",
+      "what": "the schema is not openreceipts/v1",
+      "envelopeReason": "invalid_schema",
+      "defectFace": true,
+      "bootstrap": {
+        "code": 1,
+        "ok": true,
+        "bootstrapped": true,
+        "reason": null,
+        "stderr": "{\"ok\":true,\"grantFile\":\"<workdir>.json\",\"grant\":\"g_wrong_schema\",\"bootstrapped\":true}\nENOENT: connect ENOENT <socket>\n"
+      },
+      "grantWritten": true,
+      "firstSign": {
+        "ok": false,
+        "error": "invalid_schema",
+        "raw": null
+      },
+      "defect": true
+    }
+  ],
+  "measuredAt": "2026-11-15T07:33:09.558Z",
+  "what": "does sign-message --add-grant judge the body it bootstraps from?",
+  "tree": {
+    "role": "published",
+    "ref": "6ab3718"
+  }
+}
