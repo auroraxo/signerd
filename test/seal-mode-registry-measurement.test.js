@@ -26,19 +26,47 @@ const path = require('node:path');
 
 const ROOT = path.join(__dirname, '..');
 const RESEARCH = path.join(ROOT, 'research');
-const REGISTRY = path.join(RESEARCH, 'seal-mode-registry-0.2.28-2026-11-16.json');
-const USER_ZERO = path.join(RESEARCH, 'user-zero-v0.2.28-2026-11-16.json');
 
-function registry() {
-  return JSON.parse(fs.readFileSync(REGISTRY, 'utf8'));
-}
-
+// THE ARTEFACT IS RESOLVED FROM THE PIN, NEVER FROZEN IN THE FILE NAME
+// (measured 2026-11-16): this file carried `seal-mode-registry-0.2.28-...`
+// and `user-zero-v0.2.28-...` as literals, so the first release after that
+// pin went RED on the new pin for a reason that had nothing to do with the
+// product - the verification record lagged the shipped surface, the same
+// defect class `test/user-zero-pin-sync.test.js` (UZ2) forbids. Every
+// artefact name below is derived from the README pin.
 function pin() {
   const readme = fs.readFileSync(path.join(ROOT, 'README.md'), 'utf8');
   const tags = [...new Set((readme.match(/github:auroraxo\/signerd#(v\d+\.\d+\.\d+)/g) || [])
     .map((t) => t.split('#')[1]))];
   assert.strictEqual(tags.length, 1, `README pin is not exactly one tag: ${tags.join(', ')}`);
   return tags[0].replace(/^v/, '');
+}
+
+/** Newest committed artefact for a prefix, or null. */
+function newestArtefact(prefix) {
+  if (!fs.existsSync(RESEARCH)) return null;
+  const names = fs.readdirSync(RESEARCH)
+    .filter((n) => n.startsWith(prefix) && n.endsWith('.json'))
+    .sort();
+  return names.length ? path.join(RESEARCH, names[names.length - 1]) : null;
+}
+
+function registryPath() {
+  const p = newestArtefact(`seal-mode-registry-${pin()}-`);
+  assert.ok(p, `no seal-mode registry artefact for the pinned version ${pin()} - ` +
+    'run tools/registry-seal-mode-user-zero.js against the pin before expecting this gate to pass');
+  return p;
+}
+
+function userZeroPath() {
+  const p = newestArtefact(`user-zero-v${pin()}-`);
+  assert.ok(p, `no user-zero artefact for the pinned tag v${pin()} - ` +
+    'run tools/measure-user-zero-d4-dry.js against the pin before expecting this gate to pass');
+  return p;
+}
+
+function registry() {
+  return JSON.parse(fs.readFileSync(registryPath(), 'utf8'));
 }
 
 test('P1 the registry artifact parses and names its channel', () => {
@@ -96,9 +124,8 @@ test('P4 the guards hold on the INSTALLED copy', () => {
 });
 
 test('P5 the git-tag user-zero artifact for this pin is allPass and host-path free', () => {
-  assert.ok(fs.existsSync(USER_ZERO),
-    `no user-zero artefact for the pinned tag ${pin()} - run tools/measure-user-zero-d4-dry.js`);
-  const raw = fs.readFileSync(USER_ZERO, 'utf8');
+  const userZero = userZeroPath();
+  const raw = fs.readFileSync(userZero, 'utf8');
   const uz = JSON.parse(raw);
   assert.strictEqual(uz.tag, `v${pin()}`);
   assert.strictEqual(uz.allPass, true, JSON.stringify(uz.results, null, 1).slice(0, 800));
