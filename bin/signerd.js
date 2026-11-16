@@ -988,9 +988,18 @@ async function main() {
     // sealed (the documented "edit by hand, then re-seal" repair), the
     // legacy path skips seal verification and judges the payload — exactly
     // what re-sealing needs.
+    //
+    // Since 2026-11-16 a keyless read of a SEALED document is refused
+    // (grant_file_sealed) — the journal half has always refused it
+    // (ledger_sealed), and the grant half used to degrade. So this command
+    // says explicitly that it means it: allowSealedWithoutKey is the ONE
+    // path that may judge a sealed payload without checking its MAC, and it
+    // exists because the old seal is stale by construction here (that is
+    // why the operator is re-sealing). It judges the PAYLOAD; the seal it
+    // writes is fresh.
     let loaded;
     try {
-      loaded = loadGrantFile(file);
+      loaded = loadGrantFile(file, { allowSealedWithoutKey: true });
     } catch (err) {
       if (err && err.code === 'grant_file_mode') {
         process.stderr.write(

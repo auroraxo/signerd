@@ -1,0 +1,139 @@
+{
+  "schema": "signerd/seal-mode/v1",
+  "tool": "measure-seal-mode-degradation.js",
+  "measuredAt": "2026-11-16T03:41:44.059Z",
+  "prefix": "41cd128",
+  "fixedTree": "working tree",
+  "verdict": "seal-mode-holds",
+  "instrumentSound": true,
+  "faces": [
+    "F1-keyless-read",
+    "F2-keyless-status",
+    "F3-tamper-blind"
+  ],
+  "prefixShowsDefect": [
+    "F1-keyless-read",
+    "F2-keyless-status",
+    "F3-tamper-blind"
+  ],
+  "fixedShowsDefect": [],
+  "journalControlHolds": true,
+  "keyedRefusalHolds": true,
+  "guardsHold": true,
+  "prefixTree": {
+    "keyless": {
+      "sealed": {
+        "exit": 0,
+        "ok": true
+      },
+      "keyedRefusesTamper": {
+        "exit": 1,
+        "reason": "grant_file_seal_mismatch",
+        "refused": true
+      },
+      "keylessLoader": {
+        "loaded": true,
+        "code": null,
+        "destination": "11111111111111111111111111111111",
+        "readTampered": true
+      },
+      "keylessStatus": {
+        "exit": 0,
+        "ok": true,
+        "reportedSealed": false,
+        "degraded": true
+      }
+    },
+    "daemon": {
+      "sealed": {
+        "exit": 0,
+        "ok": true
+      },
+      "exit": 0,
+      "signal": null,
+      "timedOut": true,
+      "started": true,
+      "refused": false,
+      "reason": null,
+      "stdoutHead": "{\"ok\":true,\"socketPath\":\"<scratch>/signerd-sealmode-prefix-Qc5kHh/signerd.sock\",\"grants\":[\"ops\"],\"ledger\":{\"records\":0,\"seq\":0,\"fingerprints\":0},\"signer\":\"DVUJyNcbgs",
+      "stderrHead": ""
+    },
+    "journal": {
+      "loaded": false,
+      "code": "ledger_sealed",
+      "refusedWithLedgerSealed": true
+    },
+    "guards": {
+      "firstSeal": {
+        "exit": 0,
+        "ok": true
+      },
+      "resealAfterHandEdit": {
+        "exit": 0,
+        "ok": true
+      },
+      "resealedVerifies": {
+        "exit": 0,
+        "ok": true
+      }
+    }
+  },
+  "fixedTreeResults": {
+    "keyless": {
+      "sealed": {
+        "exit": 0,
+        "ok": true
+      },
+      "keyedRefusesTamper": {
+        "exit": 1,
+        "reason": "grant_file_seal_mismatch",
+        "refused": true
+      },
+      "keylessLoader": {
+        "loaded": false,
+        "code": "grant_file_sealed",
+        "destination": null,
+        "readTampered": false
+      },
+      "keylessStatus": {
+        "exit": 1,
+        "ok": null,
+        "reportedSealed": null,
+        "degraded": false
+      }
+    },
+    "daemon": {
+      "sealed": {
+        "exit": 0,
+        "ok": true
+      },
+      "exit": 1,
+      "signal": null,
+      "timedOut": false,
+      "started": false,
+      "refused": true,
+      "reason": "grant_file_sealed",
+      "stdoutHead": "",
+      "stderrHead": "grant_file_sealed: the grant file carries a seal (<scratch>/signerd-sealmode-fixed-z4v8Fy/cfg/grants.json) but no passphrase was given: pass --grant-seal-passphrase-file <file> to read it "
+    },
+    "journal": {
+      "loaded": false,
+      "code": "ledger_sealed",
+      "refusedWithLedgerSealed": true
+    },
+    "guards": {
+      "firstSeal": {
+        "exit": 0,
+        "ok": true
+      },
+      "resealAfterHandEdit": {
+        "exit": 0,
+        "ok": true
+      },
+      "resealedVerifies": {
+        "exit": 0,
+        "ok": true
+      }
+    }
+  }
+}

@@ -127,9 +127,18 @@ function validateGrant(name, grant) {
 function loadGrantFile(file, options = {}) {
   // options.sealKeyFor: (salt) => key buffer. Provided by the daemon when the
   // operator passed --grant-seal-passphrase-file; then the document MUST
-  // carry a valid HMAC seal. Absent: legacy behaviour, unsealed files load.
+  // carry a valid HMAC seal. Absent: an UNSEALED document loads (the legacy
+  // path), but a SEALED one is refused - see the branch below.
+  //
+  // options.allowSealedWithoutKey: judge a sealed document's payload WITHOUT
+  // verifying its seal. Exactly ONE caller may pass it: `seal-grants`, on the
+  // documented "edit the file by hand, then re-seal" repair, where the old
+  // seal is stale by construction (that is why the operator is re-sealing)
+  // and only the payload has to be judged before a fresh seal is written.
+  // Never pass it to serve a request: a seal nobody checked is not a seal.
   const sealKeyFor = typeof (options && options.sealKeyFor) === 'function'
     ? options.sealKeyFor : null;
+  const allowSealedWithoutKey = options && options.allowSealedWithoutKey === true;
   const resolved = path.resolve(file);
   // The grant file is re-read on EVERY request (revocation must take effect
   // immediately), so its path has to stay trustworthy for the whole process
@@ -203,6 +212,26 @@ function loadGrantFile(file, options = {}) {
     if (!parsed.ok) throw fail(parsed.reason);
     const verdict = verifySealMac(doc, sealKeyFor(parsed.salt));
     if (!verdict.ok) throw fail(verdict.reason);
+  } else if (!allowSealedWithoutKey &&
+             Object.getOwnPropertyDescriptor(doc, 'seal') !== undefined) {
+    // NO KEY, but the document carries a seal. Measured 2026-11-16 on this
+    // tree: this branch used to be skipped entirely, so a sealed grant file
+    // was read as if it were unsealed - the GRANT half degraded where the
+    // JOURNAL half refuses. After `seal-grants`, tampering with the file and
+    // then loading it without a passphrase returned the TAMPERED grants
+    // (`status` -> {"ok":true,"sealed":false}), while the same file with the
+    // passphrase refused grant_file_seal_mismatch and the sealed JOURNAL with
+    // no passphrase refused ledger_sealed. "Never degraded" is one rule for
+    // both halves of one seal: a document whose MAC cannot be checked is not
+    // readable content, so the seal block must be parsed for a reason and
+    // the read refused. Shape is checkable without the key, so a broken seal
+    // block still reports grant_file_seal_invalid rather than the missing
+    // passphrase - the same two reasons a keyed read would give.
+    const parsed = parseSeal(doc);
+    if (!parsed.ok) throw fail(parsed.reason);
+    throw fail('grant_file_sealed',
+      `the grant file carries a seal (${resolved}) but no passphrase was given: ` +
+      'pass --grant-seal-passphrase-file <file> to read it');
   }
   const entries = Object.getOwnPropertyNames(doc.grants);
   if (entries.length > MAX_GRANTS) throw fail('grant_file_invalid', 'too many grants');
