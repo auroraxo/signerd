@@ -40,7 +40,7 @@ npm install -g signerd
 The same tree from a release tag:
 
 ```bash
-npm install github:auroraxo/signerd#v0.2.27
+npm install github:auroraxo/signerd#v0.2.28
 ```
 
 You need Node.js and a C compiler (`cc`) once: the daemon builds a small
@@ -166,7 +166,13 @@ signerd run --keystore ~/.config/signerd/ops.key --passphrase-file ~/.config/sig
             --journal-seal-passphrase-file ~/.config/signerd/seal.pass
 ```
 
-A sealed grant file is rewritten only by the CLI: `grant-add --append` and
+A sealed grant file is also unreadable without its passphrase: any command
+that loads it keylessly refuses `grant_file_sealed` and names
+`--grant-seal-passphrase-file` (`status` no longer answers `{"ok":true,
+"sealed":false}` for a file it could not verify). The one deliberate
+exception is `seal-grants` itself — re-sealing after a hand edit judges the
+payload without checking the stale seal. A sealed grant file is rewritten
+only by the CLI: `grant-add --append` and
 `grant-remove` re-seal it as part of the act (they need
 `--seal-passphrase-file`). Hand-editing a sealed file breaks its seal and the
 daemon then refuses the file (`grant_file_seal_mismatch`).

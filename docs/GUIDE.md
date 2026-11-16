@@ -116,6 +116,11 @@ signerd run --keystore ~/.config/signerd/ops.key --passphrase-file ~/.config/sig
 # `grant-remove` re-seal it as part of the act (they need
 # --seal-passphrase-file). Hand-editing a sealed file breaks its seal and the
 # daemon then refuses the file (grant_file_seal_mismatch).
+# Reading it keylessly refuses too: a sealed grant file is not readable
+# without its passphrase (grant_file_sealed) - on every command and at daemon
+# start, the same rule the JOURNAL half always had (ledger_sealed). The one
+# deliberate exception is `seal-grants` itself: judging the payload before
+# writing a fresh seal is the re-seal repair documented above.
 # Note (measured, not asserted): the signing path itself never touches the
 # network — that fetch runs in YOUR shell, and signerd stays offline. The
 # signed wire is then valid to mainnet itself except for one thing this
