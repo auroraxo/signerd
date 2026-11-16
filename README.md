@@ -215,6 +215,13 @@ with certainty instead of a wide set with guesses.
   `ok` verdict is refused as `response_invalid`. Every one of these refusals
   reaches stderr with a `fix:` line, and nothing is relayed to stdout on
   somebody else's behalf.
+- A socket that cannot be reached is reported as a STATE, never as a raw
+  errno: `socket_missing` (nothing was ever bound there), `socket_stale`
+  (the file exists, nobody listens — a daemon that died without cleaning
+  up), `socket_state_unknown` (the state cannot be proven, so it is refused
+  rather than guessed). `signerd status --socket <path>` is the diagnostic
+  every one of these refusals names, and it answers `live` on stdout with
+  exit 0 when the daemon is up.
 - Grant files are checked on load: owner, mode, schema, seal. A grant that could
   never sign (past expiry, cap below the base fee) is refused at creation.
 - Refusals name the flag and the fix instead of failing silently.

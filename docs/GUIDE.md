@@ -534,3 +534,64 @@ request"` so a retry that comes back `replay` is explained.
 Pinned by `test/client-verification.test.js` (9 cases: **6 red on the pre-fix published
 tree**, 3 green — the control and the two pure-verifier unit tests), the two-tree
 measurement above, and the full suite 717 → **726/726**.
+
+
+## A socket that cannot be reached is a STATE, not an errno (measured 2026-11-16)
+
+Every transport refusal already told the operator to check the daemon with
+`signerd status --socket <path>` — and the CLI answered `unknown_flag: --socket`,
+exit 2. The product named a repair it refused to run, and it named the *reason* in a
+kernel errno that says nothing an operator can act on.
+
+Measured on the PUBLISHED v0.2.30 tree (`e29634a`, `tools/measure-socket-voice.js`,
+`research/socket-voice-v0.2.30-2026-11-16.json`, verdict
+`operator-hears-raw-errno-and-unrunnable-repair`, **6 of 6 faces defective**):
+
+```
+signerd sign --socket <never bound> -> ENOENT: connect ENOENT <path>          exit 1
+signerd sign --socket <stale file>  -> ECONNREFUSED: connect ECONNREFUSED <path> exit 1
+signerd status --socket <path>      -> unknown_flag: --socket                 exit 2
+```
+
+The errno is not a reason: "ENOENT" does not say whether the daemon was never
+started, died, or whether the path is wrong, and "ECONNREFUSED" reads like a policy
+decision rather than a dead daemon. The repair was worse, because it pointed at a
+command that did not exist.
+
+`src/socketstatus.js` is now the one place that turns a probe verdict or a connect
+errno into the product's voice, and `signerd status --socket <path>` exists to answer
+the question every refusal asks:
+
+- `socket_missing` — nothing was ever bound at that path. Repair: the `signerd run`
+  command that starts a daemon there.
+- `socket_stale` — the socket file exists, nobody listens (a daemon that died without
+  cleaning up). Repair: remove that file (named, not `<path>`) and start again.
+- `socket_state_unknown` — the state could not be proven. Refused, never guessed.
+- `socket_not_reachable` / `socket_connect_failed` — the socket exists but cannot be
+  reached by this process.
+
+The raw errno is now only the INPUT to that classification; it never reaches the
+operator. `status --socket` answers `{"ok":true,"socket":{"path":...,"state":"live"}}`
+on stdout with exit 0 when the daemon is up, and the same JSON verdict (plus the code
+and repair on stderr) when it is not — so it works as a guard (`&&`) and as a
+diagnostic at the same time. A socket path outside the kernel's domain stays a USAGE
+refusal (exit 2), exactly as `src/socketpath.js` has always had it.
+
+**Limits, stated rather than hidden:**
+
+- The probe judges the path at the instant of the call — the same TOCTOU window as
+  every other path here. A daemon that dies between the probe and the request is
+  caught by the connect failure and re-refused by name.
+- `socket_state_unknown` is a refusal, not an answer: the product does not guess which
+  of "dead" and "alive" a socket is when it cannot prove it.
+- The state says nothing about *who* may talk to the socket — that stays the socket's
+  own protections (0700 directory, 0600 socket, owner checks).
+
+Pinned by `test/socket-voice.test.js` (8 cases: **D1–D6 red on the published pre-fix
+tree**, the RED baseline kept at `research/socket-voice-ladder-refix-baseline.log`;
+G1 — `status --grants --ledger` unchanged — and G2 — the real daemon still signs —
+green on BOTH trees), the two-tree measurement above with its pin
+`test/socket-voice-measurement.test.js` (P1–P6, and it checks the NUMBERS: 6 defective
+→ 0, and the named repair went from exit 2 / `unknown_flag` to a runnable state
+answer), and `tools/mutation-ladder-socket-voice.sh` (7/7 mutations caught, control
+green, tree byte-identical). Suite 738 → **752/752**.
