@@ -1,0 +1,119 @@
+{
+  "generatedAt": "2026-11-16T13:56:40.021Z",
+  "target": "installed:/tmp/sdup/node_modules/signerd",
+  "cli": "/tmp/sdup/node_modules/signerd/bin/signerd.js",
+  "client": "/tmp/sdup/node_modules/signerd/examples/user-zero-client.js",
+  "faces": [
+    {
+      "face": "F1-substituted-message",
+      "target": "signerd sign --out",
+      "exit": 0,
+      "stdoutHead": "{\"ok\":true,\"signature\":\"x\",\"amountLamports\":\"42\",\"feeLamports\":\"5000\",\"totalLamports\":\"5042\",\"wireSha256\":\"0000000000000000000000000000000000000000000000000000000000000000\",\"messageSha256\":\"0000000000000000000000000000000000000000000000000000000000000000\",\"seq\":\"1\",\"windowSpentLamports\":\"5042\",\"wind",
+      "stderrHead": "",
+      "artifact": {
+        "present": true,
+        "bytes": 215,
+        "verifies": true,
+        "reason": "nonempty"
+      },
+      "messageEqual": false
+    },
+    {
+      "face": "F1-substituted-message",
+      "target": "examples/user-zero-client.js",
+      "exit": 0,
+      "stdoutHead": "{\"ok\":true,\"signature\":\"x\",\"amountLamports\":\"42\",\"feeLamports\":\"5000\",\"seq\":\"1\",\"signedBytes\":215,\"out\":\"/tmp/signerd-clientverify-yj8pXq/f1-client.bin\"}",
+      "stderrHead": "",
+      "artifact": {
+        "present": true,
+        "bytes": 215,
+        "verifies": true,
+        "reason": "nonempty"
+      }
+    },
+    {
+      "face": "F2-garbage-signature",
+      "target": "signerd sign --out",
+      "exit": 0,
+      "stdoutHead": "{\"ok\":true,\"signature\":\"x\",\"amountLamports\":\"42\",\"feeLamports\":\"5000\",\"totalLamports\":\"5042\",\"wireSha256\":\"0000000000000000000000000000000000000000000000000000000000000000\",\"messageSha256\":\"0000000000000000000000000000000000000000000000000000000000000000\",\"seq\":\"1\",\"windowSpentLamports\":\"5042\",\"wind",
+      "stderrHead": "",
+      "artifact": {
+        "present": true,
+        "bytes": 215,
+        "verifies": true,
+        "reason": "nonempty"
+      },
+      "messageEqual": true
+    },
+    {
+      "face": "F2-garbage-signature",
+      "target": "examples/user-zero-client.js",
+      "exit": 0,
+      "stdoutHead": "{\"ok\":true,\"signature\":\"x\",\"amountLamports\":\"42\",\"feeLamports\":\"5000\",\"seq\":\"1\",\"signedBytes\":215,\"out\":\"/tmp/signerd-clientverify-yj8pXq/f2-client.bin\"}",
+      "stderrHead": "",
+      "artifact": {
+        "present": true,
+        "bytes": 215,
+        "verifies": true,
+        "reason": "nonempty"
+      }
+    },
+    {
+      "face": "F3-no-signature",
+      "target": "signerd sign --out",
+      "exit": 1,
+      "stdoutHead": "",
+      "stderrHead": "ERR_INVALID_ARG_TYPE: The first argument must be of type string or an instance of Buffer, ArrayBuffer, or Array or an Array-like Object. Received undefined | ",
+      "artifact": {
+        "present": false
+      }
+    },
+    {
+      "face": "F3-no-signature",
+      "target": "signerd sign-message --out",
+      "exit": 0,
+      "stdoutHead": "{\"ok\":true,\"signature\":\"x\",\"amountLamports\":\"42\",\"feeLamports\":\"5000\",\"totalLamports\":\"5042\",\"wireSha256\":\"0000000000000000000000000000000000000000000000000000000000000000\",\"messageSha256\":\"0000000000000000000000000000000000000000000000000000000000000000\",\"seq\":\"1\",\"windowSpentLamports\":\"5042\",\"wind",
+      "stderrHead": "",
+      "artifact": {
+        "present": true,
+        "bytes": 260,
+        "verifies": true,
+        "reason": "nonempty"
+      }
+    },
+    {
+      "face": "F4-substituted-body",
+      "target": "signerd sign-message --out",
+      "exit": 0,
+      "stdoutHead": "{\"ok\":true,\"kind\":\"message\",\"signature\":\"l7lsKKxHpOzgjfWK2L4M5kVBDd4l3U4hwV6rhDd8Ghhz2PTX/dbkGCQvQcllCu/G/E1KaFVOAcHfdRAAQWScDA==\",\"pubkey\":\"EycowUq+iAeNeNAoh840kEv0D252pyDRwOy0L0eRD+c=\",\"messageSha256\":\"ccf7aace1ecd1ad008cf514514fc9eb70c71e8649c1be831402bc74312d29bd1\",\"seq\":\"1\",\"windowMessages\":\"1\"",
+      "stderrHead": "",
+      "artifact": {
+        "present": true,
+        "bytes": 407,
+        "verifies": true,
+        "reason": "nonempty"
+      }
+    },
+    {
+      "face": "C1-real-daemon",
+      "target": "signerd sign --out",
+      "exit": 0,
+      "artifact": {
+        "present": true,
+        "bytes": 215,
+        "verifies": true,
+        "reason": "nonempty"
+      },
+      "verifies": true,
+      "messageEqual": true,
+      "note": "control: the honest path must still sign and verify"
+    }
+  ],
+  "defectiveCount": 6,
+  "verdict": "client-accepts-unverified-artifact",
+  "limits": [
+    "A lying server is an impostor at the socket path, which the daemon's own socket protections (0700 dir, 0600 socket, owner checks) are designed to prevent; this measures the CLIENT's last line of defense, not the socket's.",
+    "The message-path check verifies the signature against the pubkey the response carries, so it catches substitution and unverifiable signatures, not a daemon answering with its own key - pinning the key is the consumer's job (openreceipts receipt.py does it).",
+    "No network, no on-chain broadcast: the verification is over the bytes the client received."
+  ]
+}

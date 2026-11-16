@@ -476,3 +476,61 @@ tree byte-identical). Limits: the refusal names the *class* of the failure, not 
 (an `EACCES` and an `EIO` are both `unreadable`); the classification happens at the instant
 of the read, so a path that changes right after it is still the TOCTOU window every other
 path here has.
+
+## The client verifies the daemon's answer (measured 2026-11-16)
+
+The daemon verifies its own output before it returns it (`src/signer.js`), but for a long
+time nothing between the socket and the operator's file was checked. The socket is a
+*capability* — whoever can bind it can impersonate the signing daemon — and the client was
+the one place that simply believed whatever came back.
+
+Measured against the **published v0.2.28 tree** with a server that answers exactly what a
+lying daemon would answer (`node tools/measure-client-verification.js --published <install>`
+→ `research/client-verification-v0.2.28-2026-11-16.json`, verdict
+`client-accepts-unverified-artifact`, **6 of 8 faces defective**):
+
+| face | what the server answered | what the client did |
+|---|---|---|
+| substituted message | a signed wire whose message region differs from the requested wire | wrote it to `--out`, **exit 0** |
+| garbage signature | the right message, random bytes in the 64-byte signature slot | wrote it to `--out`, **exit 0** |
+| no signature (`sign`) | `{ok:true}` with no `signed` field | crashed on a raw `ERR_INVALID_ARG_TYPE`, exit 1, no artifact |
+| no signature (`sign-message`) | `{ok:true}` with no signature | wrote a 260-byte receipt document, **exit 0** |
+| substituted body | a receipt signed over a *different* body | wrote it to `--out`, **exit 0** |
+| the example client | substituted message / garbage signature | wrote it to `--out`, **exit 0** |
+
+`research/client-verification-main-2026-11-16.json` is the same instrument against the fix
+tree: verdict `client-verification-holds`, **0 of 8**, and the control — a real daemon —
+still signs, writes `0600`, and the signature verifies.
+
+**What makes it checkable with no key material.** A Solana transaction carries the fee
+payer's *public* key inside the message the client itself built, so the client can verify
+the signature under Node's OpenSSL ed25519 and byte-compare the message region against the
+wire it sent. A lying daemon fails both: it does not hold the key, and changing the message
+fails the comparison. On the message path the canonical bytes are derived from the body the
+client itself read, so a daemon that signed something else cannot pass either.
+
+**The order is deliberate** (same conservative direction as the daemon): shape first (length,
+signature count), then the byte identity of the message region, then the signature. Every
+failure is a refusal in the product's voice — one code, one `fix:` line, **exit 1, nothing
+written**: `signed_message_mismatch`, `signed_signature_invalid`, `signed_missing`,
+`signed_length_mismatch`, `signed_count_mismatch`, `signed_signature_empty`,
+`signed_unparseable`, `signed_pubkey_invalid`, `signed_body_invalid`, `signed_wire_invalid`.
+
+A refusal here means the artifact was *not* delivered, so it must not claim that nothing
+happened: the daemon may still have signed and charged its budget, and the JSON answer
+carries `note: "nothing was written; the daemon may still have spent its budget for this
+request"` so a retry that comes back `replay` is explained.
+
+**Limits, stated rather than hidden:**
+
+- The socket's own protections (0700 directory, 0600 socket, owner checks, the
+  `socketprobe` verdicts) are what keep an impostor from binding the path at all. This check
+  is the *client's last line of defense*, not a replacement for them.
+- The message-path check verifies against the pubkey **the response carries**, so it catches
+  substitution and unverifiable signatures — not a daemon answering under its own key.
+  Pinning the key is the consumer's job, and openreceipts' `receipt.py` does it.
+- Nothing is broadcast: the verification is over the bytes the client received.
+
+Pinned by `test/client-verification.test.js` (9 cases: **6 red on the pre-fix published
+tree**, 3 green — the control and the two pure-verifier unit tests), the two-tree
+measurement above, and the full suite 717 → **726/726**.

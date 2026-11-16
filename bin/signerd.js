@@ -11,6 +11,7 @@ const { writeStderrSync } = require('../src/stdout');
 // its code EXACTLY ONCE (measured doubled on 2026-11-07, see src/lease.js).
 const { detailOf } = require('../src/lease');
 const { readOperatorFile, classifyReadError } = require('../src/input-file');
+const { verifySignedWire, verifyMessageSignature } = require('../src/client-verify');
 
 /**
  * Refuse an unwritable --out BEFORE anything is read, requested or signed.
@@ -484,6 +485,51 @@ async function main() {
     }
     wire = txProbe.bytes;
     const response = await request({ socketPath, grant, wire, dry: args.dry === true ? true : undefined });
+    // VERIFY BEFORE DELIVERY. The socket is a capability: whoever can bind
+    // it can impersonate the daemon. The daemon verifies its OWN output
+    // (src/signer.js), but the client is the one that hands the artifact to
+    // a broadcaster - and until this check existed, the client believed
+    // whatever came back (measured 2026-11-16 on the published v0.2.28 tree,
+    // tools/measure-client-verification.js: a server that returned a
+    // substituted message, or a garbage signature, or no signature at all
+    // was written to --out with exit 0).
+    //
+    // The check needs no key material: the fee payer's PUBLIC key is inside
+    // the message the client itself built, so the client can verify the
+    // signature under Node's OpenSSL ed25519 and byte-compare the message
+    // region against the wire it sent.
+    //
+    // A failed verification is a REFUSAL (exit 1) and writes NOTHING: an
+    // artifact that does not verify must never reach a file or a stdout
+    // that a broadcaster could pick up. The daemon may still have signed and
+    // charged its budget - the refusal says so, so the operator knows a
+    // retry will be refused `replay`.
+    if (response.ok && !response.dry) {
+      const verdict = verifySignedWire({ wire, signed: response.signed === undefined
+        ? undefined : Buffer.from(response.signed, 'base64') });
+      if (!verdict.ok) {
+        response.ok = false;
+        response.error = verdict.code;
+        response.detail = {
+          message: verdict.message,
+          ...(verdict.detail || {}),
+        };
+        const refusal = deliverResponse({
+          payload: JSON.stringify({
+            ok: false,
+            error: verdict.code,
+            detail: response.detail,
+            note: 'nothing was written; the daemon may still have spent its budget for this request',
+          }) + '\n',
+          artifact: false,
+          ok: false,
+          exitCode: 1,
+        });
+        writeStderrSync(`${verdict.code}: ${verdict.message}\n${verdict.fix}\n`);
+        if (refusal.stderr) writeStderrSync(refusal.stderr);
+        process.exit(1);
+      }
+    }
     if (response.ok && !response.dry && typeof args.out === 'string') {
       // DELIVERY. The daemon has already signed: the budget is spent and the
       // replay identity is recorded. If the write fails now, the signature
@@ -881,6 +927,37 @@ async function main() {
       }
     }
     const response = await request({ socketPath, grant, body: bodyText, dry: args.dry === true ? true : undefined });
+    // VERIFY BEFORE DELIVERY, same rule as `sign` (see the comment there):
+    // the openreceipts consumer verifies before it writes, but the CLI did
+    // not - it handed back a {receipt, pubkey, sig} document that nothing
+    // had checked (measured 2026-11-16 on the published v0.2.28 tree).
+    // The canonical bytes are derived HERE from the body the client itself
+    // read, so a daemon that signed something else cannot pass.
+    if (response.ok && !response.dry) {
+      const verdict = verifyMessageSignature({ body: JSON.parse(bodyText), response });
+      if (!verdict.ok) {
+        response.ok = false;
+        response.error = verdict.code;
+        response.detail = {
+          message: verdict.message,
+          ...(verdict.detail || {}),
+        };
+        const refusal = deliverResponse({
+          payload: JSON.stringify({
+            ok: false,
+            error: verdict.code,
+            detail: response.detail,
+            note: 'nothing was written; the daemon may still have spent its budget for this request',
+          }) + '\n',
+          artifact: false,
+          ok: false,
+          exitCode: 1,
+        });
+        writeStderrSync(`${verdict.code}: ${verdict.message}\n${verdict.fix}\n`);
+        if (refusal.stderr) writeStderrSync(refusal.stderr);
+        process.exit(1);
+      }
+    }
     if (response.ok && !response.dry && typeof args.out === 'string') {
       // The receipt file, openreceipts-shaped: the body the daemon signed
       // (re-serialized with sorted keys, indent 2 - formatting is not

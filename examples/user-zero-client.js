@@ -41,6 +41,7 @@ const fs = require('node:fs');
 const { buildTransferWire, signViaDaemon } = require('../src/client');
 const { checkOutWritable, outPreflightFix, writeOutAtomic, outWriteFix } = require('../src/out-preflight');
 const { deliverRecovery, deliverResponse, emit } = require('../src/recovery');
+const { verifySignedWire } = require('../src/client-verify');
 const { writeStderrSync } = require('../src/stdout');
 const {
   parseTokens, arityProblemsFor, checkFlagsFor, closestFlag,
@@ -194,6 +195,34 @@ async function main() {
     });
     if (answer.stderr) writeStderrSync(answer.stderr);
     process.exit(answer.exitCode);
+  }
+
+  // VERIFY BEFORE DELIVERY. The socket is a capability: whoever can bind
+  // it can impersonate the daemon. The daemon verifies its own output, but
+  // the client is the one that hands the artifact on - so the client checks
+  // it (measured 2026-11-16 on the published v0.2.28 tree: a lying daemon
+  // could make this client write a substituted or unverifiable wire with
+  // exit 0). The check needs no key material: the fee payer's PUBLIC key
+  // is inside the message the client itself built.
+  const verification = verifySignedWire({
+    wire,
+    signed: response.signed === undefined ? undefined : Buffer.from(response.signed, 'base64'),
+  });
+  if (!verification.ok) {
+    const answer = deliverResponse({
+      payload: JSON.stringify({
+        ok: false,
+        error: verification.code,
+        detail: { message: verification.message, ...(verification.detail || {}) },
+        note: 'nothing was written; the daemon may still have spent its budget for this request',
+      }) + '\n',
+      artifact: false,
+      ok: false,
+      exitCode: 1,
+    });
+    writeStderrSync(`${verification.code}: ${verification.message}\n${verification.fix}\n`);
+    if (answer.stderr) writeStderrSync(answer.stderr);
+    process.exit(1);
   }
 
   const signed = Buffer.from(response.signed, 'base64');

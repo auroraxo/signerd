@@ -125,6 +125,13 @@ if (answer.ok) {
 }
 ```
 
+The CLI verifies that answer before it writes anything: the returned wire must
+carry the same message that was sent, and its signature must verify under the
+fee payer's public key (`verifySignedWire` from `signerd/src/client-verify.js`,
+which the CLI and the example client both call). A server at the socket path
+that answers for a different transaction, or with a signature that verifies
+under nothing, is refused by name and no file is written.
+
 Already have a key? `signerd import` encrypts an existing `id.json` and leaves
 the original untouched. To replace a keystore on purpose, add `--overwrite`
 (the old key is gone afterwards). The complete walkthrough, including signing
@@ -196,6 +203,12 @@ with certainty instead of a wide set with guesses.
 
 - Everything is local: a Unix socket, an encrypted keystore (scrypt +
   AES-256-GCM), an append-only journal. No network service.
+- The client checks what the daemon handed back before it writes it: the
+  returned wire must carry the very message that was asked to be signed, and
+  its signature must verify under the fee payer's public key. A server at
+  the socket path that answers with something else is refused by name
+  (`signed_message_mismatch`, `signed_signature_invalid`) and nothing is
+  written.
 - Grant files are checked on load: owner, mode, schema, seal. A grant that could
   never sign (past expiry, cap below the base fee) is refused at creation.
 - Refusals name the flag and the fix instead of failing silently.

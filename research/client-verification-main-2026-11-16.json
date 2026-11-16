@@ -1,0 +1,101 @@
+{
+  "generatedAt": "2026-11-16T13:57:11.803Z",
+  "target": "checkout:/home/aurora/github_repos/signerd",
+  "cli": "/home/aurora/github_repos/signerd/bin/signerd.js",
+  "client": "/home/aurora/github_repos/signerd/examples/user-zero-client.js",
+  "faces": [
+    {
+      "face": "F1-substituted-message",
+      "target": "signerd sign --out",
+      "exit": 1,
+      "stdoutHead": "{\"ok\":false,\"error\":\"signed_message_mismatch\",\"detail\":{\"message\":\"the returned wire does not carry the message that was asked to be signed\"},\"note\":\"nothing was written; the daemon may still have spent its budget for this request\"}",
+      "stderrHead": "signed_message_mismatch: the returned wire does not carry the message that was asked to be signed |   fix: the daemon at --socket answered for a DIFFERENT transaction; verify the daemon (only the daemon's owner may bind that path) before trusting anything it returns | ",
+      "artifact": {
+        "present": false
+      },
+      "messageEqual": null
+    },
+    {
+      "face": "F1-substituted-message",
+      "target": "examples/user-zero-client.js",
+      "exit": 1,
+      "stdoutHead": "{\"ok\":false,\"error\":\"signed_message_mismatch\",\"detail\":{\"message\":\"the returned wire does not carry the message that was asked to be signed\"},\"note\":\"nothing was written; the daemon may still have spent its budget for this request\"}",
+      "stderrHead": "signed_message_mismatch: the returned wire does not carry the message that was asked to be signed |   fix: the daemon at --socket answered for a DIFFERENT transaction; verify the daemon (only the daemon's owner may bind that path) before trusting anything it returns | ",
+      "artifact": {
+        "present": false
+      }
+    },
+    {
+      "face": "F2-garbage-signature",
+      "target": "signerd sign --out",
+      "exit": 1,
+      "stdoutHead": "{\"ok\":false,\"error\":\"signed_signature_invalid\",\"detail\":{\"message\":\"the returned signature does not verify under the fee payer's public key\"},\"note\":\"nothing was written; the daemon may still have spent its budget for this request\"}",
+      "stderrHead": "signed_signature_invalid: the returned signature does not verify under the fee payer's public key |   fix: the daemon at --socket returned a signature made by some other key or over other bytes; do not broadcast it — verify the daemon you are talking to | ",
+      "artifact": {
+        "present": false
+      },
+      "messageEqual": null
+    },
+    {
+      "face": "F2-garbage-signature",
+      "target": "examples/user-zero-client.js",
+      "exit": 1,
+      "stdoutHead": "{\"ok\":false,\"error\":\"signed_message_mismatch\",\"detail\":{\"message\":\"the returned wire does not carry the message that was asked to be signed\"},\"note\":\"nothing was written; the daemon may still have spent its budget for this request\"}",
+      "stderrHead": "signed_message_mismatch: the returned wire does not carry the message that was asked to be signed |   fix: the daemon at --socket answered for a DIFFERENT transaction; verify the daemon (only the daemon's owner may bind that path) before trusting anything it returns | ",
+      "artifact": {
+        "present": false
+      }
+    },
+    {
+      "face": "F3-no-signature",
+      "target": "signerd sign --out",
+      "exit": 1,
+      "stdoutHead": "{\"ok\":false,\"error\":\"signed_missing\",\"detail\":{\"message\":\"the daemon answered ok:true but returned no signature\"},\"note\":\"nothing was written; the daemon may still have spent its budget for this request\"}",
+      "stderrHead": "signed_missing: the daemon answered ok:true but returned no signature |   fix: the daemon at --socket did not produce an artifact; check it is the real signerd (only the daemon's owner may bind that path) and retry | ",
+      "artifact": {
+        "present": false
+      }
+    },
+    {
+      "face": "F3-no-signature",
+      "target": "signerd sign-message --out",
+      "exit": 1,
+      "stdoutHead": "{\"ok\":false,\"error\":\"signed_missing\",\"detail\":{\"message\":\"the daemon answered ok:true but returned no signature\"},\"note\":\"nothing was written; the daemon may still have spent its budget for this request\"}",
+      "stderrHead": "signed_missing: the daemon answered ok:true but returned no signature |   fix: the daemon at --socket did not produce an artifact; verify it is the real signerd | ",
+      "artifact": {
+        "present": false
+      }
+    },
+    {
+      "face": "F4-substituted-body",
+      "target": "signerd sign-message --out",
+      "exit": 1,
+      "stdoutHead": "{\"ok\":false,\"error\":\"signed_message_mismatch\",\"detail\":{\"message\":\"the daemon's message hash does not match the body that was asked to be signed\",\"expected\":\"d293d7d4450b61bd45f22d8f539cfb4f7c384c0fe063d476f47e871247dcdb19\",\"returned\":\"ccf7aace1ecd1ad008cf514514fc9eb70c71e8649c1be831402bc74312d29bd1",
+      "stderrHead": "signed_message_mismatch: the daemon's message hash does not match the body that was asked to be signed |   fix: the daemon at --socket answered for a DIFFERENT body; verify the daemon before trusting it | ",
+      "artifact": {
+        "present": false
+      }
+    },
+    {
+      "face": "C1-real-daemon",
+      "target": "signerd sign --out",
+      "exit": 0,
+      "artifact": {
+        "present": true,
+        "bytes": 215,
+        "verifies": true,
+        "reason": "nonempty"
+      },
+      "verifies": true,
+      "messageEqual": true,
+      "note": "control: the honest path must still sign and verify"
+    }
+  ],
+  "defectiveCount": 0,
+  "verdict": "client-verification-holds",
+  "limits": [
+    "A lying server is an impostor at the socket path, which the daemon's own socket protections (0700 dir, 0600 socket, owner checks) are designed to prevent; this measures the CLIENT's last line of defense, not the socket's.",
+    "The message-path check verifies the signature against the pubkey the response carries, so it catches substitution and unverifiable signatures, not a daemon answering with its own key - pinning the key is the consumer's job (openreceipts receipt.py does it).",
+    "No network, no on-chain broadcast: the verification is over the bytes the client received."
+  ]
+}
