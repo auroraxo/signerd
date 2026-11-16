@@ -743,7 +743,7 @@ function request({ socketPath, grant, wire, body, dry, timeoutMs = REQUEST_TIMEO
           buffer = Buffer.alloc(0);
           socket.destroy();
           const err = fail('response_invalid', 'the daemon answer was not JSON');
-          err.fix = '  fix: the answer could not be parsed, so it was not accepted; check that --socket names the signerd daemon and not another service, then retry';
+          err.fix = '  fix: the answer was not JSON, so it could not be a verdict; check that --socket names the signerd daemon and not another service, then retry';
           reject(err);
           return;
         }

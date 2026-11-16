@@ -150,6 +150,17 @@ test('D1 an oversized response frame is refused by name, not by the clock', asyn
     `the client must name the frame, not its own clock: ${JSON.stringify(settled)}`);
   assert.ok(settled.fix && settled.fix.length > 0,
     `the refusal must carry a repair: ${JSON.stringify(settled)}`);
+  // The repair must be a complete `fix:` line AND carry the bound: a
+  // repair that says nothing the operator can check is the same silence
+  // in different words (caught by M3 of the mutation ladder).
+  assert.ok(/^\s*fix:/.test(settled.fix),
+    `the repair must be a fix: line: ${JSON.stringify(settled.fix)}`);
+  assert.ok(/8192/.test(settled.fix),
+    `the repair must state the bound: ${JSON.stringify(settled.fix)}`);
+  // ...and the size of an HONEST answer, so the operator can tell the cap
+  // from a cap that swallows the contract (caught by M3).
+  assert.ok(/2450/.test(settled.fix),
+    `the repair must give the honest size for scale: ${JSON.stringify(settled.fix)}`);
   assert.ok(waited < 4000,
     `the refusal must come from the cap, not the timeout (waited ${waited}ms)`);
 });
@@ -171,6 +182,10 @@ test('D2 a non-JSON response frame is refused by name with a repair', async (t) 
     `the refusal must carry its own code (a bare Error prints as "error:"): ${JSON.stringify(settled)}`);
   assert.ok(settled.fix && settled.fix.length > 0,
     `the refusal must carry a repair: ${JSON.stringify(settled)}`);
+  assert.ok(/^\s*fix:/.test(settled.fix),
+    `the repair must be a fix: line: ${JSON.stringify(settled.fix)}`);
+  assert.ok(/JSON/.test(settled.fix),
+    `the repair must say what was wrong with the frame: ${JSON.stringify(settled.fix)}`);
 });
 
 // D3: the repair the client attaches must SURVIVE to the operator's

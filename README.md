@@ -209,6 +209,12 @@ with certainty instead of a wide set with guesses.
   the socket path that answers with something else is refused by name
   (`signed_message_mismatch`, `signed_signature_invalid`) and nothing is
   written.
+- The answer frame itself is bounded: a daemon that streams without ever
+  finishing its line is refused by name (`response_too_large`, 8192 bytes —
+  a real sign answers about 716), and a frame that is not JSON or carries no
+  `ok` verdict is refused as `response_invalid`. Every one of these refusals
+  reaches stderr with a `fix:` line, and nothing is relayed to stdout on
+  somebody else's behalf.
 - Grant files are checked on load: owner, mode, schema, seal. A grant that could
   never sign (past expiry, cap below the base fee) is refused at creation.
 - Refusals name the flag and the fix instead of failing silently.
