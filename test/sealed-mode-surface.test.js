@@ -362,10 +362,14 @@ test('S2 the README sealed block runs verbatim in its documented position', asyn
     const deadline = Date.now() + 15000;
     while (Date.now() < deadline && !answered) {
       const probe = sh(['sign', '--socket', s.socket, '--grant', 'ops-24h', '--tx', probeTx]);
-      // A refusal that is NOT a socket error means the daemon is up and
+      // A refusal that is NOT a socket state means the daemon is up and
       // answering (it refuses for its own reason - that is a daemon answer,
-      // not a dead socket).
-      answered = !/no such file|ENOENT|connect/i.test(`${probe.stdout}${probe.stderr}`);
+      // not a dead socket). The socket states are named as of 2026-11-16
+      // (socket_missing / socket_stale / socket_state_unknown); the raw
+      // errno patterns stay in the test only so the probe also recognises
+      // the voice of an older tree.
+      answered = !/socket_missing|socket_stale|socket_state_unknown|no such file|ENOENT|connect/i
+        .test(`${probe.stdout}${probe.stderr}`);
       if (!answered) await sleep(100);
     }
     assert.ok(answered,

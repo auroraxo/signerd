@@ -1,0 +1,87 @@
+{
+  "tool": "measure-socket-voice",
+  "date": "2026-11-16",
+  "tree": "published",
+  "head": "e29634a",
+  "cases": {
+    "S1-status-repair-runnable": {
+      "exit": 2,
+      "code": "unknown_flag",
+      "hasFix": true,
+      "firstLine": "unknown_flag: --socket",
+      "stdoutHead": "",
+      "namedRepair": null,
+      "defect": true
+    },
+    "S2-sign-absent-socket": {
+      "exit": 1,
+      "code": "ENOENT",
+      "hasFix": true,
+      "firstLine": "ENOENT: connect ENOENT <tmp>/never-bound.sock",
+      "stdoutHead": "",
+      "namedRepair": "<path>)",
+      "defect": true
+    },
+    "S3-sign-stale-socket": {
+      "exit": 1,
+      "code": "ECONNREFUSED",
+      "hasFix": true,
+      "firstLine": "ECONNREFUSED: connect ECONNREFUSED <tmp>/stale.sock",
+      "stdoutHead": "",
+      "namedRepair": "<path>)",
+      "defect": true
+    },
+    "S4-status-stale-socket": {
+      "exit": 2,
+      "code": "unknown_flag",
+      "hasFix": true,
+      "firstLine": "unknown_flag: --socket",
+      "stdoutHead": "",
+      "namedRepair": null,
+      "defect": true
+    },
+    "S5-sign-refusal-repair-runs": {
+      "exit": 2,
+      "code": "unknown_flag",
+      "hasFix": true,
+      "firstLine": "unknown_flag: --socket",
+      "stdoutHead": "",
+      "namedRepair": null,
+      "repairRan": true,
+      "defect": true
+    },
+    "S6-status-live-socket": {
+      "exit": 2,
+      "code": "unknown_flag",
+      "hasFix": true,
+      "firstLine": "unknown_flag: --socket",
+      "stdoutHead": "",
+      "namedRepair": null,
+      "defect": true
+    },
+    "G1-control-sign-still-signs": {
+      "exit": 0,
+      "code": "",
+      "hasFix": false,
+      "firstLine": "",
+      "stdoutHead": "{\"ok\":true,\"signature\":\"47etSZsFnfDb3sbXQL4wpnSDyDrHMLeFkw4rxK56pg2wLWrKVVfHfiK9ZmRZnKEoq7WdTyPSVu6X3EJieVd7W1cj\",\"amountLamports\":\"42\",\"feeLamports\":\"5000\",\"totalLamports\":\"5042\",\"wireSha256\":\"6be29f",
+      "namedRepair": null,
+      "control": true,
+      "artifactWritten": true,
+      "defect": false
+    },
+    "G2-control-status-files": {
+      "exit": 0,
+      "code": "",
+      "hasFix": false,
+      "firstLine": "",
+      "stdoutHead": "{\"ok\":true,\"grants\":[\"ops\"],\"ledger\":{\"records\":1,\"seq\":1,\"fingerprints\":1},\"legacyState\":{\"unknownMessageRecords\":0},\"sealed\":false,\"journalSealed\":false}",
+      "namedRepair": null,
+      "control": true,
+      "defect": false
+    }
+  },
+  "defectiveFaces": 6,
+  "totalFaces": 6,
+  "verdict": "operator-hears-raw-errno-and-unrunnable-repair"
+}

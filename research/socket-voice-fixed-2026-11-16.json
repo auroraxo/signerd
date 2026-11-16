@@ -1,0 +1,87 @@
+{
+  "tool": "measure-socket-voice",
+  "date": "2026-11-16",
+  "tree": "worktree",
+  "head": "e29634a",
+  "cases": {
+    "S1-status-repair-runnable": {
+      "exit": 1,
+      "code": "socket_missing",
+      "hasFix": true,
+      "firstLine": "socket_missing: no socket file at <tmp>/never-bound.sock: the daemon is not running there",
+      "stdoutHead": "{\"ok\":false,\"error\":\"socket_missing\",\"detail\":\"no socket file at <tmp>/never-bound.sock: the daemon is not running there\",\"socket\":{\"path\":\"<tmp>/ne",
+      "namedRepair": "<tmp>/never-bound.sock",
+      "defect": false
+    },
+    "S2-sign-absent-socket": {
+      "exit": 1,
+      "code": "socket_missing",
+      "hasFix": true,
+      "firstLine": "socket_missing: no socket file at <tmp>/never-bound.sock: the daemon is not running there",
+      "stdoutHead": "",
+      "namedRepair": "<tmp>/never-bound.sock",
+      "defect": false
+    },
+    "S3-sign-stale-socket": {
+      "exit": 1,
+      "code": "socket_stale",
+      "hasFix": true,
+      "firstLine": "socket_stale: a socket file exists at <tmp>/stale.sock but nothing is listening on it",
+      "stdoutHead": "",
+      "namedRepair": "<tmp>/stale.sock",
+      "defect": false
+    },
+    "S4-status-stale-socket": {
+      "exit": 1,
+      "code": "socket_stale",
+      "hasFix": true,
+      "firstLine": "socket_stale: a socket file exists at <tmp>/stale.sock but nothing is listening on it",
+      "stdoutHead": "{\"ok\":false,\"error\":\"socket_stale\",\"detail\":\"a socket file exists at <tmp>/stale.sock but nothing is listening on it\",\"socket\":{\"path\":\"<tmp>/stale.",
+      "namedRepair": "<tmp>/stale.sock",
+      "defect": false
+    },
+    "S5-sign-refusal-repair-runs": {
+      "exit": 1,
+      "code": "socket_missing",
+      "hasFix": true,
+      "firstLine": "socket_missing: no socket file at <tmp>/never-bound.sock: the daemon is not running there",
+      "stdoutHead": "{\"ok\":false,\"error\":\"socket_missing\",\"detail\":\"no socket file at <tmp>/never-bound.sock: the daemon is not running there\",\"socket\":{\"path\":\"<tmp>/ne",
+      "namedRepair": "<tmp>/never-bound.sock",
+      "repairRan": true,
+      "defect": false
+    },
+    "S6-status-live-socket": {
+      "exit": 0,
+      "code": "",
+      "hasFix": false,
+      "firstLine": "",
+      "stdoutHead": "{\"ok\":true,\"socket\":{\"path\":\"<tmp>/live.sock\",\"state\":\"live\"}}",
+      "namedRepair": null,
+      "defect": false
+    },
+    "G1-control-sign-still-signs": {
+      "exit": 0,
+      "code": "",
+      "hasFix": false,
+      "firstLine": "",
+      "stdoutHead": "{\"ok\":true,\"signature\":\"5wPFDHNK3aAEux5W7rdN6eAUbUVUih3nSpCcXJn5d2SUgTSUgdMouQtkBogbq6xjeobP9LQFVnGBd5PW2yHHmEJ1\",\"amountLamports\":\"42\",\"feeLamports\":\"5000\",\"totalLamports\":\"5042\",\"wireSha256\":\"b7a301",
+      "namedRepair": null,
+      "control": true,
+      "artifactWritten": true,
+      "defect": false
+    },
+    "G2-control-status-files": {
+      "exit": 0,
+      "code": "",
+      "hasFix": false,
+      "firstLine": "",
+      "stdoutHead": "{\"ok\":true,\"grants\":[\"ops\"],\"ledger\":{\"records\":1,\"seq\":1,\"fingerprints\":1},\"legacyState\":{\"unknownMessageRecords\":0},\"sealed\":false,\"journalSealed\":false}",
+      "namedRepair": null,
+      "control": true,
+      "defect": false
+    }
+  },
+  "defectiveFaces": 0,
+  "totalFaces": 6,
+  "verdict": "operator-hears-a-socket-state-not-an-errno"
+}

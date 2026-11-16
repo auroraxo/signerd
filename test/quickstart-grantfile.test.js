@@ -241,7 +241,14 @@ test('sign-message --add-grant creates the message grant the documented flow nee
     '--body', body, '--out', out, '--add-grant', '--keystore', path.join(cfg, 'ops.key')], '0002');
   const preLog = `${pre.stdout}\n${pre.stderr}`;
   assert.notStrictEqual(pre.status, 0, 'the request must still fail on the missing daemon');
-  assert.match(preLog, /ENOENT|no such file|connect/i, 'the failure must be the socket, not the grant file');
+  // The failure must be the SOCKET, not the grant file - and it must say
+  // so in the product's voice (2026-11-16: the same failure used to read
+  // `ENOENT: connect ENOENT ...`, a syscall name the operator cannot act
+  // on; the state is now named, with a repair).
+  assert.match(preLog, /socket_missing|socket_stale/,
+    'the failure must be the named socket state, not the grant file');
+  assert.doesNotMatch(preLog, /\bENOENT\b|connect ENOENT/,
+    `a raw errno must not reach the operator: ${preLog}`);
   assert.ok(fs.existsSync(grants), '--add-grant must create the grant file');
   const doc = JSON.parse(fs.readFileSync(grants, 'utf8'));
   const g = doc.grants.releases;

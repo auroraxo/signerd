@@ -1,0 +1,158 @@
+✖ D1 status --socket names an absent socket (the command every refusal names) (214.399553ms)
+✖ D2 a sign against an absent socket is socket_missing, not a raw errno (242.122301ms)
+✖ D3 a sign against a stale socket is socket_stale, not ECONNREFUSED (293.030825ms)
+✖ D4 the repair the transport refusal names actually runs (460.648782ms)
+✖ D5 status --socket on a LIVE daemon reports live and exits 0 (1334.011079ms)
+✖ D6 an unprovable socket state is refused as unknown, never guessed (221.34622ms)
+✔ G1 guard: status --grants --ledger keeps its answers (1185.833962ms)
+✔ G2 guard: the real daemon still signs through the documented path (1640.088147ms)
+ℹ tests 8
+ℹ suites 0
+ℹ pass 2
+ℹ fail 6
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 5760.358225
+
+✖ failing tests:
+
+test at test/socket-voice.test.js:158:1
+✖ D1 status --socket names an absent socket (the command every refusal names) (214.399553ms)
+  AssertionError [ERR_ASSERTION]: a state refusal exits 1 (got 2)
+  
+  2 !== 1
+  
+      at TestContext.<anonymous> (/tmp/prefixtree/test/socket-voice.test.js:165:12)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 2,
+    expected: 1,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at test/socket-voice.test.js:186:1
+✖ D2 a sign against an absent socket is socket_missing, not a raw errno (242.122301ms)
+  AssertionError [ERR_ASSERTION]: the refusal must NAME the state: ENOENT: connect ENOENT /tmp/signerd-d2-9WWLcC/never-bound.sock
+    fix: the socket connection failed; check that --socket names a running signerd daemon (signerd status --socket <path>)
+  
+  + actual - expected
+  
+  + 'ENOENT'
+  - 'socket_missing'
+  
+      at TestContext.<anonymous> (/tmp/prefixtree/test/socket-voice.test.js:195:12)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 'ENOENT',
+    expected: 'socket_missing',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at test/socket-voice.test.js:209:1
+✖ D3 a sign against a stale socket is socket_stale, not ECONNREFUSED (293.030825ms)
+  AssertionError [ERR_ASSERTION]: a stale socket must be named as stale: ECONNREFUSED: connect ECONNREFUSED /tmp/signerd-d3-qcmc7n/stale.sock
+    fix: the socket connection failed; check that --socket names a running signerd daemon (signerd status --socket <path>)
+  
+  + actual - expected
+  
+  + 'ECONNREFUSED'
+  - 'socket_stale'
+  
+      at TestContext.<anonymous> (/tmp/prefixtree/test/socket-voice.test.js:219:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 'ECONNREFUSED',
+    expected: 'socket_stale',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at test/socket-voice.test.js:232:1
+✖ D4 the repair the transport refusal names actually runs (460.648782ms)
+  AssertionError [ERR_ASSERTION]: the named repair must not be a USAGE refusal (exit 2): unknown_flag: --socket
+    fix: signerd status does not take --socket
+    fix: signerd status takes: --grant-seal-passphrase-file --grants --journal-seal-passphrase-file --ledger
+  
+      at TestContext.<anonymous> (/tmp/prefixtree/test/socket-voice.test.js:248:12)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 2,
+    expected: 2,
+    operator: 'notStrictEqual',
+    diff: 'simple'
+  }
+
+test at test/socket-voice.test.js:263:1
+✖ D5 status --socket on a LIVE daemon reports live and exits 0 (1334.011079ms)
+  AssertionError [ERR_ASSERTION]: a live daemon must be reported ok: unknown_flag: --socket
+    fix: signerd status does not take --socket
+    fix: signerd status takes: --grant-seal-passphrase-file --grants --journal-seal-passphrase-file --ledger
+  
+  
+  2 !== 0
+  
+      at TestContext.<anonymous> (/tmp/prefixtree/test/socket-voice.test.js:269:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 2,
+    expected: 0,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at test/socket-voice.test.js:295:1
+✖ D6 an unprovable socket state is refused as unknown, never guessed (221.34622ms)
+  AssertionError [ERR_ASSERTION]: an unprovable state must be named unknown: unknown_flag: --socket
+    fix: signerd status does not take --socket
+    fix: signerd status takes: --grant-seal-passphrase-file --grants --journal-seal-passphrase-file --ledger
+  
+  + actual - expected
+  
+  + 'unknown_flag'
+  - 'socket_state_unknown'
+  
+      at TestContext.<anonymous> (/tmp/prefixtree/test/socket-voice.test.js:323:12)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 'unknown_flag',
+    expected: 'socket_state_unknown',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
