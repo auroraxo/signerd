@@ -216,8 +216,13 @@ const COMMAND_FLAGS = {
   ],
   'grant-remove': ['grants', 'name', 'seal-passphrase-file'],
   'sign-message': ['socket', 'grant', 'body', 'out', 'add-grant', 'keystore', 'grants', 'dry'],
+  // `status --socket` is the REPAIR the transport refusal names (measured
+  // 2026-11-16, published v0.2.30: the refusal said "signerd status --socket
+  // <path>" and the CLI answered `unknown_flag: --socket`, exit 2 - the
+  // named repair could not be run). A refusal may only name a repair the
+  // CLI actually offers, so the flag has to be there.
   status: [
-    'grants', 'ledger', 'grant-seal-passphrase-file', 'journal-seal-passphrase-file',
+    'grants', 'ledger', 'socket', 'grant-seal-passphrase-file', 'journal-seal-passphrase-file',
   ],
   'seal-grants': ['grants', 'seal-passphrase-file', 'out'],
   'verify-grants': ['grants', 'seal-passphrase-file'],

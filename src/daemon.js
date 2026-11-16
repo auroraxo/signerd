@@ -55,6 +55,7 @@ function fail(reason, detail) {
 }
 
 const { checkSocketPath, socketPathFix } = require('./socketpath');
+const { socketConnectRefusal } = require('./socketstatus');
 
 function decodeRequest(raw) {
   let doc;
@@ -783,10 +784,21 @@ function request({ socketPath, grant, wire, body, dry, timeoutMs = REQUEST_TIMEO
       if (settled) return;
       settled = true;
       clearTimeout(timer);
-      if (err && typeof err.code === 'string' && typeof err.fix !== 'string') {
-        err.fix = '  fix: the socket connection failed; check that --socket names a running signerd daemon (signerd status --socket <path>)';
-      }
-      reject(err);
+      // THE TRANSPORT FAILURE SPEAKS (measured 2026-11-16, published
+      // v0.2.30): this path handed the operator the raw errno -
+      // `ENOENT: connect ENOENT /run/signerd.sock` - which names NO
+      // action, and the repair it carried named a command the CLI refused
+      // (`signerd status --socket <path>` -> `unknown_flag: --socket`).
+      //
+      // Now the errno CLASSIFIES and the refusal speaks: one code per
+      // situation (socket_missing / socket_stale / socket_not_reachable /
+      // socket_connect_failed), the path, and a repair that is a command
+      // this CLI actually runs. The errno itself never reaches the
+      // operator - it is an internal detail, not an action.
+      const refusal = socketConnectRefusal(err, socketPath);
+      const refusalErr = fail(refusal.code, refusal.detail);
+      refusalErr.fix = `  fix: ${refusal.fix}`;
+      reject(refusalErr);
     });
   });
 }

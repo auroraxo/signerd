@@ -113,6 +113,10 @@ Usage:
   signerd status --grants <file> --ledger <file>
             [--grant-seal-passphrase-file <file>]
             [--journal-seal-passphrase-file <file>]
+  signerd status --socket <file>       what state is the daemon socket in?
+            probes the path and answers live / absent / stale / unknown -
+            unknown is refused, never guessed (this is the check every
+            transport refusal names); may be combined with --grants/--ledger
   signerd seal-grants --grants <file> --seal-passphrase-file <file> [--out <file>]
             add/replace the HMAC seal of a grant file (provenance, R5-2)
   signerd verify-grants --grants <file> --seal-passphrase-file <file>
@@ -1005,24 +1009,76 @@ async function main() {
   }
 
   if (command === 'status') {
-    const { loadGrantFile } = require('../src/grantfile');
-    const { Ledger } = require('../src/ledger');
-    const sealPassphrase = typeof args['grant-seal-passphrase-file'] === 'string'
-      ? readPassphrase(args, 'grant-seal-passphrase-file') : undefined;
-    const journalSealPassphrase = typeof args['journal-seal-passphrase-file'] === 'string'
-      ? readPassphrase(args, 'journal-seal-passphrase-file') : undefined;
-    const options = sealPassphrase === undefined ? {} : {
-      sealKeyFor: require('../src/grantseal').makeSealKeyProvider(sealPassphrase),
-    };
-    const loaded = loadGrantFile(requireArg(args, 'grants'), options);
-    const ledger = new Ledger({
-      file: requireArg(args, 'ledger'),
-      sealPassphrase: journalSealPassphrase,
-    });
-    process.stdout.write(JSON.stringify({
-      ok: true, grants: loaded.names, ledger: ledger.snapshot(), legacyState: ledger.legacyState(),
-      sealed: sealPassphrase !== undefined, journalSealed: journalSealPassphrase !== undefined,
-    }) + '\n');
+    // THE SOCKET REPORT (measured 2026-11-16, published v0.2.30): every
+    // transport refusal already told the operator to "check it with
+    // signerd status --socket <path>" - and the CLI answered
+    // `unknown_flag: --socket`, exit 2. A refusal may only name a repair
+    // the CLI actually offers, so the probe is now a command of its own,
+    // speaking the same three-way verdict src/socketprobe.js owns (live /
+    // absent+stale / unknown) in the product's refusal voice.
+    //
+    // `--socket` may stand alone (the repair must run WITHOUT a grant file
+    // in hand) or sit beside --grants/--ledger, which keep their meaning.
+    const socketPath = typeof args.socket === 'string' ? args.socket : undefined;
+    const wantsFiles = typeof args.grants === 'string' || typeof args.ledger === 'string';
+    if (socketPath === undefined && !wantsFiles) requireArg(args, 'grants');
+    const report = {};
+    if (socketPath !== undefined) {
+      const { checkSocketPath, socketPathFix } = require('../src/socketpath');
+      const { classifySocketPath } = require('../src/socketprobe');
+      const { socketStateRefusal } = require('../src/socketstatus');
+      const check = checkSocketPath(socketPath);
+      if (!check.ok) {
+        // A path outside the kernel's domain is a USAGE refusal (exit 2),
+        // answered by the generic tail with src/socketpath.js's own repair.
+        const err = new Error(check.message);
+        err.code = check.code;
+        err.fix = socketPathFix(check);
+        throw err;
+      }
+      const state = await classifySocketPath(socketPath);
+      const refusal = socketStateRefusal(state, socketPath);
+      if (refusal !== null) {
+        // Not live is the ANSWER to the question, not a failure of the
+        // question: it goes out on BOTH channels - JSON for the script,
+        // code + repair for the operator - and exits 1, so `status --socket`
+        // is usable as a guard (`&&`) exactly like the refusal it explains.
+        const answer = deliverResponse({
+          payload: JSON.stringify({
+            ok: false, error: refusal.code, detail: refusal.detail,
+            socket: { path: socketPath, state }, fix: refusal.fix,
+          }) + '\n',
+          artifact: false,
+          ok: false,
+          exitCode: 1,
+        });
+        writeStderrSync(`${refusal.code}: ${refusal.detail}\n  fix: ${refusal.fix}\n`);
+        if (answer.stderr) writeStderrSync(answer.stderr);
+        process.exit(answer.exitCode);
+      }
+      report.socket = { path: socketPath, state };
+    }
+    if (wantsFiles) {
+      const { loadGrantFile } = require('../src/grantfile');
+      const { Ledger } = require('../src/ledger');
+      const sealPassphrase = typeof args['grant-seal-passphrase-file'] === 'string'
+        ? readPassphrase(args, 'grant-seal-passphrase-file') : undefined;
+      const journalSealPassphrase = typeof args['journal-seal-passphrase-file'] === 'string'
+        ? readPassphrase(args, 'journal-seal-passphrase-file') : undefined;
+      const options = sealPassphrase === undefined ? {} : {
+        sealKeyFor: require('../src/grantseal').makeSealKeyProvider(sealPassphrase),
+      };
+      const loaded = loadGrantFile(requireArg(args, 'grants'), options);
+      const ledger = new Ledger({
+        file: requireArg(args, 'ledger'),
+        sealPassphrase: journalSealPassphrase,
+      });
+      Object.assign(report, {
+        grants: loaded.names, ledger: ledger.snapshot(), legacyState: ledger.legacyState(),
+        sealed: sealPassphrase !== undefined, journalSealed: journalSealPassphrase !== undefined,
+      });
+    }
+    process.stdout.write(JSON.stringify({ ok: true, ...report }) + '\n');
     return;
   }
 
