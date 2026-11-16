@@ -297,6 +297,12 @@ async function main() {
 }
 
 main().catch((err) => {
+  // The repair rides WITH the refusal (the daemon CLI's generic path does
+  // the same): a transport failure from src/daemon.js carries `err.fix`,
+  // and a repair the operator never sees is not a repair.
   process.stderr.write(`${err.code || 'error'}: ${err.message}\n`);
+  if (err && typeof err.fix === 'string' && err.fix.length > 0) {
+    process.stderr.write(`${/^\s*fix:/.test(err.fix) ? err.fix : `  fix: ${err.fix}`}\n`);
+  }
   process.exit(1);
 });

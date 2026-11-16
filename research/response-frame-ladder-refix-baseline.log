@@ -1,0 +1,92 @@
+✖ D1 an oversized response frame is refused by name, not by the clock (8027.529426ms)
+✖ D2 a non-JSON response frame is refused by name with a repair (61.147288ms)
+✖ D3 a verdict-less close reaches the operator WITH its repair line (330.697076ms)
+✖ D4 a frame without a verdict field is refused, not relayed (325.307556ms)
+✔ G1 a worst-case-sized honest frame still resolves (12.771475ms)
+✔ G2 the real daemon still signs through the documented CLI path (2289.654423ms)
+ℹ tests 6
+ℹ suites 0
+ℹ pass 2
+ℹ fail 4
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 11432.340209
+
+✖ failing tests:
+
+test at test/response-frame.test.js:135:1
+✖ D1 an oversized response frame is refused by name, not by the clock (8027.529426ms)
+  AssertionError [ERR_ASSERTION]: the client must name the frame, not its own clock: {"kind":"rejected","code":"request_timeout","message":"request_timeout"}
+  + actual - expected
+  
+  + 'request_timeout'
+  - 'response_too_large'
+       ^
+  
+      at TestContext.<anonymous> (/home/aurora/github_repos/signerd/test/response-frame.test.js:149:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 'request_timeout',
+    expected: 'response_too_large',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at test/response-frame.test.js:158:1
+✖ D2 a non-JSON response frame is refused by name with a repair (61.147288ms)
+  AssertionError [ERR_ASSERTION]: the refusal must carry its own code (a bare Error prints as "error:"): {"kind":"rejected","message":"response_invalid"}
+  + actual - expected
+  
+  + undefined
+  - 'response_invalid'
+  
+      at TestContext.<anonymous> (/home/aurora/github_repos/signerd/test/response-frame.test.js:170:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: 'response_invalid',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at test/response-frame.test.js:178:1
+✖ D3 a verdict-less close reaches the operator WITH its repair line (330.697076ms)
+  AssertionError [ERR_ASSERTION]: the repair the client carries must reach stderr: {"code":"connection_closed","hasFix":false} / connection_closed: 
+  
+      at TestContext.<anonymous> (/home/aurora/github_repos/signerd/test/response-frame.test.js:193:10)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at test/response-frame.test.js:200:1
+✖ D4 a frame without a verdict field is refused, not relayed (325.307556ms)
+  AssertionError [ERR_ASSERTION]: the refusal must be named: {"code":"","hasFix":false} / 
+  + actual - expected
+  
+  + ''
+  - 'response_invalid'
+  
+      at TestContext.<anonymous> (/home/aurora/github_repos/signerd/test/response-frame.test.js:214:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: '',
+    expected: 'response_invalid',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }

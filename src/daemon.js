@@ -25,6 +25,25 @@ const { claimJournalLock, ownsJournalLock } = require('./journal-lock');
 // verdict ("silent-destroy"), which the shipped client then mis-reported as
 // its own request_timeout after 12 s.
 const MAX_REQUEST_BYTES = 25_600;
+// THE MIRROR OF THE CAP ABOVE: the largest frame the DAEMON sends back.
+// The request side has been capped by name since 2026-11-11; the response
+// side had NO bound at all - request() concatenated until a newline showed
+// up, so a server that never sent one was buffered without limit (measured
+// 2026-11-16, tools/measure-response-frame.js on the published v0.2.29
+// tree: 125-137 MB of RSS growth inside the 10 s timeout window, verdict
+// request_timeout - the clock blamed for a frame the server never
+// finished).
+//
+// The bound is derived from the response CONTRACT, not guessed (the
+// request side's own first cap was guessed and destroyed legal frames,
+// measured 2026-11-11): the largest honest field is `signed`, the base64
+// of a wire at the policy ceiling (MAX_WIRE_BYTES 1232 + 65-byte signed
+// envelope => 1297 bytes => 1732 base64 chars), plus the signature (88),
+// two sha256 hex values (128), counters, envelope and any detail => about
+// 2450 bytes worst case; MEASURED on this tree, a real sign answers 716
+// bytes. 8192 is 3.3x the derived worst case - no honest answer can reach
+// it, and an unbounded stream cannot pass it.
+const MAX_RESPONSE_BYTES = 8192;
 const REQUEST_TIMEOUT_MS = 10_000;
 // Grant names are request data: never resolve them through Object.prototype.
 const NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
@@ -671,13 +690,26 @@ function request({ socketPath, grant, wire, body, dry, timeoutMs = REQUEST_TIMEO
     const socket = net.connect(socketPath);
     let buffer = Buffer.alloc(0);
     let settled = false;
-    const timer = setTimeout(() => {
+    // Every transport failure carries a repair, in ONE place: the CLI and
+    // the example client both print `err.fix` when it is present (they did
+    // not before - measured 2026-11-16: the repair on `connection_closed`
+    // existed in this source and still never reached the operator, whose
+    // stderr showed `connection_closed: ` and nothing else).
+    const refuse = (code, detail, fix) => {
       if (settled) return;
       settled = true;
+      clearTimeout(timer);
+      // Stop reading at the refusal: a refusal that kept concatenating
+      // would trade the unbounded buffer for the very defect it closes.
+      buffer = Buffer.alloc(0);
       socket.destroy();
-      const err = new Error('request_timeout');
-      err.code = 'request_timeout';
+      const err = fail(code, detail);
+      err.fix = `  fix: ${fix}`;
       reject(err);
+    };
+    const timer = setTimeout(() => {
+      refuse('request_timeout', `no verdict within ${timeoutMs} ms`,
+        'the daemon did not answer in time; check it is running (signerd status --socket <path>) and that no proxy or firewall sits on the socket');
     }, timeoutMs);
     socket.on('connect', () => {
       // Exactly one payload per request: a transaction wire (base64) or a
@@ -689,22 +721,51 @@ function request({ socketPath, grant, wire, body, dry, timeoutMs = REQUEST_TIMEO
       socket.write(JSON.stringify(payload) + '\n');
     });
     socket.on('data', (chunk) => {
+      if (settled) return;
       buffer = Buffer.concat([buffer, chunk]);
       const newline = buffer.indexOf(0x0a);
-      if (newline === -1) return;
-      clearTimeout(timer);
-      if (settled) return;
-      settled = true;
-      let response;
-      try {
-        response = JSON.parse(buffer.subarray(0, newline).toString('utf8'));
-      } catch {
-        socket.destroy();
-        reject(new Error('response_invalid'));
+      if (newline !== -1) {
+        // A COMPLETE line within the cap is judged as it arrives; only a
+        // frame that does not fit the contract is refused, so a legal
+        // answer is never held hostage by trailing bytes after its newline.
+        if (newline > MAX_RESPONSE_BYTES) {
+          refuse('response_too_large', `answer frame exceeds ${MAX_RESPONSE_BYTES} bytes`,
+            `the daemon's answer must fit in ${MAX_RESPONSE_BYTES} bytes; a sign answer is about 2450 bytes at the wire ceiling - a frame beyond this cap cannot be an honest answer, treat the socket as untrusted`);
+          return;
+        }
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        let response;
+        try {
+          response = JSON.parse(buffer.subarray(0, newline).toString('utf8'));
+        } catch {
+          buffer = Buffer.alloc(0);
+          socket.destroy();
+          const err = fail('response_invalid', 'the daemon answer was not JSON');
+          err.fix = '  fix: the answer could not be parsed, so it was not accepted; check that --socket names the signerd daemon and not another service, then retry';
+          reject(err);
+          return;
+        }
+        socket.end();
+        // A frame that parses but is not a VERDICT is still not an answer.
+        // The daemon's own contract is one boolean `ok` field on every
+        // frame; anything else was nobody's reply and must not be handed
+        // on as if it were (measured: {"error":"boom"} was relayed to the
+        // operator's stdout, exit 1, no code, no repair).
+        if (response === null || typeof response !== 'object' || typeof response.ok !== 'boolean') {
+          const err = fail('response_invalid', 'the daemon answer carried no verdict (no boolean ok field)');
+          err.fix = '  fix: this frame was not an answer from signerd; check that --socket names the signerd daemon and not another service, then retry';
+          reject(err);
+          return;
+        }
+        resolve(response);
         return;
       }
-      socket.end();
-      resolve(response);
+      if (buffer.length > MAX_RESPONSE_BYTES) {
+        refuse('response_too_large', `answer frame exceeds ${MAX_RESPONSE_BYTES} bytes with no line break`,
+          `the daemon's answer must fit in ${MAX_RESPONSE_BYTES} bytes; a sign answer is about 2450 bytes at the wire ceiling - a frame beyond this cap cannot be an honest answer, treat the socket as untrusted`);
+      }
     });
     // A close WITHOUT a verdict line is its own named failure. Pre-fix this
     // path did not exist: the client kept waiting and then blamed its own
@@ -714,15 +775,17 @@ function request({ socketPath, grant, wire, body, dry, timeoutMs = REQUEST_TIMEO
       if (settled) return;
       settled = true;
       clearTimeout(timer);
-      const err = new Error('connection_closed');
-      err.code = 'connection_closed';
-      err.fix = 'the daemon closed the connection without answering; a frame over the transport cap is refused by name (request_too_large) - check the daemon version and the request frame size';
+      const err = fail('connection_closed', 'the daemon closed the connection without answering');
+      err.fix = '  fix: the connection died before a verdict arrived; a frame over the transport cap is refused by name (request_too_large) - check the daemon version and the request frame size';
       reject(err);
     });
     socket.on('error', (err) => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
+      if (err && typeof err.code === 'string' && typeof err.fix !== 'string') {
+        err.fix = '  fix: the socket connection failed; check that --socket names a running signerd daemon (signerd status --socket <path>)';
+      }
       reject(err);
     });
   });

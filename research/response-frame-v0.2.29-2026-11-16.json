@@ -1,0 +1,74 @@
+{
+  "tool": "measure-response-frame",
+  "date": "2026-11-16",
+  "tree": "worktree",
+  "head": "d45cc9a",
+  "maxResponseBytes": null,
+  "cases": {
+    "R1-oversized-frame": {
+      "exit": 1,
+      "elapsedMs": 11105,
+      "stdoutHead": "",
+      "stderrHead": "request_timeout:  | ",
+      "code": "request_timeout",
+      "hasFix": false,
+      "artifactWritten": false,
+      "library": {
+        "outcome": {
+          "rejected": true,
+          "code": "request_timeout",
+          "message": "request_timeout"
+        },
+        "elapsedMs": 4537,
+        "rssGrowthMB": 125
+      },
+      "defect": true
+    },
+    "R2-non-json-frame": {
+      "exit": 1,
+      "elapsedMs": 294,
+      "stdoutHead": "",
+      "stderrHead": "error: response_invalid | ",
+      "code": "error",
+      "hasFix": false,
+      "artifactWritten": false,
+      "library": null,
+      "defect": true
+    },
+    "R3-verdict-less-close": {
+      "exit": 1,
+      "elapsedMs": 249,
+      "stdoutHead": "",
+      "stderrHead": "connection_closed:  | ",
+      "code": "connection_closed",
+      "hasFix": false,
+      "artifactWritten": false,
+      "library": null,
+      "defect": true
+    },
+    "R4-no-verdict-field": {
+      "exit": 1,
+      "elapsedMs": 285,
+      "stdoutHead": "{\"error\":\"boom\"}",
+      "stderrHead": "",
+      "code": "",
+      "hasFix": false,
+      "artifactWritten": false,
+      "library": null,
+      "defect": true
+    },
+    "G1-control-named-refusal": {
+      "exit": 1,
+      "stdoutHead": "{\"ok\":false,\"error\":\"signed_length_mismatch\",\"detail\":{\"message\":\"the returned wire is 1 bytes, the requested wire is 215\",\"returnedBytes\":1,\"requestedBytes\":215},\"note\":\"nothing was written; the daem",
+      "stderrHead": "signed_length_mismatch: the returned wire is 1 bytes, the requested wire is 215 |   fix: the daemon returned something other than this transaction; treat the socket as untrusted and verify the daemon you are talking to",
+      "code": "signed_length_mismatch",
+      "hasFix": true,
+      "artifactWritten": false,
+      "library": null,
+      "defect": false
+    }
+  },
+  "defectiveFaces": 4,
+  "totalFaces": 4,
+  "verdict": "client-swallows-response-failures"
+}

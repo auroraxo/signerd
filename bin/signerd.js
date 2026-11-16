@@ -1269,6 +1269,18 @@ main().catch((err) => {
     process.stderr.write(`${err.code}: ${detailOf(err)}\n${fix}\n`);
     process.exit(2);
   }
+  // THE GENERIC TAIL: every refusal that reaches here carries its repair
+  // on the error itself, and the operator must see it. Measured 2026-11-16
+  // (tools/measure-response-frame.js, published v0.2.29): a verdict-less
+  // close printed `connection_closed: ` and NOTHING else - the repair sat
+  // in the error object and died with it, because this path wrote code and
+  // detail and dropped fix. A fix that is already prefixed keeps its own
+  // shape; one without the marker gets it, so the line the product prints
+  // is always a `fix:` line.
+  const fixLine = err && typeof err.fix === 'string' && err.fix.length > 0
+    ? (/^\s*fix:/.test(err.fix) ? err.fix : `  fix: ${err.fix}`)
+    : null;
   process.stderr.write(`${err.code || 'error'}: ${detailOf(err)}\n`);
+  if (fixLine) process.stderr.write(`${fixLine}\n`);
   process.exit(1);
 });

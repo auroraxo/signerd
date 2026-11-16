@@ -1,0 +1,74 @@
+{
+  "tool": "measure-response-frame",
+  "date": "2026-11-16",
+  "tree": "worktree",
+  "head": "d45cc9a",
+  "maxResponseBytes": 8192,
+  "cases": {
+    "R1-oversized-frame": {
+      "exit": 1,
+      "elapsedMs": 328,
+      "stdoutHead": "",
+      "stderrHead": "response_too_large: answer frame exceeds 8192 bytes with no line break |   fix: the daemon's answer must fit in 8192 bytes; a sign answer is about 2450 bytes at the wire ceiling - a frame beyond this cap cannot be an honest answer, treat the socket a",
+      "code": "response_too_large",
+      "hasFix": true,
+      "artifactWritten": false,
+      "library": {
+        "outcome": {
+          "rejected": true,
+          "code": "response_too_large",
+          "message": "response_too_large: answer frame exceeds 8192 bytes with no line break"
+        },
+        "elapsedMs": 16,
+        "rssGrowthMB": 0
+      },
+      "defect": false
+    },
+    "R2-non-json-frame": {
+      "exit": 1,
+      "elapsedMs": 342,
+      "stdoutHead": "",
+      "stderrHead": "response_invalid: the daemon answer was not JSON |   fix: the answer could not be parsed, so it was not accepted; check that --socket names the signerd daemon and not another service, then retry",
+      "code": "response_invalid",
+      "hasFix": true,
+      "artifactWritten": false,
+      "library": null,
+      "defect": false
+    },
+    "R3-verdict-less-close": {
+      "exit": 1,
+      "elapsedMs": 368,
+      "stdoutHead": "",
+      "stderrHead": "connection_closed: the daemon closed the connection without answering |   fix: the connection died before a verdict arrived; a frame over the transport cap is refused by name (request_too_large) - check the daemon version and the request frame size",
+      "code": "connection_closed",
+      "hasFix": true,
+      "artifactWritten": false,
+      "library": null,
+      "defect": false
+    },
+    "R4-no-verdict-field": {
+      "exit": 1,
+      "elapsedMs": 299,
+      "stdoutHead": "",
+      "stderrHead": "response_invalid: the daemon answer carried no verdict (no boolean ok field) |   fix: this frame was not an answer from signerd; check that --socket names the signerd daemon and not another service, then retry",
+      "code": "response_invalid",
+      "hasFix": true,
+      "artifactWritten": false,
+      "library": null,
+      "defect": false
+    },
+    "G1-control-named-refusal": {
+      "exit": 1,
+      "stdoutHead": "{\"ok\":false,\"error\":\"signed_length_mismatch\",\"detail\":{\"message\":\"the returned wire is 1 bytes, the requested wire is 215\",\"returnedBytes\":1,\"requestedBytes\":215},\"note\":\"nothing was written; the daem",
+      "stderrHead": "signed_length_mismatch: the returned wire is 1 bytes, the requested wire is 215 |   fix: the daemon returned something other than this transaction; treat the socket as untrusted and verify the daemon you are talking to",
+      "code": "signed_length_mismatch",
+      "hasFix": true,
+      "artifactWritten": false,
+      "library": null,
+      "defect": false
+    }
+  },
+  "defectiveFaces": 0,
+  "totalFaces": 4,
+  "verdict": "client-names-every-response-failure"
+}
