@@ -1,0 +1,119 @@
+{
+  "tool": "tools/measure-grant-file-revocation-race.js",
+  "tree": "this working tree (the fix, v0.2.35 lock)",
+  "generatedAt": "2026-11-17",
+  "rounds": 5,
+  "appendersPerRound": 6,
+  "removersPerRound": 2,
+  "runs": [
+    {
+      "expected": "good + new1..new6 = 7",
+      "count": 7,
+      "names": [
+        "good",
+        "new1",
+        "new2",
+        "new3",
+        "new4",
+        "new5",
+        "new6"
+      ],
+      "appendOk": 6,
+      "removeOk": 2,
+      "r1_revoked_back": [],
+      "r2_added_missing_after_ok": 0,
+      "r3_removed_present_after_ok": 0,
+      "r4_lock_left": false,
+      "stderrSamples": []
+    },
+    {
+      "expected": "good + new1..new6 = 7",
+      "count": 7,
+      "names": [
+        "good",
+        "new1",
+        "new2",
+        "new3",
+        "new4",
+        "new5",
+        "new6"
+      ],
+      "appendOk": 6,
+      "removeOk": 2,
+      "r1_revoked_back": [],
+      "r2_added_missing_after_ok": 0,
+      "r3_removed_present_after_ok": 0,
+      "r4_lock_left": false,
+      "stderrSamples": []
+    },
+    {
+      "expected": "good + new1..new6 = 7",
+      "count": 7,
+      "names": [
+        "good",
+        "new1",
+        "new2",
+        "new3",
+        "new4",
+        "new5",
+        "new6"
+      ],
+      "appendOk": 6,
+      "removeOk": 2,
+      "r1_revoked_back": [],
+      "r2_added_missing_after_ok": 0,
+      "r3_removed_present_after_ok": 0,
+      "r4_lock_left": false,
+      "stderrSamples": []
+    },
+    {
+      "expected": "good + new1..new6 = 7",
+      "count": 7,
+      "names": [
+        "good",
+        "new1",
+        "new2",
+        "new3",
+        "new4",
+        "new5",
+        "new6"
+      ],
+      "appendOk": 6,
+      "removeOk": 2,
+      "r1_revoked_back": [],
+      "r2_added_missing_after_ok": 0,
+      "r3_removed_present_after_ok": 0,
+      "r4_lock_left": false,
+      "stderrSamples": []
+    },
+    {
+      "expected": "good + new1..new6 = 7",
+      "count": 7,
+      "names": [
+        "good",
+        "new1",
+        "new2",
+        "new3",
+        "new4",
+        "new5",
+        "new6"
+      ],
+      "appendOk": 6,
+      "removeOk": 2,
+      "r1_revoked_back": [],
+      "r2_added_missing_after_ok": 0,
+      "r3_removed_present_after_ok": 0,
+      "r4_lock_left": false,
+      "stderrSamples": []
+    }
+  ],
+  "defectFaces": {
+    "R1_revoked_grant_back": 0,
+    "R2_added_missing_after_ok": 0,
+    "R3_removed_present_after_ok": 0,
+    "R4_lock_left_behind": 0
+  },
+  "verdict": "revocation-and-append-serialize",
+  "prefixSha": "6e33571",
+  "prefixRefersTo": "research/grant-file-revocation-race-prefix-2026-11-17.json"
+}
