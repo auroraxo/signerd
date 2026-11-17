@@ -12,6 +12,52 @@ const { writeStderrSync } = require('../src/stdout');
 const { detailOf } = require('../src/lease');
 const { readOperatorFile, classifyReadError } = require('../src/input-file');
 const { verifySignedWire, verifyMessageSignature } = require('../src/client-verify');
+const { refusalFix } = require('../src/refusal-voice');
+
+/**
+ * The HUMAN half of a verdict the daemon answered with `ok:false`.
+ *
+ * MEASURED 2026-11-17 (tools/measure-daemon-refusal-voice.js, on the
+ * v0.2.33 tree): every daemon refusal - `destination`, `grant_not_found`,
+ * `replay`, `window_cap`, `expired`, `grant_kind_mismatch`,
+ * `request_invalid` - reached the operator as a JSON line on STDOUT and
+ * 0 bytes on STDERR. The README promises the opposite for this exact class
+ * ("Refusals name the flag and the fix instead of failing silently"), and
+ * every OTHER refusal this CLI prints - transport, client-verification,
+ * unknown flag, grant file, unreadable input - already had a code plus a
+ * `fix:` line. The product's own verdict was the one surface that stayed
+ * mute.
+ *
+ * Shape: `<code>` on one line, `  fix: <repair>` on the next. The repair
+ * comes from THE daemon frame first (src/daemon.js attaches it at the one
+ * point every refusal leaves) and falls back to the same map locally, so a
+ * refusal is still readable when the daemon is older than this CLI.
+ *
+ * Returns null only for a frame that carries no error code at all - there
+ * is then no refusal to speak about.
+ *
+ * @param {{ok?: boolean, error?: string, fix?: string}} response
+ * @param {{grant?: string}} [facts]  the grant NAME, never a path
+ */
+function refusalText(response, facts) {
+  if (response === null || typeof response !== 'object') return null;
+  const code = typeof response.error === 'string' && response.error.length > 0
+    ? response.error : null;
+  if (code === null) return null;
+  // Prefer the repair the daemon sent with this very verdict; fall back to
+  // the same map, so the wording can never diverge between the two sides.
+  const fix = typeof response.fix === 'string' && response.fix.length > 0
+    ? response.fix : refusalFix(code, facts);
+  // The code appears EXACTLY ONCE (the rule from test/grant-refusal-voice),
+  // and the repair is its own line. When this tree does not know the code,
+  // the code still reaches stderr - a known-code-plus-no-fix is strictly
+  // better than the measured silence, and test/refusal-voice.test.js is what
+  // keeps that case out of real traffic.
+  return fix === null
+    ? `${code}\n`
+    : `${code}\n  fix: ${fix}\n`;
+}
+
 
 /**
  * Refuse an unwritable --out BEFORE anything is read, requested or signed.
@@ -579,6 +625,18 @@ async function main() {
       ok: response.ok === true,
       exitCode: response.ok ? 0 : 1,
     });
+    // THE REFUSAL VOICE (measured 2026-11-17, tools/measure-daemon-refusal-voice.js):
+    // a verdict that says `ok:false` is the product's own answer, and it
+    // reaches the operator as a CODE plus a repair on stderr - the same shape
+    // every other refusal in this CLI already has. Before this, a daemon
+    // policy refusal was a JSON line on stdout and NOTHING on stderr: the
+    // operator learned WHICH refusal happened but not what to do about it.
+    // The stdout JSON is unchanged (a refusal is still data for the example
+    // client), so this only ADDS the human channel.
+    if (response.ok !== true) {
+      const refusal = refusalText(response, { grant, kind: 'transaction' });
+      if (refusal !== null) writeStderrSync(refusal);
+    }
     if (answer.stderr) writeStderrSync(answer.stderr);
     process.exit(answer.exitCode);
   }
@@ -1004,6 +1062,13 @@ async function main() {
       ok: response.ok === true,
       exitCode: response.ok ? 0 : 1,
     });
+    // The same refusal voice as `sign` (measured 2026-11-17,
+    // tools/measure-daemon-refusal-voice.js): the code AND the repair reach
+    // stderr, and the stdout JSON stays the machine channel.
+    if (response.ok !== true) {
+      const refusal = refusalText(response, { grant, kind: 'message' });
+      if (refusal !== null) writeStderrSync(refusal);
+    }
     if (answer.stderr) writeStderrSync(answer.stderr);
     process.exit(answer.exitCode);
   }

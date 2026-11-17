@@ -10,6 +10,7 @@ const { signApproved, previewApproved } = require('./signer');
 const { signMessageApproved, previewMessageApproved } = require('./signer-message');
 const { classifySocketPath } = require('./socketprobe');
 const { claimJournalLock, ownsJournalLock } = require('./journal-lock');
+const { refusalFix } = require('./refusal-voice');
 
 // The request frame cap bounds memory per connection. It must leave room for
 // EVERY body the documented body contract admits (<= 4096 chars), measured in
@@ -56,6 +57,42 @@ function fail(reason, detail) {
 
 const { checkSocketPath, socketPathFix } = require('./socketpath');
 const { socketConnectRefusal } = require('./socketstatus');
+
+/**
+ * The grant NAME out of a request frame, for the refusal's repair line.
+ *
+ * Best effort and total: a malformed frame still has to be refused with a
+ * repair, so this never throws and never returns anything but a plain name
+ * that matches NAME (a name from this function can therefore never be a
+ * path, which is what keeps the repair free of host paths). Returns null
+ * for anything it cannot name.
+ */
+function grantNameOf(raw) {
+  if (!Buffer.isBuffer(raw) && !(raw instanceof Uint8Array)) return null;
+  let doc;
+  try { doc = JSON.parse(Buffer.from(raw).toString('utf8')); } catch { return null; }
+  if (doc === null || typeof doc !== 'object' || Array.isArray(doc)) return null;
+  const field = Object.getOwnPropertyDescriptor(doc, 'grant');
+  if (!field || !('value' in field) || typeof field.value !== 'string') return null;
+  return NAME.test(field.value) ? field.value : null;
+}
+
+/**
+ * Which envelope the request carried: a `body` is a message-grant request,
+ * a `wire` is a transaction request. Some refusal CODES are shared by the
+ * two (see src/refusal-voice.js), so the repair needs this to name the
+ * right one. Best effort, like grantNameOf: a malformed frame must still be
+ * refused with a repair.
+ */
+function requestKindOf(raw) {
+  if (!Buffer.isBuffer(raw) && !(raw instanceof Uint8Array)) return null;
+  let doc;
+  try { doc = JSON.parse(Buffer.from(raw).toString('utf8')); } catch { return null; }
+  if (doc === null || typeof doc !== 'object' || Array.isArray(doc)) return null;
+  const body = Object.getOwnPropertyDescriptor(doc, 'body');
+  if (body !== undefined && 'value' in body) return 'message';
+  return 'transaction';
+}
 
 function decodeRequest(raw) {
   let doc;
@@ -614,6 +651,21 @@ class Daemon {
       } catch {
         response = { ok: false, error: 'internal_error' };
       }
+      // THE REFUSAL VOICE (measured 2026-11-17, tools/measure-daemon-refusal-voice.js):
+      // every verdict that says `ok:false` carries the repair the operator
+      // is to act on, attached HERE - at the one point every refusal leaves
+      // the daemon - so a refusal class cannot be added later and ship mute.
+      // The machine fields (ok / error / detail) are untouched; `fix` is an
+      // addition for the human channel. The grant NAME (never a path) comes
+      // from the request frame, so the lookup refusals can say which grant
+      // they mean.
+      if (response && response.ok === false && typeof response.fix !== 'string') {
+        const fix = refusalFix(response.error, {
+          grant: grantNameOf(raw),
+          kind: requestKindOf(raw),
+        });
+        if (fix !== null) response.fix = fix;
+      }
       clearTimeout(timer);
       const extra = rest.length > 0
         // A pipelined second request arrived behind the first line. It is
@@ -622,7 +674,8 @@ class Daemon {
         // the whole policy -> ledger -> sign chain again, on every later data
         // event, because the buffer was never consumed).
         ? JSON.stringify(response) + '\n' +
-          JSON.stringify({ ok: false, error: 'one_request_per_connection' }) + '\n'
+          JSON.stringify({ ok: false, error: 'one_request_per_connection',
+            fix: refusalFix('one_request_per_connection') }) + '\n'
         : JSON.stringify(response) + '\n';
       socket.end(extra);
       reapAfter(1000);
