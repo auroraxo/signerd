@@ -70,13 +70,19 @@ function opt(name, fallback) {
 }
 const OUT = opt('out', null);
 const PREFIX = opt('prefix', null);
+// --published <dir>: measure an INSTALLED signerd (the bytes a stranger
+// installs) instead of this checkout, as the sibling instruments do.
+const PUBLISHED = opt('published', null);
 const REPO = path.resolve(__dirname, '..');
+const FIXED_DIR = PUBLISHED ? path.resolve(PUBLISHED) : REPO;
 
 function sh(cmd, opts = {}) {
   return spawnSync(cmd[0], cmd.slice(1), { encoding: 'utf8', timeout: 120000, ...opts });
 }
 
 function envFor() {
+  // The installed package has no node_modules of its own: its dependencies
+  // resolve upward, and this checkout supplies the key module for probes.
   return { ...process.env, NODE_PATH: path.join(REPO, 'node_modules') };
 }
 
@@ -262,7 +268,7 @@ function main() {
     process.exit(2);
   }
   const prefixDir = materialize(PREFIX);
-  const fixedDir = REPO;
+  const fixedDir = FIXED_DIR;
 
   const prefix = measure(prefixDir, 'prefix');
   const fixed = measure(fixedDir, 'fixed');
@@ -295,6 +301,7 @@ function main() {
     schema: 'signerd/grant-key-verdict/v1',
     measuredAt: new Date().toISOString(),
     prefix: PREFIX,
+    fixed: PUBLISHED ? 'published' : 'working-tree',
     verdict,
     defectCases: DEFECT_CASES,
     guardCases: GUARD_CASES,

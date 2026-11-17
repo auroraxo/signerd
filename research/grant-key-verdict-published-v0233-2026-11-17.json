@@ -1,0 +1,198 @@
+{
+  "schema": "signerd/grant-key-verdict/v1",
+  "measuredAt": "2026-11-17T08:39:40.556Z",
+  "prefix": "v0.2.32",
+  "fixed": "published",
+  "verdict": "grant-key-verdict-holds",
+  "defectCases": [
+    "status-two-key",
+    "seal-two-key",
+    "verify-sealed-two"
+  ],
+  "guardCases": [
+    "status-single",
+    "seal-single",
+    "verify-single",
+    "cross-encoding",
+    "remove-repairs"
+  ],
+  "prefixTree": {
+    "defects": {
+      "status-two-key": {
+        "case": "status-two-key",
+        "status": 0,
+        "okVerdict": true,
+        "reason": null,
+        "fileUnchanged": true,
+        "sealed": false,
+        "repairWorked": null,
+        "stderrHead": ""
+      },
+      "seal-two-key": {
+        "case": "seal-two-key",
+        "status": 0,
+        "okVerdict": true,
+        "reason": null,
+        "fileUnchanged": false,
+        "sealed": true,
+        "repairWorked": null,
+        "stderrHead": ""
+      },
+      "verify-sealed-two": {
+        "case": "verify-sealed-two",
+        "status": 0,
+        "okVerdict": true,
+        "reason": null,
+        "fileUnchanged": true,
+        "sealed": true,
+        "repairWorked": null,
+        "stderrHead": ""
+      }
+    },
+    "guards": {
+      "status-single": {
+        "case": "status-single",
+        "status": 0,
+        "okVerdict": true,
+        "reason": null,
+        "fileUnchanged": true,
+        "sealed": false,
+        "repairWorked": null,
+        "stderrHead": ""
+      },
+      "seal-single": {
+        "case": "seal-single",
+        "status": 0,
+        "okVerdict": true,
+        "reason": null,
+        "fileUnchanged": false,
+        "sealed": true,
+        "repairWorked": null,
+        "stderrHead": ""
+      },
+      "verify-single": {
+        "case": "verify-single",
+        "status": 0,
+        "okVerdict": true,
+        "reason": null,
+        "fileUnchanged": true,
+        "sealed": true,
+        "repairWorked": null,
+        "stderrHead": ""
+      },
+      "cross-encoding": {
+        "case": "cross-encoding",
+        "status": 0,
+        "okVerdict": true,
+        "reason": null,
+        "fileUnchanged": true,
+        "sealed": false,
+        "repairWorked": null,
+        "stderrHead": ""
+      },
+      "remove-repairs": {
+        "case": "remove-repairs",
+        "status": 0,
+        "okVerdict": true,
+        "reason": null,
+        "fileUnchanged": false,
+        "sealed": false,
+        "repairWorked": false,
+        "stderrHead": ""
+      }
+    }
+  },
+  "fixedTree": {
+    "defects": {
+      "status-two-key": {
+        "case": "status-two-key",
+        "status": 1,
+        "okVerdict": false,
+        "reason": "grant_file_key_mismatch",
+        "fileUnchanged": true,
+        "sealed": false,
+        "repairWorked": null,
+        "stderrHead": "grant_file_key_mismatch: foreign pins a different key than good — one grant file holds ONE key (the daemon refuses the whole file when one grant names another key) |   fix: point --signer at the key the other grants in this file pin (one grant file holds ONE key)"
+      },
+      "seal-two-key": {
+        "case": "seal-two-key",
+        "status": 1,
+        "okVerdict": false,
+        "reason": "grant_file_key_mismatch",
+        "fileUnchanged": true,
+        "sealed": false,
+        "repairWorked": null,
+        "stderrHead": "grant_file_key_mismatch: foreign pins a different key than good — one grant file holds ONE key (the daemon refuses the whole file when one grant names another key) |   fix: point --signer at the key the other grants in this file pin (one grant file holds ONE key)"
+      },
+      "verify-sealed-two": {
+        "case": "verify-sealed-two",
+        "status": 1,
+        "okVerdict": false,
+        "reason": "grant_file_key_mismatch",
+        "fileUnchanged": true,
+        "sealed": true,
+        "repairWorked": null,
+        "stderrHead": "grant_file_key_mismatch: foreign pins a different key than good — one grant file holds ONE key (the daemon refuses the whole file when one grant names another key) |   fix: point --signer at the key the other grants in this file pin (one grant file holds ONE key)"
+      }
+    },
+    "guards": {
+      "status-single": {
+        "case": "status-single",
+        "status": 0,
+        "okVerdict": true,
+        "reason": null,
+        "fileUnchanged": true,
+        "sealed": false,
+        "repairWorked": null,
+        "stderrHead": ""
+      },
+      "seal-single": {
+        "case": "seal-single",
+        "status": 0,
+        "okVerdict": true,
+        "reason": null,
+        "fileUnchanged": false,
+        "sealed": true,
+        "repairWorked": null,
+        "stderrHead": ""
+      },
+      "verify-single": {
+        "case": "verify-single",
+        "status": 0,
+        "okVerdict": true,
+        "reason": null,
+        "fileUnchanged": true,
+        "sealed": true,
+        "repairWorked": null,
+        "stderrHead": ""
+      },
+      "cross-encoding": {
+        "case": "cross-encoding",
+        "status": 0,
+        "okVerdict": true,
+        "reason": null,
+        "fileUnchanged": true,
+        "sealed": false,
+        "repairWorked": null,
+        "stderrHead": ""
+      },
+      "remove-repairs": {
+        "case": "remove-repairs",
+        "status": 0,
+        "okVerdict": true,
+        "reason": null,
+        "fileUnchanged": false,
+        "sealed": false,
+        "repairWorked": true,
+        "stderrHead": ""
+      }
+    }
+  },
+  "checks": {
+    "prefixShowsAllDefectFaces": true,
+    "prefixSealsTheDeadFile": true,
+    "fixedTreeRefusesEveryDefectFace": true,
+    "fixedTreeLeavesTheFileUntouched": true,
+    "guardsHoldOnFixedTree": true
+  }
+}
