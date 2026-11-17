@@ -40,7 +40,7 @@ npm install -g signerd
 The same tree from a release tag:
 
 ```bash
-npm install github:auroraxo/signerd#v0.2.31
+npm install github:auroraxo/signerd#v0.2.32
 ```
 
 You need Node.js and a C compiler (`cc`) once: the daemon builds a small
@@ -224,6 +224,11 @@ with certainty instead of a wide set with guesses.
   exit 0 when the daemon is up.
 - Grant files are checked on load: owner, mode, schema, seal. A grant that could
   never sign (past expiry, cap below the base fee) is refused at creation.
+- One grant file holds ONE key. `signerd` signs with a single key, and the daemon
+  refuses the whole file when one grant names another key — so a write that would
+  poison the file is refused at write time, before a byte lands
+  (`grant_file_key_mismatch`, with `grant-remove` named as the repair for a file
+  that is already broken).
 - Refusals name the flag and the fix instead of failing silently.
 - Exit codes are part of the contract, including "signed but could not deliver".
 
