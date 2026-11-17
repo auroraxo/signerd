@@ -228,7 +228,10 @@ with certainty instead of a wide set with guesses.
   refuses the whole file when one grant names another key — so a write that would
   poison the file is refused at write time, before a byte lands
   (`grant_file_key_mismatch`, with `grant-remove` named as the repair for a file
-  that is already broken).
+  that is already broken). The surfaces that answer *whether a file is usable*
+  — `status`, `verify-grants` and `seal-grants` — judge the same rule: a file no
+  daemon can run is refused there too, instead of being reported `ok:true` or
+  sealed into an authenticated file that will never sign.
 - Refusals name the flag and the fix instead of failing silently.
 - Exit codes are part of the contract, including "signed but could not deliver".
 

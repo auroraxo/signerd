@@ -51,8 +51,14 @@ const REPO = path.resolve(__dirname, '..');
 const CLI = path.join(REPO, 'bin', 'signerd.js');
 
 const DESTINATION = 'So11111111111111111111111111111111111111112';
+// ONE key, two spellings (base58 for the tx grant, base64 for the message
+// grant) — the fixture must be a file a daemon could actually run: a doc
+// whose tx grant and message grant pin DIFFERENT keys is refused by
+// seal-grants (grant_file_key_mismatch), which is exactly the defect class
+// measured 2026-11-17 (tools/measure-grant-key-verdict.js).
+const KEY_BYTES = Buffer.alloc(32); // 32 zero bytes: base58 '11111111111111111111111111111111'
 const SIGNER = '11111111111111111111111111111111';
-const PUBKEY_B64 = Buffer.alloc(32, 1).toString('base64');
+const PUBKEY_B64 = KEY_BYTES.toString('base64');
 
 function run(args) {
   return spawnSync(process.execPath, [CLI, ...args], { encoding: 'utf8', timeout: 120000 });

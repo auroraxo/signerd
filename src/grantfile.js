@@ -331,6 +331,31 @@ function loadGrantFile(file, options = {}) {
 }
 
 /**
+ * THE VERDICT ENFORCEMENT (2026-11-17, published v0.2.32).
+ *
+ * v0.2.32 put the ONE-KEY rule on the write paths (grant-add --append, the
+ * message bootstrap). The surfaces that TELL THE OPERATOR whether a file is
+ * usable were left out: `status`, `verify-grants` answered {"ok":true} for a
+ * two-key file, and `seal-grants` SEALED one - making an unrunnable file
+ * authenticated, the strongest provenance statement this product can make
+ * about content nothing will ever sign (the daemon refuses the WHOLE file:
+ * src/daemon.js #reloadGrants).
+ *
+ * The check lives HERE, next to assertUniformGrantKeys, and is a separate
+ * entry point so the loader stays permissive: `grant-remove` must still READ
+ * a broken file, because reading it is how the operator repairs it (house
+ * rule: the rule is enforced on the verdict, never by refusing to read a
+ * broken file). The three verdict surfaces call this; grant-remove and the
+ * daemon keep calling loadGrantFile and judge the key themselves (against
+ * the repair target / against their own keystore).
+ */
+function loadVerdictGrantFile(file, options = {}) {
+  const loaded = loadGrantFile(file, options);
+  assertUniformGrantKeys(loaded.grants);
+  return loaded;
+}
+
+/**
  * WHAT THE OPERATOR SEES after a seal: every field the loader accepted for
  * this grant, in schema order. `seal-grants` prints one of these per grant
  * because sealing a forged file makes the forgery valid — but it used to
@@ -360,6 +385,6 @@ function grantSummary(name, grant) {
 }
 
 module.exports = {
-  loadGrantFile, validateGrant, grantSummary, assertUniformGrantKeys, grantKeyBytes, MAX_GRANTS,
+  loadGrantFile, loadVerdictGrantFile, validateGrant, grantSummary, assertUniformGrantKeys, grantKeyBytes, MAX_GRANTS,
 };
 ;

@@ -1059,7 +1059,7 @@ async function main() {
       report.socket = { path: socketPath, state };
     }
     if (wantsFiles) {
-      const { loadGrantFile } = require('../src/grantfile');
+      const { loadVerdictGrantFile } = require('../src/grantfile');
       const { Ledger } = require('../src/ledger');
       const sealPassphrase = typeof args['grant-seal-passphrase-file'] === 'string'
         ? readPassphrase(args, 'grant-seal-passphrase-file') : undefined;
@@ -1068,7 +1068,7 @@ async function main() {
       const options = sealPassphrase === undefined ? {} : {
         sealKeyFor: require('../src/grantseal').makeSealKeyProvider(sealPassphrase),
       };
-      const loaded = loadGrantFile(requireArg(args, 'grants'), options);
+      const loaded = loadVerdictGrantFile(requireArg(args, 'grants'), options);
       const ledger = new Ledger({
         file: requireArg(args, 'ledger'),
         sealPassphrase: journalSealPassphrase,
@@ -1094,7 +1094,7 @@ async function main() {
 
   if (command === 'seal-grants') {
     const { sealDocument } = require('../src/grantseal');
-    const { loadGrantFile, grantSummary } = require('../src/grantfile');
+    const { loadVerdictGrantFile, grantSummary } = require('../src/grantfile');
     const file = requireArg(args, 'grants');
     const passphrase = readPassphrase(args, 'seal-passphrase-file');
 
@@ -1132,7 +1132,7 @@ async function main() {
     // writes is fresh.
     let loaded;
     try {
-      loaded = loadGrantFile(file, { allowSealedWithoutKey: true });
+      loaded = loadVerdictGrantFile(file, { allowSealedWithoutKey: true });
     } catch (err) {
       if (err && err.code === 'grant_file_mode') {
         process.stderr.write(
@@ -1172,10 +1172,10 @@ async function main() {
   }
 
   if (command === 'verify-grants') {
-    const { loadGrantFile } = require('../src/grantfile');
+    const { loadVerdictGrantFile } = require('../src/grantfile');
     const { makeSealKeyProvider } = require('../src/grantseal');
     const passphrase = readPassphrase(args, 'seal-passphrase-file');
-    const loaded = loadGrantFile(requireArg(args, 'grants'), {
+    const loaded = loadVerdictGrantFile(requireArg(args, 'grants'), {
       sealKeyFor: makeSealKeyProvider(passphrase),
     });
     process.stdout.write(JSON.stringify({ ok: true, grants: loaded.names }) + '\n');
