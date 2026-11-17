@@ -1,0 +1,77 @@
+{
+  "tool": "measure-grant-key-uniformity",
+  "version": "0.2.32",
+  "measured": "/tmp/pub232/node_modules/signerd",
+  "measuredAt": "2026-11-17T02:16:31.526Z",
+  "faces": {
+    "K1": {
+      "name": "append-foreign-tx",
+      "defect": false,
+      "written": false,
+      "verdict": "refused: grant_file_key_mismatch",
+      "detail": "grant_file_key_mismatch"
+    },
+    "K2": {
+      "name": "run-after-foreign-tx",
+      "defect": false,
+      "daemonStarted": null,
+      "refusal": "not_reached",
+      "servableBefore": [
+        "good"
+      ],
+      "servableAfter": [],
+      "collateralDamage": [
+        "good"
+      ],
+      "verdict": "not reached (K1 refused the write)"
+    },
+    "K3": {
+      "name": "append-foreign-message",
+      "defect": false,
+      "written": false,
+      "verdict": "refused: grant_file_key_mismatch",
+      "detail": "grant_file_key_mismatch"
+    },
+    "K4": {
+      "name": "append-same-key-message-other-encoding",
+      "defect": false,
+      "ok": true,
+      "encodingsAgree": true,
+      "verdict": "accepted (base64 pubkey == base58 signer, one key)"
+    },
+    "K5": {
+      "name": "append-same-key-tx",
+      "defect": false,
+      "ok": true,
+      "verdict": "accepted"
+    },
+    "K6": {
+      "name": "remove-repairs-the-file",
+      "defect": false,
+      "removeOk": true,
+      "daemonBeforeRemove": false,
+      "daemonAfterRemove": true,
+      "refusal": null,
+      "verdict": "file runs again after removing the foreign grant"
+    }
+  },
+  "faceOrder": [
+    "K1",
+    "K2",
+    "K3",
+    "K4",
+    "K5",
+    "K6"
+  ],
+  "defectFaces": 0,
+  "guardDefects": [],
+  "totalFaces": 6,
+  "finalServable": [
+    "good",
+    "good-2",
+    "receipts",
+    "rogue-receipts"
+  ],
+  "notes": [],
+  "verdict": "grant-file-key-uniformity-held"
+}
