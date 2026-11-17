@@ -134,6 +134,8 @@ const REPAIRS = {
   grant_file_key_mismatch: 'more than one key is named in a file that holds ONE key — drop the foreign grant: signerd grant-remove --grants <grants> --name <grant>',
   grant_file_exists: 'a grant file already exists there — add to it instead: signerd grant-add --grants <grants> --name <grant> --append ...',
   grant_file_write_failed: 'the grant file could not be written — check the directory is writable and has space: ls -ld $(dirname <grants>)',
+  grant_file_locked: 'another writer holds this grant file\'s lock (a concurrent grant-add/grant-remove/seal-grants, or a dead writer\'s stale lock) — retry once it finished: signerd status --grants <grants> --ledger <ledger>',
+  grant_file_lock_failed: 'the grant file\'s lock could not be claimed — check the directory is writable: ls -ld $(dirname <grants>)',
   grant_signer_mismatch: 'the grant pins a signer this daemon\'s keystore is not — rebuild the grant from this keystore: signerd grant-add --grants <grants> --name <grant> --keystore <keystore> --destination <pubkey> --max-lamports <u64> --window-max-lamports <u64> --window-seconds <secs> --expires <iso>',
   grant_key_mismatch: 'the grant pins a public key this keystore does not hold — re-derive it from the keystore: signerd sign-message --add-grant --keystore <keystore> --body <file>',
   grant_name_invalid: 'the grant name has characters this daemon does not accept — use letters, digits, `_`, `-`, `.` or `+`',

@@ -13,6 +13,7 @@ const { detailOf } = require('../src/lease');
 const { readOperatorFile, classifyReadError } = require('../src/input-file');
 const { verifySignedWire, verifyMessageSignature } = require('../src/client-verify');
 const { refusalFix } = require('../src/refusal-voice');
+const { withGrantFileLock } = require('../src/grant-file-lock');
 
 /**
  * The HUMAN half of a verdict the daemon answered with `ok:false`.
@@ -1217,13 +1218,30 @@ async function main() {
     // Build the document directly from the loader's validated grants so the
     // payload sealed carries only what the loader accepted (no prototype
     // pollution, no extra fields).
-    const doc = { version: 1, grants: loaded.grants };
-    const sealed = sealDocument(doc, passphrase);
-    const out = typeof args.out === 'string' ? args.out : file;
-    requireWritableOut(out);
-    const delivery = writeOutAtomic(out, Buffer.from(JSON.stringify(sealed, null, 2) + '\n'));
-    if (!delivery.ok) {
-      process.stderr.write(`out_write_failed: cannot write sealed grants to ${out}: ${delivery.message}\n`);
+    // ONE WRITER AT A TIME: seal-grants is a WRITE path, so it takes the
+    // file's lock like grant-add and grant-remove (measured 2026-11-17:
+    // judge outside + write inside raced another writer to ok:true while
+    // one update vanished). Under the lock the file is re-read and the
+    // seal is computed over the FRESH load, so a writer that landed between
+    // judge and write cannot be clobbered; the summary names what was
+    // actually sealed.
+    const sealedSummary = withGrantFileLock(resolved, () => {
+      const fresh = loadVerdictGrantFile(file, { allowSealedWithoutKey: true });
+      const doc = { version: 1, grants: fresh.grants };
+      const sealed = sealDocument(doc, passphrase);
+      const out = typeof args.out === 'string' ? args.out : file;
+      requireWritableOut(out);
+      const delivery = writeOutAtomic(out, Buffer.from(JSON.stringify(sealed, null, 2) + '\n'));
+      if (!delivery.ok) {
+        return { writeError: `out_write_failed: cannot write sealed grants to ${out}: ${delivery.message}` };
+      }
+      return {
+        summary: fresh.names.map((name) => grantSummary(name, fresh.grants[name])),
+        out,
+      };
+    });
+    if (sealedSummary.writeError) {
+      process.stderr.write(sealedSummary.writeError + '\n');
       process.exit(1);
     }
     // The operator must see WHAT was sealed: sealing a forged file makes the
@@ -1231,8 +1249,7 @@ async function main() {
     // the loader's OWN field lists (grantSummary), not a hand-picked
     // subset — the old list hid a message grant's entire scope and the tx
     // grant's rolling window budget (measured 2026-11-15).
-    const summary = loaded.names.map((name) => grantSummary(name, loaded.grants[name]));
-    process.stdout.write(JSON.stringify({ ok: true, out, grants: summary }) + '\n');
+    process.stdout.write(JSON.stringify({ ok: true, out: sealedSummary.out, grants: sealedSummary.summary }) + '\n');
     return;
   }
 

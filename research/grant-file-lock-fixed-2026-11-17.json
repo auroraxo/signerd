@@ -1,0 +1,83 @@
+{
+  "tool": "tools/measure-grant-file-lock.js",
+  "tree": "this working tree (the fix)",
+  "generatedAt": "2026-11-17",
+  "rounds": 3,
+  "writersPerRound": 8,
+  "runs": [
+    {
+      "createOk": true,
+      "appendOkReports": 8,
+      "refusedWriters": 0,
+      "grantsOnDisk": 9,
+      "expected": 9,
+      "a1_mismatch": false,
+      "a2_missing": false,
+      "a3_lockLeft": false,
+      "names": [
+        "g1",
+        "g2",
+        "g3",
+        "g4",
+        "g5",
+        "g6",
+        "g7",
+        "g8",
+        "good"
+      ],
+      "stderrSamples": []
+    },
+    {
+      "createOk": true,
+      "appendOkReports": 8,
+      "refusedWriters": 0,
+      "grantsOnDisk": 9,
+      "expected": 9,
+      "a1_mismatch": false,
+      "a2_missing": false,
+      "a3_lockLeft": false,
+      "names": [
+        "g1",
+        "g2",
+        "g3",
+        "g4",
+        "g5",
+        "g6",
+        "g7",
+        "g8",
+        "good"
+      ],
+      "stderrSamples": []
+    },
+    {
+      "createOk": true,
+      "appendOkReports": 8,
+      "refusedWriters": 0,
+      "grantsOnDisk": 9,
+      "expected": 9,
+      "a1_mismatch": false,
+      "a2_missing": false,
+      "a3_lockLeft": false,
+      "names": [
+        "g1",
+        "g2",
+        "g3",
+        "g4",
+        "g5",
+        "g6",
+        "g7",
+        "g8",
+        "good"
+      ],
+      "stderrSamples": []
+    }
+  ],
+  "defectFaces": {
+    "A1_ok_vs_disk_mismatch": 0,
+    "A2_grants_missing": 0,
+    "A3_lock_left_behind": 0
+  },
+  "verdict": "grant-file-writes-serialize",
+  "prefixSha": "6e33571",
+  "prefixRefersTo": "research/grant-file-lock-prefix-2026-11-17.json"
+}

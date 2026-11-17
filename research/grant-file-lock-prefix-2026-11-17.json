@@ -1,0 +1,71 @@
+{
+  "tool": "tools/measure-grant-file-lock.js",
+  "tree": "pre-fix tree (6e33571, git archive, the code that shipped v0.2.34)",
+  "generatedAt": "2026-11-17",
+  "rounds": 3,
+  "writersPerRound": 8,
+  "runs": [
+    {
+      "createOk": true,
+      "appendOkReports": 8,
+      "refusedWriters": 0,
+      "grantsOnDisk": 6,
+      "expected": 9,
+      "a1_mismatch": true,
+      "a2_missing": true,
+      "a3_lockLeft": false,
+      "names": [
+        "g1",
+        "g2",
+        "g4",
+        "g6",
+        "g8",
+        "good"
+      ],
+      "stderrSamples": []
+    },
+    {
+      "createOk": true,
+      "appendOkReports": 8,
+      "refusedWriters": 0,
+      "grantsOnDisk": 4,
+      "expected": 9,
+      "a1_mismatch": true,
+      "a2_missing": true,
+      "a3_lockLeft": false,
+      "names": [
+        "g1",
+        "g4",
+        "g6",
+        "good"
+      ],
+      "stderrSamples": []
+    },
+    {
+      "createOk": true,
+      "appendOkReports": 8,
+      "refusedWriters": 0,
+      "grantsOnDisk": 6,
+      "expected": 9,
+      "a1_mismatch": true,
+      "a2_missing": true,
+      "a3_lockLeft": false,
+      "names": [
+        "g2",
+        "g3",
+        "g4",
+        "g6",
+        "g8",
+        "good"
+      ],
+      "stderrSamples": []
+    }
+  ],
+  "defectFaces": {
+    "A1_ok_vs_disk_mismatch": 3,
+    "A2_grants_missing": 3,
+    "A3_lock_left_behind": 0
+  },
+  "verdict": "lost-updates-present",
+  "prefixSha": "6e33571"
+}

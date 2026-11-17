@@ -58,6 +58,7 @@ const {
   validateGrant, loadGrantFile, assertUniformGrantKeys, MAX_GRANTS,
 } = require('./grantfile');
 const { makeSealKeyProvider, sealDocument } = require('./grantseal');
+const { withGrantFileLock } = require('./grant-file-lock');
 const {
   isCanonicalPublicKey, isCanonicalBase64PublicKey, isCanonicalExpiry, isU64,
   isWindowMaxLamports, isWindowSeconds, isMessageCount, isFutureExpiry,
@@ -113,6 +114,27 @@ function fail(reason, detail) {
   const err = new Error(detail === undefined ? reason : `${reason}: ${detail}`);
   err.code = reason;
   return err;
+}
+
+/**
+ * Run a grant-file WRITE under the file's own lock.
+ *
+ * WHY (measured 2026-11-17, tools/measure-grant-file-lock.js, on the tree
+ * that shipped v0.2.34): every write path in this module is a
+ * READ-JUDGE-WRITE sequence - re-read the file, judge it with the
+ * product's own loader, add/remove, rename the result back. Two writers at
+ * once interleave those steps and BOTH report {"ok":true}: 8 concurrent
+ * `grant-add --append` runs against one file all exited 0 and the file
+ * ended with 6 of the 9 grants. A write that reports ok and did not happen
+ * is the same class the journal already refuses (the daemon stops serving a
+ * journal whose lock it lost - ledger_lock_lost).
+ *
+ * The judge-then-rename body runs UNCHANGED inside the lock: same rule,
+ * new serialization. The lock is released even when the write refuses, so a
+ * refusal never leaves the file locked.
+ */
+function underGrantFileLock(resolved, fn) {
+  return withGrantFileLock(resolved, fn);
 }
 
 /**
@@ -291,6 +313,10 @@ function writeGrantFile({ file, name, grant }) {
     throw fail('grant_file_exists', resolved);
   }
 
+  // ONE WRITER AT A TIME: creation races the other writers of this file
+  // too (measured 2026-11-17, see src/grant-file-lock.js). The lock lives
+  // in the grant file's own directory, so the directory is made FIRST and
+  // the lock is taken inside it; the lock guards the NAME, not the inode.
   const dir = path.dirname(resolved);
   let dirExists = true;
   try {
@@ -304,6 +330,14 @@ function writeGrantFile({ file, name, grant }) {
     try { fs.chmodSync(dir, 0o700); } catch { /* loader's rules verify */ }
   }
 
+  return underGrantFileLock(resolved, () => {
+  // Re-check the file under the lock: a concurrent creator may have won
+  // the race while we waited (measured 2026-11-17). Without this, the
+  // second creator would overwrite the first one's grant file.
+  const reread = lstatOrNull(resolved);
+  if (reread !== null && reread.isSymbolicLink()) throw fail('grant_file_symlink', resolved);
+  if (reread !== null) throw fail('grant_file_exists', resolved);
+
   const doc = { version: 1, grants: { [name]: grant } };
   // The SAME atomic path as --append and grant-remove: temp file (O_EXCL),
   // fsync, rename, best-effort parent-directory fsync. Before this, the
@@ -313,6 +347,7 @@ function writeGrantFile({ file, name, grant }) {
   // test/grant-write-dir-fsync.test.js).
   writeAtomic(resolved, doc);
   return { file: resolved, grant: name };
+  });
 }
 
 /**
@@ -358,7 +393,10 @@ function addGrantToFile({ file, name, grant }) {
   // through one would touch a path the operator never named.
   const link = lstatOrNull(resolved);
   if (link !== null && link.isSymbolicLink()) throw fail('grant_file_symlink', resolved);
-
+  // ONE WRITER AT A TIME: the judge-then-rename sequence below is
+  // serialized against the other writers of this file (measured
+  // 2026-11-17, see src/grant-file-lock.js).
+  return underGrantFileLock(resolved, () => {
   // Seal presence needs the raw document: loadGrantFile only VERIFIES a
   // seal when a key provider is given and would otherwise ignore it — the
   // one outcome this path must never produce is an unsealed write over a
@@ -397,6 +435,7 @@ function addGrantToFile({ file, name, grant }) {
   const out = { version: 1, grants };
   writeAtomic(resolved, out);
   return { file: resolved, grant: name };
+  });
 }
 
 const MAX_GRANTS_LOCAL = MAX_GRANTS; // single source of truth: src/grantfile.js
@@ -474,6 +513,12 @@ function extendGrantFile({ file, name, grant, sealPassphrase }) {
     return writeGrantFile({ file: resolved, name, grant });
   }
 
+  // ONE WRITER AT A TIME: the judge-then-rename sequence below is
+  // serialized against the other writers of this file (measured
+  // 2026-11-17, see src/grant-file-lock.js). The create branch above takes
+  // the lock inside writeGrantFile instead - the lock is never nested.
+  return underGrantFileLock(resolved, () => {
+
   // Seal presence needs the raw document: loadGrantFile only VERIFIES a
   // seal when a key provider is given and would otherwise ignore it — the
   // one outcome this command must never produce is an unsealed write over
@@ -531,6 +576,7 @@ function extendGrantFile({ file, name, grant, sealPassphrase }) {
     grants: Object.keys(grants).sort(),
     sealed: sealPassphrase !== undefined,
   };
+  });
 }
 
 /**
@@ -595,6 +641,13 @@ function removeGrantFromFile({ file, name, sealPassphrase }) {
   if (link !== null && link.isSymbolicLink()) throw fail('grant_file_symlink', resolved);
   if (link === null) throw fail('grant_file_unreadable', 'ENOENT');
 
+  // ONE WRITER AT A TIME: a revocation that races another writer must not
+  // come back as a lost update - the daemon re-reads this file on EVERY
+  // request, so a resurrected grant is a silent revocation undo (measured
+  // 2026-11-17, see src/grant-file-lock.js). The judge-then-rename sequence
+  // below runs under the file's lock; the refusal voices join the refusal map.
+  return underGrantFileLock(resolved, () => {
+
   // Seal presence needs the raw document: loadGrantFile only VERIFIES a
   // seal when a key provider is given and would otherwise ignore it — the
   // one outcome this command must never produce is an unsealed write over
@@ -650,6 +703,7 @@ function removeGrantFromFile({ file, name, sealPassphrase }) {
     grants: Object.keys(grants).sort(),
     sealed: sealPassphrase !== undefined,
   };
+  });
 }
 
 /**
