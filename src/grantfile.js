@@ -2,6 +2,7 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
+const { PublicKey } = require('@solana/web3.js');
 const { readUnderLease } = require('./lease');
 const { verifySealMac, parseSeal } = require('./grantseal');
 const {
@@ -117,6 +118,88 @@ function validateGrant(name, grant) {
       !isWindowSeconds(grant.windowSeconds) || !isCanonicalExpiry(grant.expiresAt)) {
     throw fail('grant_field_invalid', `${name}.format`);
   }
+}
+
+/**
+ * The 32 raw bytes of the key a grant PINS.
+ *
+ * signerd holds exactly ONE key. A transaction grant pins it base58 in
+ * `signer`, a message grant pins the SAME key base64 in `pubkey` (the
+ * openreceipts encoding). Both spellings are DECODED here, so the two
+ * encodings of one key compare equal — a rule that compared the strings
+ * would call one key two keys and refuse a legal file.
+ *
+ * Returns null when the grant pins no key this module can read (a grant
+ * that survived validateGrant always pins one; the null is a fail-closed
+ * fallback, never a licence to skip the check).
+ */
+function grantKeyBytes(grant) {
+  if (grant === null || typeof grant !== 'object' || Array.isArray(grant)) return null;
+  const kindField = Object.getOwnPropertyDescriptor(grant, 'kind');
+  const isMessage = kindField !== undefined && 'value' in kindField;
+  if (isMessage) {
+    const descriptor = Object.getOwnPropertyDescriptor(grant, 'pubkey');
+    if (!descriptor || typeof descriptor.value !== 'string') return null;
+    let raw;
+    try { raw = Buffer.from(descriptor.value, 'base64'); } catch { return null; }
+    return raw.length === 32 ? raw : null;
+  }
+  const descriptor = Object.getOwnPropertyDescriptor(grant, 'signer');
+  if (!descriptor || typeof descriptor.value !== 'string') return null;
+  try {
+    return Buffer.from(new PublicKey(descriptor.value).toBytes());
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * THE UNIFORMITY RULE: one grant file, ONE key.
+ *
+ * WHY (measured 2026-11-17, tree after v0.2.31): the daemon's
+ * `#reloadGrants()` (src/daemon.js) checks EVERY grant against ITS key and
+ * throws on the first mismatch. A file that pins two keys can therefore
+ * NEVER be run by this daemon — and the failure takes the WHOLE file down
+ * with it, including the grants that were perfectly valid. The write paths
+ * (`grant-add --append`, the message bootstrap) had no key to judge
+ * against, so they wrote such a file with {"ok":true}.
+ *
+ * This is the same house rule the repo has applied to grant VALUES since
+ * 2026-11-08 ("a file that would be refused at run time is refused here") —
+ * extended from the VALUES to the KEY.
+ *
+ * The rule is decidable from the FILE ALONE (no keystore needed), which is
+ * what makes it enforceable at every write path: the file's own grants must
+ * all pin the same key.
+ *
+ * Returns { key, names } for a uniform map, or null when the map is empty.
+ * Throws fail('grant_file_key_mismatch') when the map pins more than one
+ * key — the refusal names the offending grant and the key the others pin.
+ */
+function assertUniformGrantKeys(grants) {
+  const names = Object.getOwnPropertyNames(grants);
+  if (names.length === 0) return null;
+  let key = null;
+  let keyNames = [];
+  for (const name of names) {
+    const bytes = grantKeyBytes(grants[name]);
+    if (bytes === null) {
+      throw fail('grant_file_key_mismatch',
+        `${name} pins no readable key, so the file cannot be shown to pin ONE key`);
+    }
+    if (key === null) {
+      key = bytes;
+      keyNames = [name];
+      continue;
+    }
+    if (!bytes.equals(key)) {
+      throw fail('grant_file_key_mismatch',
+        `${name} pins a different key than ${keyNames[0]} — one grant file holds ONE key ` +
+        `(the daemon refuses the whole file when one grant names another key)`);
+    }
+    keyNames.push(name);
+  }
+  return { key, names: keyNames };
 }
 
 /**
@@ -276,5 +359,7 @@ function grantSummary(name, grant) {
   return summary;
 }
 
-module.exports = { loadGrantFile, validateGrant, grantSummary, MAX_GRANTS };
+module.exports = {
+  loadGrantFile, validateGrant, grantSummary, assertUniformGrantKeys, grantKeyBytes, MAX_GRANTS,
+};
 ;

@@ -54,7 +54,9 @@ function bootstrapMaxBytes(body) {
 
 const fs = require('node:fs');
 const path = require('node:path');
-const { validateGrant, loadGrantFile, MAX_GRANTS } = require('./grantfile');
+const {
+  validateGrant, loadGrantFile, assertUniformGrantKeys, MAX_GRANTS,
+} = require('./grantfile');
 const { makeSealKeyProvider, sealDocument } = require('./grantseal');
 const {
   isCanonicalPublicKey, isCanonicalBase64PublicKey, isCanonicalExpiry, isU64,
@@ -389,6 +391,9 @@ function addGrantToFile({ file, name, grant }) {
   const grants = {};
   for (const key of existing) grants[key] = loaded.grants[key];
   grants[name] = grant;
+  // ONE KEY PER FILE (see extendGrantFile): a file that pins two keys cannot
+  // be run by the daemon at all - measured 2026-11-17 (K3).
+  assertUniformGrantKeys(grants);
   const out = { version: 1, grants };
   writeAtomic(resolved, out);
   return { file: resolved, grant: name };
@@ -507,6 +512,13 @@ function extendGrantFile({ file, name, grant, sealPassphrase }) {
   const grants = {};
   for (const key of existing) grants[key] = loaded.grants[key];
   grants[name] = grant;
+  // ONE KEY PER FILE. The daemon refuses the WHOLE file when one grant names
+  // another key (src/daemon.js #reloadGrants), so a file that pins two keys
+  // cannot be run at all - and the grants that were valid before it die with
+  // it. The loader cannot catch this (it has no key to judge against), so the
+  // write path must: measured 2026-11-17, tools/measure-grant-key-uniformity.js
+  // (K1/K3: ok:true for a file no daemon can run).
+  assertUniformGrantKeys(grants);
   const out = sealPassphrase === undefined
     ? { version: 1, grants }
     : sealDocument({ version: 1, grants }, sealPassphrase);

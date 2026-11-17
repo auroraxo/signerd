@@ -1,0 +1,75 @@
+{
+  "tool": "measure-grant-key-uniformity",
+  "version": "0.2.31",
+  "measured": "checkout",
+  "measuredAt": "2026-11-17T01:50:59.136Z",
+  "faces": {
+    "K1": {
+      "name": "append-foreign-tx",
+      "defect": true,
+      "written": true,
+      "verdict": "ok:true, foreign signer written",
+      "detail": "{\"file\":\"/tmp/signerd-kuniform-Mkg1kZ/grants.json\",\"grant\":\"foreign\",\"appended\":true,\"grants\":[\"foreign\",\"good\"],\"sealed\":false}"
+    },
+    "K2": {
+      "name": "run-after-foreign-tx",
+      "defect": true,
+      "daemonStarted": false,
+      "refusal": "grant_signer_mismatch",
+      "servableBefore": [
+        "good"
+      ],
+      "servableAfter": [],
+      "collateralDamage": [
+        "good"
+      ],
+      "verdict": "daemon refuses (grant_signer_mismatch); 1 previously-valid grant(s) stop working"
+    },
+    "K3": {
+      "name": "append-foreign-message",
+      "defect": true,
+      "written": true,
+      "verdict": "ok:true, foreign-pubkey message grant written into a file pinned to another key",
+      "detail": "{\"file\":\"/tmp/signerd-kuniform-Mkg1kZ/grants.json\",\"grant\":\"rogue-receipts\"}"
+    },
+    "K4": {
+      "name": "append-same-key-message-other-encoding",
+      "defect": false,
+      "ok": true,
+      "encodingsAgree": true,
+      "verdict": "accepted (base64 pubkey == base58 signer, one key)"
+    },
+    "K5": {
+      "name": "append-same-key-tx",
+      "defect": false,
+      "ok": true,
+      "verdict": "accepted"
+    },
+    "K6": {
+      "name": "remove-repairs-the-file",
+      "defect": false,
+      "removeOk": true,
+      "daemonAfterRemove": true,
+      "refusal": null,
+      "verdict": "file runs again after removing the foreign grant"
+    }
+  },
+  "faceOrder": [
+    "K1",
+    "K2",
+    "K3",
+    "K4",
+    "K5",
+    "K6"
+  ],
+  "defectFaces": 2,
+  "guardDefects": [],
+  "totalFaces": 6,
+  "finalServable": [
+    "good",
+    "good-2",
+    "receipts"
+  ],
+  "notes": [],
+  "verdict": "grant-file-key-uniformity-enforced-at-writetime"
+}

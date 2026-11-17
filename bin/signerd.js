@@ -1325,6 +1325,23 @@ main().catch((err) => {
     process.stderr.write(`${err.code}: ${detailOf(err)}\n${fix}\n`);
     process.exit(2);
   }
+  // A grant file that would pin MORE THAN ONE KEY. signerd holds exactly one
+  // key, and the daemon refuses the WHOLE file when a single grant names
+  // another key (src/daemon.js #reloadGrants) - so a two-key file cannot be
+  // run at all, and every grant that was valid before it dies with it.
+  // Measured 2026-11-17 (tools/measure-grant-key-uniformity.js, published
+  // v0.2.31 tree): `grant-add --append` with a foreign signer answered
+  // {"ok":true,"appended":true} and the daemon then refused the file with
+  // grant_signer_mismatch - taking the previously valid grant down with it.
+  // The write path now refuses it, with the repair that works: remove the
+  // offending grant, or point --signer at the file's own key.
+  if (err && err.code === 'grant_file_key_mismatch') {
+    process.stderr.write(
+      `${err.code}: ${detailOf(err)}\n` +
+      `  fix: point --signer at the key the other grants in this file pin (one grant file holds ONE key)\n` +
+      `  fix: signerd grant-remove --grants <file> --name <the grant named above>   # drop the foreign grant\n`);
+    process.exit(1);
+  }
   // THE GENERIC TAIL: every refusal that reaches here carries its repair
   // on the error itself, and the operator must see it. Measured 2026-11-16
   // (tools/measure-response-frame.js, published v0.2.29): a verdict-less
