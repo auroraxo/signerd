@@ -41,9 +41,9 @@ function assertNotSymlink(file, reason = 'keystore_symlink') {
     st = fs.lstatSync(file);
   } catch (err) {
     if (err.code === 'ENOENT') return; // nothing there: no link to refuse
-    throw fail('keystore_unreadable', err.code);
+    throw fail('keystore_unreadable', readFailureReason(err));
   }
-  if (st.isSymbolicLink()) throw fail(reason, `${file} is a symlink — the keystore path must be a real file (a link lets a stranger point it at any file on the machine; fix: remove the link and re-run, or point --keystore at the intended path)`);
+  if (st.isSymbolicLink()) throw fail(reason, `${file} is a symlink — the keystore path must be a real file (a link lets a stranger point it at any file on the machine)`);
 }
 
 /**
@@ -56,6 +56,50 @@ function assertNotSymlink(file, reason = 'keystore_symlink') {
  * working one. With a rename the operator either keeps the OLD complete
  * document or gets the NEW complete one; the temp is removed on any failure.
  */
+/**
+ * Turn a write errno into a NAMED reason. The errno itself stays out of the
+ * refusal (the operator cannot act on "EISDIR" without being told what to
+ * DO); the named reason says which condition broke.
+ */
+/**
+ * Turn a read errno into a NAMED reason. The errno itself stays out of the
+ * refusal text (house rule, the 2026-11-18 cli-voice sweep): the named
+ * reason says which condition broke, the one map (src/refusal-voice.js)
+ * carries the repair.
+ */
+function readFailureReason(err) {
+  const code = err && typeof err.code === 'string' ? err.code : '';
+  if (code === 'ENOENT') return 'no file at that path';
+  if (code === 'EACCES' || code === 'EPERM') return 'not readable by this user';
+  if (code === 'EISDIR' || code === 'ENOTDIR') return 'not a regular file at that path';
+  if (code === 'ELOOP') return 'a symlink loop at that path';
+  return 'cannot be read';
+}
+
+function writeFailureReason(err) {
+  const code = err && typeof err.code === 'string' ? err.code : '';
+  switch (code) {
+    case 'EISDIR':
+    case 'ENOTDIR':
+      return 'not a regular file (a directory cannot hold a keystore)';
+    case 'EACCES':
+    case 'EPERM':
+      return 'not writable by this user';
+    case 'ENOSPC':
+      return 'not writable - the filesystem is full';
+    case 'EROFS':
+      return 'not writable - the filesystem is read-only';
+    case 'ELOOP':
+      return 'not a regular file (a symlink cannot hold a keystore)';
+    case 'ENAMETOOLONG':
+      return 'not a usable path (the name is too long)';
+    case 'EEXIST':
+      return 'not writable (a file with that name is in the way)';
+    default:
+      return 'not writable';
+  }
+}
+
 function writeKeystoreAtomic(file, text) {
   const dir = path.dirname(file);
   const tmp = path.join(dir,
@@ -72,7 +116,14 @@ function writeKeystoreAtomic(file, text) {
   } catch (err) {
     if (fd !== undefined) { try { fs.closeSync(fd); } catch { /* already closed */ } }
     try { fs.unlinkSync(tmp); } catch { /* never existed or already removed */ }
-    throw fail('keystore_write_failed', `${file}: ${err && err.code ? err.code : err}`);
+    // NO RAW ERRNO in the reason (house rule: the refusal text names a
+    // condition, not a Node error code) — the errno becomes a NAMED reason
+    // the operator can act on, and the repair lives in the one map
+    // (src/refusal-voice.js, code keystore_write_failed). Measured
+    // 2026-11-18 on the tree 4a2ae5f: a directory at --keystore came back
+    // as `keystore_write_failed: <path>: EISDIR` — an errno as the
+    // "reason", naming nothing the operator could act on.
+    throw fail('keystore_write_failed', `${file} is ${writeFailureReason(err)}`);
   }
   // Durability of the NAME, after the rename — best effort (house convention).
   try {
@@ -151,7 +202,7 @@ function writeKeystore({ file, passphrase, secretKey, overwrite = false }) {
   try {
     fs.statSync(dir);
   } catch (err) {
-    if (err.code !== 'ENOENT') throw fail('keystore_dir_unreadable', err.code);
+    if (err.code !== 'ENOENT') throw fail('keystore_dir_unreadable', readFailureReason(err));
     dirExists = false;
   }
   if (!dirExists) {
@@ -217,7 +268,7 @@ function importKeystore({ file, passphrase, from, overwrite = false }) {
   try {
     raw = fs.readFileSync(from);
   } catch (err) {
-    throw fail('import_source_unreadable', err.code);
+    throw fail('import_source_unreadable', readFailureReason(err));
   }
   const sourceMode = fs.statSync(from).mode & 0o777;
   const secret = parseSecretFile(raw);
@@ -245,7 +296,7 @@ function loadKeystore({ file, passphrase }) {
   try {
     raw = fs.readFileSync(file);
   } catch (err) {
-    throw fail('keystore_unreadable', err.code);
+    throw fail('keystore_unreadable', readFailureReason(err));
   }
   const mode = fs.statSync(file).mode & 0o777;
   if ((mode & 0o077) !== 0) throw fail('keystore_mode', mode.toString(8));
@@ -285,7 +336,7 @@ function loadKeystore({ file, passphrase }) {
   const dirMode = dirStat.mode & 0o7777;
   if ((dirMode & 0o022) !== 0 && (dirMode & 0o1000) === 0) {
     throw fail('keystore_dir_mode',
-      `${dirMode.toString(8)} — a stranger could swap the keystore; fix: chmod 700 ${dirPath}`);
+      `${dirMode.toString(8)} — a stranger could swap the keystore`);
   }
   if (typeof process.getuid === 'function' &&
       dirStat.uid !== process.getuid() && dirStat.uid !== 0) {
@@ -341,7 +392,12 @@ function readKeystorePublicKey({ file }) {
   try {
     raw = fs.readFileSync(resolved, 'utf8');
   } catch (err) {
-    throw fail('keystore_unreadable', err.code);
+    // The public-key reader is the one read left that still surfaced a raw
+    // errno as the detail (measured 2026-11-18, the cli-voice sweep: a
+    // missing keystore printed `keystore_unreadable: ENOENT`). Same named
+    // reason as every other read here; the repair lives in the map
+    // (src/refusal-voice.js).
+    throw fail('keystore_unreadable', readFailureReason(err));
   }
   let doc;
   try {

@@ -110,7 +110,7 @@ const REPAIRS = {
 
   // ---- the request and the grant lookup (src/daemon.js) ------------------
   request_invalid: 'the request frame is malformed (it needs a `grant` and exactly one of `wire`/`body`) — build it with: signerd sign ... or signerd sign-message ...',
-  body_invalid: 'the `body` field is not valid JSON — pass a JSON file: signerd sign-message --socket <file> --grant <name> --body <json-file>',
+  body_invalid: 'the `body` file must hold a JSON OBJECT (the receipt itself) — pass a JSON file: signerd sign-message --socket <file> --grant <name> --body <json-file>',
   grant_not_found: 'no grant by that name is in the grant file — list the names: signerd status --grants <grants> --ledger <ledger>, or create it: signerd grant-add --grants <grants> --name <grant> --keystore <keystore> --destination <pubkey> --max-lamports <u64> --window-max-lamports <u64> --window-seconds <secs> --expires <iso>',
   grant_kind_mismatch: 'a message body was sent to a transaction grant (or a wire to a message grant) — use signerd sign for transaction grants and signerd sign-message for message grants',
   daemon_not_running: 'the daemon is not running — start it: signerd run --keystore <keystore> --passphrase-file <file> --grants <grants> --ledger <ledger> --socket <file>',
@@ -205,6 +205,43 @@ const REPAIRS = {
   legacy_wire_missing: 'the wires directory does not hold the original wire for every legacy record - collect every wire the clients kept (--out files) into one directory and pass it: signerd migrate --ledger <ledger> --wires <dir>',
   wires_dir_unreadable: 'the wires directory cannot be read - check the path: ls -ld <dir-of-saved-wires>',
   lease_unavailable: 'the kernel lease helper could not be used - build it by hand once: cc -O2 -o tools/leasecheck tools/leasecheck.c (it ships next to the package), then retry',
+
+  // ---- the refusals THIS CLI mints itself (2026-11-18) -------------------
+  // WHY: the refusal voice was closed class by class — the daemon's
+  // verdicts (v0.2.34), the journal-integrity family (v0.2.36), the
+  // build-tx value inputs (v0.2.37), the import source file (v0.2.24
+  // sweep). What remained were the refusals bin/signerd.js prints at its
+  // OWN ad-hoc sites, each written by hand: the keystore faces keygen and
+  // import raise, the --body shape check, grant-add's signer requirement,
+  // the passphrase-file ownership rule. Measured on the tree 4a2ae5f
+  // (tools/measure-cli-voice.js, research/cli-voice-prefix-2026-11-18.json):
+  // 7 of 7 faces violated the contract — a code with no repair, a bare
+  // errno as the reason, prose with no code at all.
+  //
+  // The same rules as everywhere else: the repair names a command or a
+  // flag this CLI actually offers, and it never carries a host path — the
+  // operator substitutes their own (<keystore>, <file>, <id.json>).
+  keystore_exists: 'a keystore already exists at that path - replace it with --overwrite (the old key is then gone), or point --keystore at a different path',
+  keystore_write_failed: 'the keystore could not be written - point --keystore at a writable path that is a FILE, not a directory: signerd keygen --keystore <keystore> --passphrase-file <file>',
+  keystore_symlink: 'the keystore path is a symlink - remove the link and point --keystore at the intended file',
+  keystore_path_required: 'no keystore path was given - pass it: --keystore <keystore>',
+  keystore_unreadable: 'the keystore file cannot be read - check the path and its permissions: ls -l <keystore>',
+  passphrase_required: 'a passphrase is required - pass it with --passphrase-file <file> (a file holding the passphrase, owner-only): signerd keygen --keystore <keystore> --passphrase-file <file>',
+  keystore_mode: 'the keystore file is readable or writable by others - owner-only it: chmod 600 <keystore>',
+  keystore_auth_failed: 'the passphrase does not open this keystore - check the passphrase (it is the one this keystore was created with)',
+  keystore_invalid: 'the keystore file is not a keystore this version can read - create one: signerd keygen --keystore <keystore> --passphrase-file <file>',
+  keystore_dir_mode: 'the keystore\'s directory allows group/other WRITING, so anyone could swap the keystore - owner-only it: chmod 700 <keystore-dir>',
+  keystore_dir_owner: 'the keystore\'s directory is not owned by this user - chown it back to yourself: chown $(id -u) <keystore-dir>',
+  keystore_dir_unreadable: 'the keystore\'s directory cannot be read - check its path: ls -ld <keystore-dir>',
+  secret_key_invalid: 'the source file does not hold a Solana secret key - pass a solana-keygen id.json (a JSON array of 64 numbers), a base58 secret key, or a raw 64-byte file: signerd import --keystore <keystore> --from <id.json> --passphrase-file <file>',
+  import_source_required: 'no source file was given - pass it: --from <id.json>',
+  import_source_is_target: 'the source and the keystore are the same file - point --from at the plaintext key you want to adopt: signerd import --keystore <keystore> --from <id.json> --passphrase-file <file>',
+  import_source_unreadable: 'the source file cannot be read - check the path and its permissions: ls -l <id.json>',
+  grant_add_signer_required: 'the signer is not stated and cannot be derived - give it, or let it be read from the keystore: signerd grant-add --grants <grants> --name <grant> --keystore <keystore> --destination <pubkey> --max-lamports <u64> --window-max-lamports <u64> --window-seconds <secs> --expires <iso>',
+  passphrase_file_mode: 'the passphrase file is readable by others - owner-only it: chmod 600 <file>',
+  passphrase_file_owner: 'the passphrase file is not owned by this user - chown it back to yourself: chown $(id -u) <file> && chmod 600 <file>',
+  passphrase_file_dir_mode: 'the passphrase file\'s directory allows group/other WRITING, so anyone could replace the file there - owner-only it: chmod 700 <file-dir>',
+  passphrase_file_dir_owner: 'the passphrase file\'s directory is not owned by this user - chown it back to yourself: chown $(id -u) <file-dir>',
 };
 
 /**

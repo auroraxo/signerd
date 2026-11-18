@@ -1,0 +1,109 @@
+{
+  "measuredAt": "2026-11-18T17:49:22.110Z",
+  "cli": "signerd.js",
+  "head": "4a2ae5f",
+  "faces": 7,
+  "verdict": "violations-present",
+  "violations": 7,
+  "rules": [
+    "code-colon-first-line",
+    "fix-line",
+    "face-token-in-fix",
+    "exit-2",
+    "no-raw-errno",
+    "condition-held"
+  ],
+  "rows": [
+    {
+      "id": "keystore_exists",
+      "code": "keystore_exists",
+      "firstLine": "keystore_exists:",
+      "named": true,
+      "hasFix": false,
+      "token": "--overwrite",
+      "tokenOk": false,
+      "exit": 1,
+      "rawErrno": false,
+      "guardOk": true,
+      "ok": false
+    },
+    {
+      "id": "keystore_write_failed",
+      "code": "keystore_write_failed",
+      "firstLine": "keystore_write_failed: <tmp> EISDIR",
+      "named": true,
+      "hasFix": false,
+      "token": null,
+      "tokenOk": true,
+      "exit": 1,
+      "rawErrno": true,
+      "guardOk": true,
+      "ok": false
+    },
+    {
+      "id": "secret_key_invalid",
+      "code": "secret_key_invalid",
+      "firstLine": "secret_key_invalid:",
+      "named": true,
+      "hasFix": false,
+      "token": "id.json",
+      "tokenOk": false,
+      "exit": 1,
+      "rawErrno": false,
+      "guardOk": true,
+      "ok": false
+    },
+    {
+      "id": "body_invalid_not-json",
+      "code": "body_invalid",
+      "firstLine": "body_invalid: not JSON",
+      "named": true,
+      "hasFix": false,
+      "token": "--body",
+      "tokenOk": false,
+      "exit": 2,
+      "rawErrno": false,
+      "guardOk": true,
+      "ok": false
+    },
+    {
+      "id": "body_invalid_not-object",
+      "code": "body_invalid",
+      "firstLine": "body_invalid: expected a JSON object",
+      "named": true,
+      "hasFix": false,
+      "token": "--body",
+      "tokenOk": false,
+      "exit": 2,
+      "rawErrno": false,
+      "guardOk": true,
+      "ok": false
+    },
+    {
+      "id": "grant_add_signer_required",
+      "code": "grant_add_signer_required",
+      "firstLine": "grant-add needs --signer <pubkey> or --keystore <file> (the signer is read from the keystore's public key)",
+      "named": false,
+      "hasFix": false,
+      "token": "--keystore",
+      "tokenOk": true,
+      "exit": 2,
+      "rawErrno": false,
+      "guardOk": true,
+      "ok": false
+    },
+    {
+      "id": "passphrase_file_owner",
+      "code": "passphrase_file_owner",
+      "firstLine": "passphrase-file must be owned by the operator (uid 65534)",
+      "named": false,
+      "hasFix": false,
+      "token": "chown",
+      "tokenOk": false,
+      "exit": 2,
+      "rawErrno": false,
+      "guardOk": true,
+      "ok": false
+    }
+  ]
+}

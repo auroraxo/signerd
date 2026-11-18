@@ -1,0 +1,109 @@
+{
+  "measuredAt": "2026-11-18T19:10:36.018Z",
+  "cli": "signerd.js",
+  "head": "4a2ae5f",
+  "faces": 7,
+  "verdict": "refusals-present",
+  "violations": 0,
+  "rules": [
+    "code-colon-first-line",
+    "fix-line",
+    "face-token-in-fix",
+    "exit-2",
+    "no-raw-errno",
+    "condition-held"
+  ],
+  "rows": [
+    {
+      "id": "keystore_exists",
+      "code": "keystore_exists",
+      "firstLine": "keystore_exists: <tmp> already holds a key",
+      "named": true,
+      "hasFix": true,
+      "token": "--overwrite",
+      "tokenOk": true,
+      "exit": 2,
+      "rawErrno": false,
+      "guardOk": true,
+      "ok": true
+    },
+    {
+      "id": "keystore_write_failed",
+      "code": "keystore_write_failed",
+      "firstLine": "keystore_write_failed: <tmp> is not a regular file (a directory cannot hold a keystore)",
+      "named": true,
+      "hasFix": true,
+      "token": null,
+      "tokenOk": true,
+      "exit": 2,
+      "rawErrno": false,
+      "guardOk": true,
+      "ok": true
+    },
+    {
+      "id": "secret_key_invalid",
+      "code": "secret_key_invalid",
+      "firstLine": "secret_key_invalid: <tmp> does not hold a readable Solana secret key (tried id.json/JSON and base58)",
+      "named": true,
+      "hasFix": true,
+      "token": "id.json",
+      "tokenOk": true,
+      "exit": 2,
+      "rawErrno": false,
+      "guardOk": true,
+      "ok": true
+    },
+    {
+      "id": "body_invalid_not-json",
+      "code": "body_invalid",
+      "firstLine": "body_invalid: <tmp> is not JSON",
+      "named": true,
+      "hasFix": true,
+      "token": "--body",
+      "tokenOk": true,
+      "exit": 2,
+      "rawErrno": false,
+      "guardOk": true,
+      "ok": true
+    },
+    {
+      "id": "body_invalid_not-object",
+      "code": "body_invalid",
+      "firstLine": "body_invalid: <tmp> holds JSON but not a JSON object (arrays, strings and numbers are not receipt bodies)",
+      "named": true,
+      "hasFix": true,
+      "token": "--body",
+      "tokenOk": true,
+      "exit": 2,
+      "rawErrno": false,
+      "guardOk": true,
+      "ok": true
+    },
+    {
+      "id": "grant_add_signer_required",
+      "code": "grant_add_signer_required",
+      "firstLine": "grant_add_signer_required: grant-add needs a signer - give --signer <pubkey>, or let it be read from a keystore",
+      "named": true,
+      "hasFix": true,
+      "token": "--keystore",
+      "tokenOk": true,
+      "exit": 2,
+      "rawErrno": false,
+      "guardOk": true,
+      "ok": true
+    },
+    {
+      "id": "passphrase_file_owner",
+      "code": "passphrase_file_owner",
+      "firstLine": "passphrase_file_owner: passphrase-file must be owned by the operator (uid 65534)",
+      "named": true,
+      "hasFix": true,
+      "token": "chown",
+      "tokenOk": true,
+      "exit": 2,
+      "rawErrno": false,
+      "guardOk": true,
+      "ok": true
+    }
+  ]
+}

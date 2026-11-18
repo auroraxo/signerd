@@ -50,10 +50,14 @@ const KNOWN_COMMANDS = [
  *   - src/policy.js, src/policy-message.js, src/signer.js,
  *     src/signer-message.js, src/ledger.js: the policy/ledger verdicts
  *     (`refused('<code>')`);
- *   - src/daemon.js: the daemon's own literals (`error: '<code>'`).
+ *   - src/daemon.js: the daemon's own literals (`error: '<code>'`);
+ *   - src/keystore.js: the keystore family's `fail('<code>')` (added
+ *     2026-11-18 with the cli-voice sweep: the keystore codes now travel
+ *     through the SAME map at the CLI's generic tail, so a missing repair
+ *     there is the same mute-refusal defect this gate exists to catch).
  *
  * Codes from the OTHER modules are deliberately OUT of scope: a
- * `keystore_*` or `ledger_sealed` error is raised by a CLI command that
+ * `grant_file_*` or `ledger_sealed` error is raised by a CLI command that
  * prints it with its OWN wording and its own repair (the grant-file and
  * journal refusal classes, which already had a voice before this fix). A
  * daemon verdict frame is a different surface, and only THAT surface is
@@ -65,7 +69,7 @@ const KNOWN_COMMANDS = [
  */
 const VERDICT_MODULES = [
   'policy.js', 'policy-message.js', 'signer.js', 'signer-message.js',
-  'ledger.js', 'daemon.js',
+  'ledger.js', 'daemon.js', 'keystore.js',
 ];
 
 function scrapeSourceCodes() {
@@ -75,6 +79,14 @@ function scrapeSourceCodes() {
     /refused\('([a-z_]+)'/g,
     /error:\s*'([a-z_]+)'/g,
   ];
+  // src/keystore.js raises its codes with `fail('<code>')` instead of the
+  // `refused('...')` / `error: '...'` forms above - one extra pattern for
+  // that file, still scraped from the source, never a hand-written list.
+  const failPattern = /fail\('([a-z_]+)'/g;
+  const keystore = fs.readFileSync(path.join(dir, 'keystore.js'), 'utf8');
+  let f;
+  failPattern.lastIndex = 0;
+  while ((f = failPattern.exec(keystore)) !== null) codes.add(f[1]);
   for (const name of VERDICT_MODULES) {
     const text = fs.readFileSync(path.join(dir, name), 'utf8');
     for (const re of patterns) {

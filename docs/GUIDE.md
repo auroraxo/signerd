@@ -595,3 +595,60 @@ green on BOTH trees), the two-tree measurement above with its pin
 → 0, and the named repair went from exit 2 / `unknown_flag` to a runnable state
 answer), and `tools/mutation-ladder-socket-voice.sh` (7/7 mutations caught, control
 green, tree byte-identical). Suite 738 → **752/752**.
+
+## The CLI's own refusals name their fix (measured 2026-11-18)
+
+The refusal voice had been closed class by class — the daemon's verdicts (v0.2.34), the
+journal-integrity family (v0.2.36), the build-tx value inputs (v0.2.37). What remained was
+the LAST class: the refusals `bin/signerd.js` prints **itself**, at its own ad-hoc sites,
+each hand-written by whoever added it. They were the oldest and least uniform code in the
+product, and the README promise ("refusals name the flag and the fix") reached them last.
+
+Measured on this tree (`4a2ae5f`, `tools/measure-cli-voice.js`,
+`research/cli-voice-prefix-2026-11-18.json`, verdict `violations-present`,
+**7 of 7 faces violating**):
+
+```
+keygen --keystore <an existing keystore>       -> keystore_exists: (empty detail)   no fix
+keygen --overwrite --keystore <a directory>    -> keystore_write_failed: <path>: EISDIR
+import --from <a readable file that is no key> -> secret_key_invalid:                no fix
+sign-message --body <not JSON> / <an array>    -> body_invalid: ...                  no fix
+grant-add without --signer/--keystore          -> prose with NO code and NO fix
+keygen --passphrase-file <a foreign uid>       -> prose with NO code and NO fix
+```
+
+Each face failed a different subset of the contract: an empty detail, a raw errno as the
+"reason", no `fix:` line, no machine-readable code, or an exit code that claimed the
+daemon had refused when no daemon was ever asked. The sibling `import` path had already
+been fixed (2026-11-05) and named `--overwrite`; the keygen path for the same verdict had
+not — one verdict, two voices.
+
+The four rules, applied uniformly (the same four as the swept families):
+the first line is `<code>: <detail>`; a `fix:` line follows and names a real flag or
+command for the face (`--overwrite`, `id.json`, `--body`, `--keystore`, `chown`);
+usage/preflight faces exit **2** (1 stays the daemon's/policy's); and no raw Node errno
+reaches the operator — `src/keystore.js` turns write/read errnos into named reasons
+("not a regular file (a directory cannot hold a keystore)", "not writable by this user").
+
+Where a repair existed for the same code somewhere in the product, the ONE map
+(`src/refusal-voice.js`) is the single source: `body_invalid` and
+`grant_add_signer_required` now print the map's wording rather than a private copy, so the
+same code can never be repaired twice in two different words. Sites whose detail names the
+real input file keep a hand-written repair, because only they know the file — the repair
+still follows the shape rule.
+
+Pinned by `test/cli-voice.test.js` (**11 cases: D1–D7 red on the pre-fix tree `4a2ae5f`,
+G1–G6 green on both**, every D face now asserting exit 2 as well), the two-tree measurement
+`tools/measure-cli-voice.js` → `research/cli-voice-prefix-2026-11-18.json`
+(verdict `violations-present`, 7 of 7) and `research/cli-voice-fixed-2026-11-18.json`
+(verdict `refusals-present`, **0 violations**, all 7 faces exit 2), and
+`tools/mutation-ladder-cli-voice.sh` (11 mutations, each breaking exactly one property of
+one face; the ladder's own VACUUM on its first run — an M5 that stripped only the fix line
+while the detail still named the format — is recorded in the ladder, and the gate was
+tightened to require all three source formats instead).
+
+Limits, stated rather than hidden: the measurement can only sweep faces it can *arrange* —
+the foreign-ownership face needs a uid it may chown to (nobody/65534), so on a machine
+where that is impossible the face is skipped, never counted as passing; and the reason is
+the *condition* ("not writable by this user"), not the errno behind it, so an `EIO` and an
+`EACCES` on the keystore write are both "not writable".

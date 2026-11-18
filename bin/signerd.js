@@ -261,26 +261,30 @@ function readPassphrase(args, flag = 'passphrase-file') {
     // the fix. The rule stays fail-closed; the message now carries the
     // command that repairs it.
     process.stderr.write(
-      `${flag} must not be group/other accessible (mode ${mode.toString(8)})\n` +
+      `passphrase_file_mode: ${flag} must not be group/other accessible (mode ${mode.toString(8)})\n` +
       `  fix: chmod 600 ${file}   # the passphrase file is a secret; keep it owner-only\n`);
     process.exit(2);
   }
   if (typeof process.getuid === 'function' &&
       lstat.uid !== process.getuid() && lstat.uid !== 0) {
-    process.stderr.write(`${flag} must be owned by the operator (uid ${lstat.uid})\n`);
+    process.stderr.write(
+      `passphrase_file_owner: ${flag} must be owned by the operator (uid ${lstat.uid})\n` +
+      `  fix: chown ${process.getuid()}:${process.getgid()} ${file}   # the passphrase unlocks the keystore; only you may read it\n`);
     process.exit(2);
   }
   const dirStat = fs.statSync(path.dirname(path.resolve(file)));
   const dirMode = dirStat.mode & 0o7777;
   if ((dirMode & 0o022) !== 0 && (dirMode & 0o1000) === 0) {
     process.stderr.write(
-      `${flag} must not live in a group/other writable directory (mode ${dirMode.toString(8)})\n` +
+      `passphrase_file_dir_mode: ${flag} must not live in a group/other writable directory (mode ${dirMode.toString(8)})\n` +
       `  fix: chmod 700 ${path.dirname(path.resolve(file))}   # a stranger could replace the file there\n`);
     process.exit(2);
   }
   if (typeof process.getuid === 'function' &&
       dirStat.uid !== process.getuid() && dirStat.uid !== 0) {
-    process.stderr.write(`${flag} directory must be owned by the operator (uid ${dirStat.uid})\n`);
+    process.stderr.write(
+      `passphrase_file_dir_owner: the directory holding ${flag} must be owned by the operator (uid ${dirStat.uid})\n` +
+      `  fix: chown ${process.getuid()}:${process.getgid()} ${path.dirname(path.resolve(file))}\n`);
     process.exit(2);
   }
   let text;
@@ -375,8 +379,44 @@ async function main() {
     const { createKeystore } = require('../src/keystore');
     const file = requireArg(args, 'keystore');
     const passphrase = readPassphrase(args);
-    const out = createKeystore({ file, passphrase, overwrite: args.overwrite === true });
-    process.stdout.write(JSON.stringify(out) + '\n');
+    try {
+      const out = createKeystore({ file, passphrase, overwrite: args.overwrite === true });
+      process.stdout.write(JSON.stringify(out) + '\n');
+    } catch (err) {
+      // Measured 2026-11-18 (tools/measure-cli-voice.js, tree 4a2ae5f): the
+      // KEYGEN face of keystore_exists printed `keystore_exists: ` - an EMPTY
+      // detail, no repair - while the sibling import path already named
+      // --overwrite (test/import-repair-surface.test.js pins THAT path
+      // only). The library's fail('keystore_exists') carries no detail by
+      // design; the condition lives at THIS site, so the repair is named
+      // here: replace the keystore with --overwrite, or generate elsewhere.
+      // The generic tail would print the map's repair, but at exit 1; a
+      // mistyped/occupied keystore path is a USAGE refusal, so this face is
+      // handled here to keep the code-exactly-once shape AND exit 2 (the
+      // same rule the import path applies since 2026-11-05).
+      if (err && err.code === 'keystore_exists') {
+        process.stderr.write(
+          `keystore_exists: ${file} already holds a key\n` +
+          `  fix: add --overwrite   # replace ${file} with the NEW key (the old key is gone), or\n` +
+          `  fix: signerd keygen --keystore <other-file> --passphrase-file <file>   # generate elsewhere; this file keeps its key\n`);
+        process.exit(2);
+      }
+      // A keystore path that cannot be WRITTEN (a directory in the way, no
+      // permission, a full disk) used to surface as
+      // `keystore_write_failed: <path>: EISDIR` - a raw errno as the
+      // "reason". The library now names the condition; this face only adds
+      // the repair and the usage exit code. Fail-closed stands: the refused
+      // write leaves the target untouched (atomic temp+rename,
+      // src/keystore.js writeKeystoreAtomic).
+      if (err && err.code === 'keystore_write_failed') {
+        process.stderr.write(
+          `keystore_write_failed: ${detailOf(err)}\n` +
+          `  fix: point --keystore at a writable FILE path that is not a directory:\n` +
+          `       signerd keygen --keystore <file> --passphrase-file <file>\n`);
+        process.exit(2);
+      }
+      throw err;
+    }
     return;
   }
 
@@ -428,7 +468,39 @@ async function main() {
           `keystore_exists: ${file} already holds a key\n` +
           `  fix: signerd import --keystore <other-file> --from ${from} ...   # adopt into a DIFFERENT keystore, or\n` +
           `  fix: add --overwrite   # replace ${file} with the imported key (the old key is gone)\n`);
-        process.exit(1);
+        process.exit(2);
+      }
+      // A SOURCE that parses but is NO KEY. Measured 2026-11-18 (the same
+      // sweep): the three ACCEPTED source formats - solana-keygen id.json,
+      // base58, raw 64 bytes - were named nowhere; the operator had to
+      // guess what the tool wanted. The fix names all three. Exit 2: the
+      // input is the defect, not the daemon.
+      if (err && err.code === 'secret_key_invalid') {
+        process.stderr.write(
+          `secret_key_invalid: ${from} does not hold a readable Solana secret key (tried id.json/JSON and base58)\n` +
+          `  fix: point --from at one of the three accepted formats - a solana-keygen id.json (a JSON array of 64 numbers), a base58 secret key, or a raw 64-byte file:\n` +
+          `       signerd import --keystore <file> --from <id.json> --passphrase-file <file>\n`);
+        process.exit(2);
+      }
+      // Same source/target file. A USAGE refusal like every other mistyped
+      // path here (previously the generic tail's exit 1 - aligned 2026-11-18
+      // with the exit contract: 1 is the daemon's/policy's verdict, and no
+      // daemon was involved).
+      if (err && err.code === 'import_source_is_target') {
+        process.stderr.write(
+          `import_source_is_target: --from and --keystore are the same file\n` +
+          `  fix: point --from at the plaintext key to adopt and --keystore at the encrypted keystore (a different path):\n` +
+          `       signerd import --keystore <file> --from <id.json> --passphrase-file <file>\n`);
+        process.exit(2);
+      }
+      // A keystore path that cannot be WRITTEN: the library names the
+      // condition (no raw errno); this face adds the repair and exit 2.
+      if (err && err.code === 'keystore_write_failed') {
+        process.stderr.write(
+          `keystore_write_failed: ${detailOf(err)}\n` +
+          `  fix: point --keystore at a writable FILE path that is not a directory:\n` +
+          `       signerd import --keystore <file> --from ${from} --passphrase-file <file>\n`);
+        process.exit(2);
       }
       // The source changed between the preflight and the read (a rare
       // race, but a real one): the library's errno detail must not reach
@@ -657,9 +729,15 @@ async function main() {
     // grant_signer_mismatch, so deriving from the same keystore the daemon
     // runs makes the documented setup fail-proof without a paste step.
     if (typeof args.signer !== 'string' && typeof args.keystore !== 'string') {
+      // A CODED refusal (2026-11-18): the prose face named neither flag nor
+      // repair and carried no code a caller could branch on, while every
+      // sibling refusal carries one. The repair comes from the ONE map
+      // (src/refusal-voice.js); exit 2 - the invocation, not the daemon,
+      // is missing its input.
+      const signerFix = refusalFix('grant_add_signer_required');
       process.stderr.write(
-        'grant-add needs --signer <pubkey> or --keystore <file> ' +
-        '(the signer is read from the keystore\'s public key)\n');
+        `grant_add_signer_required: grant-add needs a signer - give --signer <pubkey>, or let it be read from a keystore\n` +
+        (signerFix === null ? '' : `  fix: ${signerFix}\n`));
       process.exit(2);
     }
     const signer = typeof args.signer === 'string'
@@ -902,14 +980,24 @@ async function main() {
     const bodyText = bodyProbe.bytes.toString('utf8');
     // Shape check BEFORE the round trip: the body must be a JSON object (a
     // bare number or string would only fail at the policy layer).
+    // The repair comes from the ONE map (src/refusal-voice.js) - the same
+    // wording every other surface of this code prints for this code, kept
+    // in one place. The DETAIL stays here: it names the file and which of
+    // the two shapes failed. A code the map does not know still prints
+    // (code alone), never an empty `fix:` line.
+    const bodyFixLine = (() => {
+      const mapped = refusalFix('body_invalid');
+      return mapped === null ? '' : `  fix: ${mapped}\n`;
+    })();
     try {
       const parsed = JSON.parse(bodyText);
       if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
-        process.stderr.write('body_invalid: expected a JSON object\n');
+        process.stderr.write(
+          `body_invalid: ${bodyPath} holds JSON but not a JSON object (arrays, strings and numbers are not receipt bodies)\n${bodyFixLine}`);
         process.exit(2);
       }
     } catch {
-      process.stderr.write('body_invalid: not JSON\n');
+      process.stderr.write(`body_invalid: ${bodyPath} is not JSON\n${bodyFixLine}`);
       process.exit(2);
     }
     // --add-grant: bootstrap the message grant this command needs, straight
