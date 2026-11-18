@@ -1432,10 +1432,28 @@ main().catch((err) => {
   // detail and dropped fix. A fix that is already prefixed keeps its own
   // shape; one without the marker gets it, so the line the product prints
   // is always a `fix:` line.
+  //
+  // 2026-11-18: the refusal that carries NO repair on the error itself now
+  // looks its repair up in the ONE map (src/refusal-voice.js) by its code.
+  // Measured on the published v0.2.35 (tools/measure-journal-integrity-voice.js):
+  // the journal-integrity class - the refusals an operator meets when their
+  // own history is untrustworthy - reached the operator as a bare name with
+  // NO repair, and (where the loader raised an error without a code) as
+  // "error: ledger_tampered", with the name buried in the detail. The map
+  // was the daemon's verdict vocabulary; the journal's refusals were not in
+  // it. Now every refusal code the CLI can print has a repair.
+  //
+  // The map is consulted LAST, so a refusal that carries its own repair
+  // keeps its own wording - the map never overrules a specific repair.
+  const code = (err && typeof err.code === 'string' && err.code.length > 0)
+    ? err.code : 'error';
   const fixLine = err && typeof err.fix === 'string' && err.fix.length > 0
     ? (/^\s*fix:/.test(err.fix) ? err.fix : `  fix: ${err.fix}`)
-    : null;
-  process.stderr.write(`${err.code || 'error'}: ${detailOf(err)}\n`);
+    : (() => {
+      const mapped = refusalFix(code);
+      return mapped ? `  fix: ${mapped}` : null;
+    })();
+  process.stderr.write(`${code}: ${detailOf(err)}\n`);
   if (fixLine) process.stderr.write(`${fixLine}\n`);
   process.exit(1);
 });

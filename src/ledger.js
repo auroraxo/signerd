@@ -65,6 +65,33 @@ function ledgerError(code, detail) {
   return err;
 }
 
+/**
+ * A refusal that NAMES ITSELF.
+ *
+ * WHY (measured 2026-11-18, published v0.2.35): the journal's own
+ * refusals were raised as a bare `new Error('ledger_tampered')` - an error
+ * whose MESSAGE is the code but which carries no `code` property. The CLI's
+ * generic tail prints `err.code || 'error'`, so those refusals reached the
+ * operator as
+ *
+ *     error: ledger_tampered
+ *
+ * The name was BURIED in the detail text: the first `:`-separated token -
+ * the one a caller reads - was the literal word "error", so every journal
+ * refusal looked the same to a machine and the operator got no repair
+ * either. A refusal that cannot be told apart from another refusal is not
+ * a refusal the operator can act on.
+ *
+ * The loader therefore raises the refusal through this helper, which sets
+ * the same `code` property the other refusal classes already carry. The
+ * MESSAGE stays exactly what it was (`ledger_tampered`, or
+ * `ledger_tampered: <detail>`), so every existing assertion on the message
+ * keeps holding.
+ */
+function ledgerRefusal(code, detail) {
+  return ledgerError(code, detail);
+}
+
 function parseU64(value) {
   return isU64(value) ? BigInt(value) : null;
 }
@@ -303,22 +330,22 @@ function parseJournal(raw, options = {}) {
   let xHead = prevX;
   for (const line of segments) {
     let record;
-    try { record = JSON.parse(line); } catch { throw new Error('ledger_corrupt'); }
+    try { record = JSON.parse(line); } catch { throw ledgerRefusal('ledger_corrupt'); }
     const isSealed = record !== null && typeof record === 'object' &&
       record.v === SEALED_JOURNAL_FORMAT;
     // A sealed record without the key: refuse, never accept-and-ignore.
-    if (isSealed && !macKey) throw new Error('ledger_sealed');
+    if (isSealed && !macKey) throw ledgerRefusal('ledger_sealed');
     if (!validRecord(record, seq, fingerprints, messageHashes,
       isSealed ? SEALED_JOURNAL_FORMAT : undefined)) {
-      throw new Error('ledger_corrupt');
+      throw ledgerRefusal('ledger_corrupt');
     }
-    if (chainHash(lastHash, record) !== record.h) throw new Error('ledger_tampered');
+    if (chainHash(lastHash, record) !== record.h) throw ledgerRefusal('ledger_tampered');
     if (isSealed) {
       // The keyed chain: prev_x -> this record's chain hash. The chain hash
       // commits to the record body, so this commits to the body AND to every
       // record before it.
       if (seal.chainMac(macKey, prevX, record.h) !== record.x) {
-        throw new Error('ledger_mac_invalid');
+        throw ledgerRefusal('ledger_mac_invalid');
       }
       prevX = record.x;
       xHead = record.x;
@@ -358,16 +385,16 @@ function assertJournalPath(file) {
     // exist in it either, so there is nothing foreign to trust yet.
     return;
   }
-  if (!dirStat.isDirectory()) throw new Error('ledger_dir_invalid');
+  if (!dirStat.isDirectory()) throw ledgerRefusal('ledger_dir_invalid');
   const dirMode = dirStat.mode & 0o7777;
   // A group/world-writable directory lets a stranger replace the journal.
   // A STICKY directory is safe: only the file's own owner may remove it.
   if ((dirMode & 0o022) !== 0 && (dirMode & 0o1000) === 0) {
-    throw new Error('ledger_dir_mode');
+    throw ledgerRefusal('ledger_dir_mode');
   }
   if (typeof process.getuid === 'function' &&
       dirStat.uid !== process.getuid() && dirStat.uid !== 0) {
-    throw new Error('ledger_dir_owner');
+    throw ledgerRefusal('ledger_dir_owner');
   }
   let stat;
   try {
@@ -376,26 +403,26 @@ function assertJournalPath(file) {
     stat = fs.lstatSync(resolved);
   } catch (err) {
     if (err.code === 'ENOENT') return;
-    throw new Error('ledger_unreadable');
+    throw ledgerRefusal('ledger_unreadable');
   }
-  if (!stat.isFile()) throw new Error('ledger_not_a_file');
+  if (!stat.isFile()) throw ledgerRefusal('ledger_not_a_file');
   if (typeof process.getuid === 'function' &&
       stat.uid !== process.getuid() && stat.uid !== 0) {
-    throw new Error('ledger_owner');
+    throw ledgerRefusal('ledger_owner');
   }
   const mode = stat.mode & 0o777;
   // Group/other WRITABLE is refused outright even though we own the file:
   // somebody else could already have written to it, and the chain hash is
   // unkeyed sha256, so a forged journal validates. Content provenance is
   // broken once a stranger can write - do not read it at all.
-  if ((mode & 0o022) !== 0) throw new Error('ledger_mode');
+  if ((mode & 0o022) !== 0) throw ledgerRefusal('ledger_mode');
   // Group/other READABLE only leaks what was signed; readers cannot alter the
   // replay set, so we repair it to 0600 instead of bricking an existing
   // journal (the keystore, which is a secret, refuses outright).
   if ((mode & 0o055) !== 0) {
     try { fs.chmodSync(resolved, 0o600); } catch { /* falls through to check */ }
     const repaired = fs.lstatSync(resolved).mode & 0o777;
-    if ((repaired & 0o077) !== 0) throw new Error('ledger_mode');
+    if ((repaired & 0o077) !== 0) throw ledgerRefusal('ledger_mode');
   }
 }
 
@@ -437,13 +464,13 @@ function assertJournalPath(file) {
  */
 class Ledger {
   constructor({ file, sealPassphrase }) {
-    if (typeof file !== 'string' || file.length === 0) throw new Error('ledger_file_required');
+    if (typeof file !== 'string' || file.length === 0) throw ledgerRefusal('ledger_file_required');
     this.file = file;
     this.macKey = null;
     this.xHead = null;
     if (sealPassphrase !== undefined && sealPassphrase !== null) {
       if (typeof sealPassphrase !== 'string' || sealPassphrase.length === 0) {
-        throw new Error('journal_seal_passphrase_required');
+        throw ledgerRefusal('journal_seal_passphrase_required');
       }
       // Derived EAGERLY, from a fixed public salt (see journalseal): with a
       // passphrase there is no "journal keeps running unsealed" fallback.
@@ -504,7 +531,7 @@ class Ledger {
       if (err && typeof err.code === 'string' && err.code.startsWith('ledger_')) {
         throw err;
       }
-      throw new Error('ledger_unreadable');
+      throw ledgerRefusal('ledger_unreadable');
     }
     const parsed = parseJournal(raw, { macKey: this.macKey });
     // FAIL CLOSED on format 1 (R3-2): those records carry no message identity,
@@ -655,7 +682,7 @@ class Ledger {
       fs.ftruncateSync(fd, validBytes);
       fs.fsyncSync(fd);
     } catch {
-      throw new Error('ledger_unreadable');
+      throw ledgerRefusal('ledger_unreadable');
     } finally {
       if (fd !== undefined) fs.closeSync(fd);
     }

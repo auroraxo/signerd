@@ -157,6 +157,54 @@ const REPAIRS = {
   socket_not_reachable: 'the daemon at that path cannot be reached — check it: signerd status --socket <file>',
   socket_connect_failed: 'the socket connection failed — check it: signerd status --socket <file>',
   socket_state_unknown: 'the socket state cannot be proven, so it is refused rather than guessed — check it: signerd status --socket <file>',
+
+  // ---- the journal and the tools that judge it (2026-11-18) --------------
+  // WHY: the journal-integrity refusals were the last mute class. Measured
+  // on the published v0.2.35 (tools/measure-journal-integrity-voice.js,
+  // research/journal-integrity-voice-published-v0235-2026-11-18.json): the
+  // operator got a NAME (or, where the loader raised a bare Error, not even
+  // that - the name was buried as "error: ledger_tampered") and NO repair,
+  // on the exact surface where history itself is untrustworthy. The README
+  // promises the opposite: "Refusals name the flag and the fix."
+  //
+  // Rules (the same as above): every repair names a command this CLI offers
+  // (F3), never a host path - the operator's <ledger> placeholder stands for
+  // their own path; the repair must be RUNNABLE as printed.
+  ledger_missing: 'no journal exists at that path yet - the daemon creates it on its first append; check the path: signerd status --grants <grants> --ledger <ledger>',
+  ledger_not_a_file: 'the journal path is not a regular file - point --ledger at the journal file itself, not at a directory or a link: signerd status --grants <grants> --ledger <ledger>',
+  ledger_unreadable: 'the journal cannot be read - check the path and its permissions: ls -l <ledger>',
+  ledger_mode: 'the journal is readable or writable by others - owner-only it: chmod 600 <ledger>',
+  ledger_owner: 'the journal is not owned by this user - chown it back to yourself: chown $(id -u) <ledger> && chmod 600 <ledger>',
+  ledger_dir_mode: 'the journal\'s directory allows group/other WRITING, so anyone could swap the journal - owner-only the directory: chmod 700 $(dirname <ledger>)',
+  ledger_dir_owner: 'the journal\'s directory is not owned by this user - chown it back to yourself: chown $(id -u) $(dirname <ledger>) && chmod 700 $(dirname <ledger>)',
+  ledger_dir_invalid: 'the journal\'s path is not a directory - point --ledger at a path inside a real directory',
+  ledger_corrupt: 'the journal is structurally broken (a record no loader version ever wrote) - restore it from a backup; do not hand-edit history',
+  ledger_tampered: 'a journal record was edited after it was written (the chain no longer verifies) - restore the journal from a backup; a journal whose chain does not verify is never trusted, and hand-editing it does not repair it',
+  ledger_mac_invalid: 'a SEALED journal record was edited (the keyed chain refuses it) - restore from a backup; if none exists, note the refusal and do not sign against this history',
+  ledger_mac_short: 'the journal\'s keyed chain is incomplete (a sealed record lost its MAC) - restore from a backup; do not hand-repair history',
+  ledger_torn_tail: 'the journal\'s last line was cut off (a crash mid-append) - start the daemon once and it repairs the torn tail itself, then retry',
+  ledger_sealed: 'this journal is SEALED and no passphrase was given - it is never read unsealed: pass the seal key (--journal-seal-passphrase-file <file>), or migrate/seal with the matching flag',
+  ledger_unsealed_journal: 'a seal passphrase was given but the journal carries no seal - drop the flag for an unsealed journal, or seal it: signerd seal-journal --journal <ledger> --journal-seal-passphrase-file <file>',
+  ledger_legacy_format: 'this journal is format 1 (no message identity) - migrate it before use: signerd migrate --ledger <ledger> --wires <dir-of-saved-wires> (or --discard-legacy to accept the loss explicitly)',
+  ledger_locked: 'a LIVE daemon holds this journal\'s lock - stop it first (a crashed daemon\'s lock is taken over automatically): signerd status --socket <file>',
+  ledger_lock_failed: 'the journal lock could not be claimed - check the journal\'s directory is writable: ls -ld $(dirname <ledger>)',
+  ledger_anchor_missing: 'the journal is shorter than its seal floor claims (truncation, or the floor is gone) - restore both files from a backup; a journal and a floor that disagree are never trusted',
+  ledger_anchor_invalid: 'the journal\'s seal floor file is unusable - check it: ls -l <ledger>.anchor',
+  ledger_anchor_mode: 'the journal\'s seal floor is readable or writable by others - owner-only it: chmod 600 <ledger>.anchor',
+  ledger_anchor_owner: 'the journal\'s seal floor is not owned by this user - chown it back to yourself: chown $(id -u) <ledger>.anchor && chmod 600 <ledger>.anchor',
+  ledger_anchor_dir: 'the seal floor\'s path is not a directory - point --ledger at a path inside a real directory',
+  ledger_anchor_mismatch: 'the seal floor does not witness this journal (a rollback of one of the two) - restore both from a backup; the floor says how much history the daemon approved',
+  ledger_changed: 'the journal changed while the migration was judging it (a daemon is still writing) - stop the daemon, then retry: signerd migrate --ledger <ledger> ...',
+  ledger_file_required: 'no journal path was given - pass it: --ledger <ledger>',
+  journal_seal_passphrase_required: 'this journal is sealed and the seal key is required - pass it: --journal-seal-passphrase-file <file>',
+  journal_seal_key_invalid: 'the journal seal passphrase is empty - write it into a 0600 file and pass that file',
+  journal_seal_chain_invalid: 'the journal\'s chain could not be verified under the seal key - the journal does not match this passphrase\'s history; use the passphrase it was sealed with',
+  seal_self_check_failed: 'seal-journal verified its own output and it did not parse - nothing was changed; report this as a bug with the journal (never hand-edit it)',
+  migration_self_check_failed: 'the migration verified its own output and it did not parse - nothing was changed, the backup was not written; report this as a bug with the journal',
+  legacy_wire_required: 'this journal is format 1 and needs its message identity restored - either hand back the original wires: signerd migrate --ledger <ledger> --wires <dir>, or accept the loss explicitly: --discard-legacy',
+  legacy_wire_missing: 'the wires directory does not hold the original wire for every legacy record - collect every wire the clients kept (--out files) into one directory and pass it: signerd migrate --ledger <ledger> --wires <dir>',
+  wires_dir_unreadable: 'the wires directory cannot be read - check the path: ls -ld <dir-of-saved-wires>',
+  lease_unavailable: 'the kernel lease helper could not be used - build it by hand once: cc -O2 -o tools/leasecheck tools/leasecheck.c (it ships next to the package), then retry',
 };
 
 /**
