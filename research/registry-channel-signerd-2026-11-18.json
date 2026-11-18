@@ -5,13 +5,13 @@
   "registryEndpoint": "registry.npmjs.org/signerd",
   "registryReadmeSource": "package.readme",
   "registryMeta": {
-    "latest": "0.2.38",
+    "latest": "0.2.39",
     "maintainers": [
       "sprintberlin"
     ],
     "repository": "git+https://github.com/auroraxo/signerd.git",
-    "versions": 22,
-    "publishedAt": "2026-11-18T19:37:09.320Z"
+    "versions": 23,
+    "publishedAt": "2026-11-18T21:18:53.504Z"
   },
   "readmeBytes": 12897,
   "denials": [],
