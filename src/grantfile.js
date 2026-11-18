@@ -292,9 +292,21 @@ function loadGrantFile(file, options = {}) {
   // fail CLOSED with distinct reasons.
   if (sealKeyFor !== null) {
     const parsed = parseSeal(doc);
-    if (!parsed.ok) throw fail(parsed.reason);
+    if (!parsed.ok) {
+      // The seal-block reasons carry their own detail now (2026-11-18,
+      // grant-seal-voice sweep); same rule: the code stays the code, the
+      // detail speaks.
+      throw fail(parsed.reason, parsed.detail);
+    }
     const verdict = verifySealMac(doc, sealKeyFor(parsed.salt));
-    if (!verdict.ok) throw fail(verdict.reason);
+    if (!verdict.ok) {
+      // The verdict's detail rides along (2026-11-18, grant-seal-voice
+      // sweep): the reasons were bare names, and the operator read
+      // `grant_file_seal_mismatch: ` with an empty reason. The code stays
+      // the code - assertions and scripts read it - the DETAIL is what
+      // the CLI prints after the colon.
+      throw fail(verdict.reason, verdict.detail);
+    }
   } else if (!allowSealedWithoutKey &&
              Object.getOwnPropertyDescriptor(doc, 'seal') !== undefined) {
     // NO KEY, but the document carries a seal. Measured 2026-11-16 on this
@@ -311,9 +323,19 @@ function loadGrantFile(file, options = {}) {
     // block still reports grant_file_seal_invalid rather than the missing
     // passphrase - the same two reasons a keyed read would give.
     const parsed = parseSeal(doc);
-    if (!parsed.ok) throw fail(parsed.reason);
+    if (!parsed.ok) {
+      // The seal-block reasons carry their own detail now (2026-11-18,
+      // grant-seal-voice sweep); same rule: the code stays the code, the
+      // detail speaks.
+      throw fail(parsed.reason, parsed.detail);
+    }
+    // NO host path in the reason (2026-11-18, grant-seal-voice sweep, the
+    // instrument's rule no-path-in-detail): the old wording embedded the
+    // resolved absolute path, the only refusal in this CLI that carried
+    // one. The file is already named by --grants on the operator's own
+    // command line; the repair says which flag to pass.
     throw fail('grant_file_sealed',
-      `the grant file carries a seal (${resolved}) but no passphrase was given: ` +
+      'the grant file carries a seal but no passphrase was given: ' +
       'pass --grant-seal-passphrase-file <file> to read it');
   }
   const entries = Object.getOwnPropertyNames(doc.grants);

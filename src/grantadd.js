@@ -75,6 +75,19 @@ function lstatOrNull(target) {
 }
 
 const NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
+
+// The seal-family reasons are SPOKEN FOR (2026-11-18, grant-seal-voice
+// sweep): the detail of these refusals used to be the file's resolved
+// absolute path - the only refusals in this CLI whose detail was nothing
+// but a host path. The code stays the code; the reason now says what the
+// condition is and the one map (src/refusal-voice.js) carries the repair.
+// The file itself is already named by --grants on the operator's own
+// command line, so nothing is lost by dropping the path.
+const SEALED_REASON =
+  'the grant file carries a seal but no passphrase was given: pass --grant-seal-passphrase-file <file> to read it';
+const UNSEALED_REASON =
+  'the grant file carries no seal but a seal passphrase was given: drop the passphrase flag, or seal the file first (signerd seal-grants)';
+
 // The value rules (a real 32-byte key, a moment that EXISTS, a cap inside
 // u64, a positive safe-integer window) live in src/grantvalues.js - the
 // SAME rules the loader and the daemon apply. A grant that grant-add
@@ -308,7 +321,7 @@ function writeGrantFile({ file, name, grant }) {
     let existing = null;
     try { existing = JSON.parse(fs.readFileSync(resolved, 'utf8')); } catch { /* unreadable/garbage */ }
     if (existing && Object.getOwnPropertyDescriptor(existing, 'seal') !== undefined) {
-      throw fail('grant_file_sealed', resolved);
+      throw fail('grant_file_sealed', SEALED_REASON);
     }
     throw fail('grant_file_exists', resolved);
   }
@@ -415,7 +428,7 @@ function addGrantToFile({ file, name, grant }) {
   }
   const sealed = doc !== null && typeof doc === 'object' &&
     Object.getOwnPropertyDescriptor(doc, 'seal') !== undefined;
-  if (sealed) throw fail('grant_file_sealed', resolved);
+  if (sealed) throw fail('grant_file_sealed', SEALED_REASON);
 
   // THE JUDGE: the product's own loader. Everything about the existing file
   // must pass before a single byte is written.
@@ -508,7 +521,10 @@ function extendGrantFile({ file, name, grant, sealPassphrase }) {
     // No file yet: creating it is exactly what grant-add already does.
     if (sealPassphrase !== undefined) {
       // --seal-passphrase-file must never silently seal a file it creates.
-      throw fail('grant_file_unsealed', resolved);
+      // The reason is SPOKEN FOR (2026-11-18): there is no file here yet,
+      // so "carries no seal" would misdescribe the condition.
+      throw fail('grant_file_unsealed',
+        'there is no grant file at that path yet, and this command will not create one that carries no seal while --seal-passphrase-file is given');
     }
     return writeGrantFile({ file: resolved, name, grant });
   }
@@ -538,8 +554,8 @@ function extendGrantFile({ file, name, grant, sealPassphrase }) {
   }
   const sealed = doc !== null && typeof doc === 'object' &&
     Object.getOwnPropertyDescriptor(doc, 'seal') !== undefined;
-  if (sealed && sealPassphrase === undefined) throw fail('grant_file_sealed', resolved);
-  if (!sealed && sealPassphrase !== undefined) throw fail('grant_file_unsealed', resolved);
+  if (sealed && sealPassphrase === undefined) throw fail('grant_file_sealed', SEALED_REASON);
+  if (!sealed && sealPassphrase !== undefined) throw fail('grant_file_unsealed', UNSEALED_REASON);
 
   // THE JUDGE: the product's loader, with the seal key when the operator
   // gave one. Directory, lease, owner, mode, schema, seal, and every
@@ -666,8 +682,8 @@ function removeGrantFromFile({ file, name, sealPassphrase }) {
   }
   const sealed = doc !== null && typeof doc === 'object' &&
     Object.getOwnPropertyDescriptor(doc, 'seal') !== undefined;
-  if (sealed && sealPassphrase === undefined) throw fail('grant_file_sealed', resolved);
-  if (!sealed && sealPassphrase !== undefined) throw fail('grant_file_unsealed', resolved);
+  if (sealed && sealPassphrase === undefined) throw fail('grant_file_sealed', SEALED_REASON);
+  if (!sealed && sealPassphrase !== undefined) throw fail('grant_file_unsealed', UNSEALED_REASON);
 
   // THE JUDGE: the product's loader, with the seal key when the operator
   // gave one. Directory, lease, owner, mode, schema, seal, and every

@@ -54,7 +54,13 @@ const KNOWN_COMMANDS = [
  *   - src/keystore.js: the keystore family's `fail('<code>')` (added
  *     2026-11-18 with the cli-voice sweep: the keystore codes now travel
  *     through the SAME map at the CLI's generic tail, so a missing repair
- *     there is the same mute-refusal defect this gate exists to catch).
+ *     there is the same mute-refusal defect this gate exists to catch);
+ *   - src/grantseal.js: the grant-SEAL family (added 2026-11-18 with the
+ *     grant-seal-voice sweep: the seal reasons reached the operator as a
+ *     bare name with no repair - `grant_file_seal_mismatch: ` - while the
+ *     journal half of the same idea had repairs; the seal codes now
+ *     travel through the SAME map, so a missing repair there is the same
+ *     mute-refusal defect this gate exists to catch).
  *
  * Codes from the OTHER modules are deliberately OUT of scope: a
  * `grant_file_*` or `ledger_sealed` error is raised by a CLI command that
@@ -69,7 +75,7 @@ const KNOWN_COMMANDS = [
  */
 const VERDICT_MODULES = [
   'policy.js', 'policy-message.js', 'signer.js', 'signer-message.js',
-  'ledger.js', 'daemon.js', 'keystore.js',
+  'ledger.js', 'daemon.js', 'keystore.js', 'grantseal.js',
 ];
 
 function scrapeSourceCodes() {
@@ -82,11 +88,20 @@ function scrapeSourceCodes() {
   // src/keystore.js raises its codes with `fail('<code>')` instead of the
   // `refused('...')` / `error: '...'` forms above - one extra pattern for
   // that file, still scraped from the source, never a hand-written list.
-  const failPattern = /fail\('([a-z_]+)'/g;
-  const keystore = fs.readFileSync(path.join(dir, 'keystore.js'), 'utf8');
+  // src/keystore.js and src/grantseal.js raise their codes with
+  // `fail('<code>')` / `reason: '<code>'` instead of the `refused('...')` /
+  // `error: '...'` forms above - extra patterns for those two files, still
+  // scraped from the source, never a hand-written list.
+  const multiPatternFiles = {
+    'keystore.js': /fail\('([a-z_]+)'/g,
+    'grantseal.js': /(?:fail|new Error|reason:)\s*\(?\s*'([a-z_]+)'/g,
+  };
   let f;
-  failPattern.lastIndex = 0;
-  while ((f = failPattern.exec(keystore)) !== null) codes.add(f[1]);
+  for (const [name, pattern] of Object.entries(multiPatternFiles)) {
+    const text = fs.readFileSync(path.join(dir, name), 'utf8');
+    pattern.lastIndex = 0;
+    while ((f = pattern.exec(text)) !== null) codes.add(f[1]);
+  }
   for (const name of VERDICT_MODULES) {
     const text = fs.readFileSync(path.join(dir, name), 'utf8');
     for (const re of patterns) {

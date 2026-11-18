@@ -74,7 +74,12 @@ function canonicalPayload(doc) {
 
 function deriveSealKey(passphrase, salt) {
   if (typeof passphrase !== 'string' || passphrase.length === 0) {
-    const err = new Error('seal_passphrase_required');
+    // The reason is SPOKEN FOR (2026-11-18, grant-seal-voice sweep): the
+    // message used to be the bare code, so the operator read
+    // `seal_passphrase_required: ` with an empty reason and no repair,
+    // while the journal side names the empty passphrase (and its repair)
+    // and the daemon's constructor says so too. Same words as those two.
+    const err = new Error('the grant-seal passphrase file is empty');
     err.code = 'seal_passphrase_required';
     throw err;
   }
@@ -125,17 +130,35 @@ function parseSeal(doc) {
   if (seal === undefined) return { ok: false, reason: 'grant_file_unsealed' };
   if (seal === null || typeof seal !== 'object' || Array.isArray(seal) ||
       seal.v !== SEAL_VERSION || seal.alg !== 'hmac-sha256') {
-    return { ok: false, reason: 'grant_file_seal_invalid' };
+    // SPOKEN FOR (2026-11-18, grant-seal-voice sweep): a shape-broken seal
+    // block is a DIFFERENT condition from a wrong passphrase, and the
+    // operator must be able to tell them apart. The reason names the
+    // block; the repair lives in the one map (src/refusal-voice.js).
+    return {
+      ok: false,
+      reason: 'grant_file_seal_invalid',
+      detail: 'the seal block is not a seal this version can read (version, algorithm or key-derivation parameters do not match)',
+    };
   }
   const kdf = seal.kdf;
   if (kdf === null || typeof kdf !== 'object' || kdf.name !== 'scrypt' ||
       kdf.N !== SCRYPT.N || kdf.r !== SCRYPT.r || kdf.p !== SCRYPT.p ||
       typeof kdf.salt !== 'string' || typeof seal.mac !== 'string' ||
       !/^[0-9a-f]{64}$/.test(seal.mac)) {
-    return { ok: false, reason: 'grant_file_seal_invalid' };
+    return {
+      ok: false,
+      reason: 'grant_file_seal_invalid',
+      detail: 'the seal block is not a seal this version can read (version, algorithm or key-derivation parameters do not match)',
+    };
   }
   const salt = Buffer.from(kdf.salt, 'base64');
-  if (salt.length !== 16) return { ok: false, reason: 'grant_file_seal_invalid' };
+  if (salt.length !== 16) {
+    return {
+      ok: false,
+      reason: 'grant_file_seal_invalid',
+      detail: 'the seal block is not a seal this version can read (version, algorithm or key-derivation parameters do not match)',
+    };
+  }
   return { ok: true, salt };
 }
 
@@ -144,7 +167,16 @@ function parseSeal(doc) {
  */
 function verifySealMac(doc, key) {
   if (!Buffer.isBuffer(key) || key.length !== SCRYPT.keylen) {
-    return { ok: false, reason: 'grant_file_seal_key_missing' };
+    // The reason is SPOKEN FOR (2026-11-18, grant-seal-voice sweep): this
+    // reaches a caller who asked for a verified read without providing the
+    // key. The shape stays {ok, reason} - the existing callers and their
+    // assertions read `.reason` - but the reason now CARRIES a detail, so
+    // the refusal that reaches the operator is not a bare name.
+    return {
+      ok: false,
+      reason: 'grant_file_seal_key_missing',
+      detail: 'no seal key was derived for this read - a seal nobody checked is not a seal',
+    };
   }
   const expected = crypto.createHmac('sha256', key).update(canonicalPayload(doc)).digest('hex');
   const a = Buffer.from(expected, 'hex');
@@ -152,7 +184,17 @@ function verifySealMac(doc, key) {
   // Constant-time compare: a timing side channel on the MAC would leak the
   // correct bytes one at a time.
   if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
-    return { ok: false, reason: 'grant_file_seal_mismatch' };
+    // SPOKEN FOR (2026-11-18, grant-seal-voice sweep): this is the face an
+    // operator meets with a tampered file OR a wrong passphrase - the two
+    // are indistinguishable BY DESIGN (the MAC says only "not this
+    // content under this key"), and the refusal must say so instead of
+    // printing a bare name. The repair lives in the one map
+    // (src/refusal-voice.js).
+    return {
+      ok: false,
+      reason: 'grant_file_seal_mismatch',
+      detail: 'the contents do not match this seal (edited after sealing, or a different passphrase than the one it was sealed with)',
+    };
   }
   return { ok: true };
 }
