@@ -1,5 +1,5 @@
 {
-  "measuredAt": "2026-11-18T23:16:48.440Z",
+  "measuredAt": "2026-11-18T23:17:10.274Z",
   "repo": "auroraxo/signerd",
   "surfaces": {
     "releases": [
@@ -15,7 +15,7 @@
         "draft": false,
         "prerelease": false,
         "createdAt": "2026-11-18T23:15:50Z",
-        "bodyBytes": 2452
+        "bodyBytes": 2496
       },
       {
         "tag": "v0.2.39",
@@ -659,9 +659,8 @@
     }
   },
   "verdict": {
-    "verdict": "defective:v0.2.40:body-no-limits+v0.1.0:tag-private-true+v0.1.0:tag-no-quickstart+v0.1.0:tag-no-install-command+v0.1.0:tag-nonexistent-api",
+    "verdict": "defective:v0.1.0:tag-private-true+v0.1.0:tag-no-quickstart+v0.1.0:tag-no-install-command+v0.1.0:tag-nonexistent-api",
     "defects": [
-      "v0.2.40:body-no-limits",
       "v0.1.0:tag-private-true",
       "v0.1.0:tag-no-quickstart",
       "v0.1.0:tag-no-install-command",
@@ -672,9 +671,7 @@
   },
   "perRelease": {
     "v0.2.40": {
-      "defects": [
-        "body-no-limits"
-      ]
+      "defects": []
     },
     "v0.2.39": {
       "defects": []
