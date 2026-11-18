@@ -3,7 +3,7 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
-const { checkFlags, closestFlag, parseArgv } = require('../src/cli-flags');
+const { checkFlags, closestFlag, parseArgv, COMMAND_FLAGS } = require('../src/cli-flags');
 const { checkOutWritable, outPreflightFix, writeOutAtomic, outWriteFix } = require('../src/out-preflight');
 const { deliverRecovery, deliverResponse } = require('../src/recovery');
 const { writeStderrSync } = require('../src/stdout');
@@ -212,11 +212,50 @@ function lstatOrNull(target) {
   }
 }
 
+// THE MISSING-FLAG VOICE (measured 2026-11-19, tools/measure-missing-flag-voice.js,
+// research/missing-flag-voice-prefix-2026-11-19.json: verdict
+// missing-flag-voice-mute, 14/14 faces): an ABSENT required flag was the one
+// refusal class this CLI printed without a code and without a repair — bare
+// prose `missing --<flag>` (requireArg even appended the 77-line banner;
+// readPassphrase printed nothing else at all), while every sibling voice —
+// the arity refusals (duplicate_flag / missing_value / flag_takes_no_value),
+// build-tx's missing_argument, the unknown_flag surface, the daemon verdicts
+// — answers `<code>: <detail>` + `fix:` + exit 2. The face escaped the
+// coverage gate because it carries NO code token to scrape.
+//
+// ONE minting site for this class, right beside the unknown_flag voice that
+// answers the other half of the flag question (typed vs forgotten):
+//
+//   1. first line is `missing_flag: --<name>` — the code, named exactly once;
+//   2. a `fix:` line that names the flag itself;
+//   3. a `fix:` line naming the flags the command ACTUALLY takes, read from
+//      src/cli-flags.js COMMAND_FLAGS — the same source the unknown_flag
+//      voice names (no hand-written copy can drift from the real surface);
+//   4. exit 2, stdout empty: nothing ran, and a usage question is not a
+//      verdict frame;
+//   5. no host path in either line (rule 3 of src/refusal-voice.js).
+//
+// The usage banner is NOT appended anymore: the arity and unknown-flag
+// refusals do not print it either, and the takes list above is the part an
+// operator acts on. An unknown COMMAND still answers the banner alone —
+// tools/measure-documented-flags.mjs classifies commands by it.
+let ACTIVE_COMMAND = undefined;
+
+function missingFlagRefusal(flag) {
+  const supported = ACTIVE_COMMAND === undefined ? null : COMMAND_FLAGS[ACTIVE_COMMAND];
+  const takesLine = Array.isArray(supported)
+    ? `  fix: signerd ${ACTIVE_COMMAND} takes: ${supported.map((f) => `--${f}`).join(' ')}\n`
+    : '';
+  process.stderr.write(`missing_flag: --${flag}\n` +
+    `  fix: give --${flag} a value — this command cannot run without it\n` +
+    takesLine);
+  process.exit(2);
+}
+
 function requireArg(args, name) {
   const value = args[name];
   if (typeof value !== 'string' || value.length === 0) {
-    process.stderr.write(`missing --${name}\n${USAGE}`);
-    process.exit(2);
+    missingFlagRefusal(name);
   }
   return value;
 }
@@ -230,8 +269,10 @@ function requireArg(args, name) {
 // race after them is the same residual window every other path here has.
 function readPassphrase(args, flag = 'passphrase-file') {
   if (typeof args[flag] !== 'string') {
-    process.stderr.write(`missing --${flag}\n`);
-    process.exit(2);
+    // Same class, same voice as requireArg's absent-flag refusal above —
+    // this site used to print nothing but the prose line (no banner, no
+    // code, no fix), the quietest face of the measured 14.
+    missingFlagRefusal(flag);
   }
   const file = requireArg(args, flag);
   // MEASURED 2026-11-14 (published v0.2.22): a passphrase path that does not
@@ -302,6 +343,9 @@ function readPassphrase(args, flag = 'passphrase-file') {
 async function main() {
   const { args, problems } = parseArgs(process.argv.slice(2));
   const command = args._[0];
+  // The absent-flag refusal needs the command to name its real flag
+  // surface; set it before anything can refuse.
+  ACTIVE_COMMAND = command;
 
   // THE FLAG SURFACE (measured 2026-11-06): a flag the operator set used to
   // be dropped without a word. For `--grant-seal-passphrasefile` (typo: no

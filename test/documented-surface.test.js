@@ -119,6 +119,21 @@ test('T3 classifyRun: the CLI asking for a flag is missing-flag, with the flag n
   assert.deepStrictEqual(v, { kind: 'missing-flag', flag: 'seal-passphrase-file' });
 });
 
+test('T3c classifyRun: the NEW missing_flag voice classifies as missing-flag too (2026-11-19)', () => {
+  // The absent-flag voice became `missing_flag: --<flag>` + fix lines
+  // (main); a PINNED tag still answers the old prose shape, which is why
+  // T3 above keeps its legacy fixture — both are the same defect class:
+  // the documented invocation does not run.
+  const inv = { command: 'seal-grants', text: 'signerd seal-grants --grants g' };
+  const v = classifyRun(inv, {
+    stdout: '', status: 2,
+    stderr: 'missing_flag: --seal-passphrase-file\n' +
+      '  fix: give --seal-passphrase-file a value — this command cannot run without it\n' +
+      '  fix: signerd seal-grants takes: --grants --seal-passphrase-file --out\n',
+  });
+  assert.deepStrictEqual(v, { kind: 'missing-flag', flag: 'seal-passphrase-file' });
+});
+
 test('T3b classifyRun: the CLI refusing a flag the README gave is unknown-flag, with the flag named', () => {
   // The strict CLI's refusal shape (measured 2026-11-06): it names the flag
   // the README GOT WRONG instead of the flag it wanted.

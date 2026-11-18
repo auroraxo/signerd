@@ -436,11 +436,14 @@ test('G3 guard: the ordinary documented commands still run', () => {
   assert.strictEqual(add2.status, 0, `--append must still work: ${add2.stderr}`);
 });
 
-test('G4 guard: an ABSENT flag still answers missing --<flag> from requireArg', () => {
+test('G4 guard: an ABSENT flag still refuses from requireArg, in the named voice', () => {
   // Arity covers a flag that was TYPED without a value, not one that was
-  // forgotten. The documented `missing --x` shape must survive.
+  // forgotten. The absent flag is still refused — since 2026-11-19 in the
+  // same code-and-repair voice as every other refusal (measured 14/14
+  // faces mute before the fix; test/missing-flag-voice.test.js pins the
+  // full voice, this guard only pins that the refusal stays a refusal).
   const res = sh(['sign']);
   assert.notStrictEqual(res.status, 0);
-  assert.match(res.stderr, /^missing --socket$/m,
-    `an absent flag must keep the documented shape: ${res.stderr}`);
+  assert.match(res.stderr, /^missing_flag: --socket$/m,
+    `an absent flag must be refused by name: ${res.stderr}`);
 });

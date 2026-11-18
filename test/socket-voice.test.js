@@ -360,9 +360,13 @@ test('G1 guard: status --grants --ledger keeps its answers', () => {
 
     // ... and a missing --grants with no --socket is still the usage
     // refusal it always was (the dispatch must not become lenient).
+    // Since 2026-11-19 the refusal wears the named voice `missing_flag:`
+    // + fix (measured mute before the fix; test/missing-flag-voice.test.js
+    // pins the full voice) — same refusal, named instead of prose.
     const bare = sh(['status']);
     assert.strictEqual(bare.status, 2, 'a bare status still asks for its flags');
-    assert.match(bare.stderr, /missing --grants/, `the usage voice is unchanged: ${bare.stderr}`);
+    assert.match(bare.stderr, /missing_flag: --grants|missing --grants/,
+      `the usage voice is unchanged: ${bare.stderr}`);
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }

@@ -1,0 +1,353 @@
+{
+ "generatedAt": "2026-11-18T23:07:29.808Z",
+ "cli": "<tmp>",
+ "verdict": "missing-flag-voice-mute",
+ "faces": 14,
+ "faceDefects": 14,
+ "guards": [
+  {
+   "id": "happy_keygen",
+   "pass": true
+  },
+  {
+   "id": "unknown_flag_unchanged",
+   "pass": true
+  },
+  {
+   "id": "unknown_command_banner",
+   "pass": true
+  },
+  {
+   "id": "buildtx_missing_argument",
+   "pass": true
+  }
+ ],
+ "guardBroken": [],
+ "rows": [
+  {
+   "id": "keygen_needs_passphrase",
+   "code": "missing_flag",
+   "argv": [
+    "keygen",
+    "--keystore",
+    "<tmp>"
+   ],
+   "exit": 2,
+   "named": null,
+   "expectedFlag": "passphrase-file",
+   "firstLine": "missing --passphrase-file",
+   "fixes": 0,
+   "fixNamesFlag": false,
+   "takesListReal": false,
+   "codeOnce": false,
+   "stdoutEmpty": true,
+   "exit2": true,
+   "noHostPath": true,
+   "holds": false
+  },
+  {
+   "id": "import_needs_from",
+   "code": "missing_flag",
+   "argv": [
+    "import",
+    "--keystore",
+    "<tmp>"
+   ],
+   "exit": 2,
+   "named": null,
+   "expectedFlag": "from",
+   "firstLine": "missing --from",
+   "fixes": 0,
+   "fixNamesFlag": false,
+   "takesListReal": false,
+   "codeOnce": false,
+   "stdoutEmpty": true,
+   "exit2": true,
+   "noHostPath": true,
+   "holds": false
+  },
+  {
+   "id": "run_needs_socket",
+   "code": "missing_flag",
+   "argv": [
+    "run",
+    "--keystore",
+    "<tmp>",
+    "--passphrase-file",
+    "<tmp>",
+    "--grants",
+    "<tmp>",
+    "--ledger",
+    "<tmp>"
+   ],
+   "exit": 2,
+   "named": null,
+   "expectedFlag": "socket",
+   "firstLine": "missing --socket",
+   "fixes": 0,
+   "fixNamesFlag": false,
+   "takesListReal": false,
+   "codeOnce": false,
+   "stdoutEmpty": true,
+   "exit2": true,
+   "noHostPath": true,
+   "holds": false
+  },
+  {
+   "id": "sign_needs_grant",
+   "code": "missing_flag",
+   "argv": [
+    "sign",
+    "--socket",
+    "<tmp>",
+    "--tx",
+    "<tmp>"
+   ],
+   "exit": 2,
+   "named": null,
+   "expectedFlag": "grant",
+   "firstLine": "missing --grant",
+   "fixes": 0,
+   "fixNamesFlag": false,
+   "takesListReal": false,
+   "codeOnce": false,
+   "stdoutEmpty": true,
+   "exit2": true,
+   "noHostPath": true,
+   "holds": false
+  },
+  {
+   "id": "sign_needs_tx",
+   "code": "missing_flag",
+   "argv": [
+    "sign",
+    "--socket",
+    "<tmp>",
+    "--grant",
+    "g"
+   ],
+   "exit": 2,
+   "named": null,
+   "expectedFlag": "tx",
+   "firstLine": "missing --tx",
+   "fixes": 0,
+   "fixNamesFlag": false,
+   "takesListReal": false,
+   "codeOnce": false,
+   "stdoutEmpty": true,
+   "exit2": true,
+   "noHostPath": true,
+   "holds": false
+  },
+  {
+   "id": "sign_message_needs_body",
+   "code": "missing_flag",
+   "argv": [
+    "sign-message",
+    "--socket",
+    "<tmp>",
+    "--grant",
+    "g"
+   ],
+   "exit": 2,
+   "named": null,
+   "expectedFlag": "body",
+   "firstLine": "missing --body",
+   "fixes": 0,
+   "fixNamesFlag": false,
+   "takesListReal": false,
+   "codeOnce": false,
+   "stdoutEmpty": true,
+   "exit2": true,
+   "noHostPath": true,
+   "holds": false
+  },
+  {
+   "id": "grant_add_needs_destination",
+   "code": "missing_flag",
+   "argv": [
+    "grant-add",
+    "--grants",
+    "<tmp>",
+    "--name",
+    "n",
+    "--signer",
+    "11111111111111111111111111111111"
+   ],
+   "exit": 2,
+   "named": null,
+   "expectedFlag": "destination",
+   "firstLine": "missing --destination",
+   "fixes": 0,
+   "fixNamesFlag": false,
+   "takesListReal": false,
+   "codeOnce": false,
+   "stdoutEmpty": true,
+   "exit2": true,
+   "noHostPath": true,
+   "holds": false
+  },
+  {
+   "id": "grant_add_needs_expires",
+   "code": "missing_flag",
+   "argv": [
+    "grant-add",
+    "--grants",
+    "<tmp>",
+    "--name",
+    "n",
+    "--signer",
+    "11111111111111111111111111111111",
+    "--destination",
+    "So11111111111111111111111111111111111111112",
+    "--max-lamports",
+    "1000",
+    "--window-max-lamports",
+    "5000",
+    "--window-seconds",
+    "60"
+   ],
+   "exit": 2,
+   "named": null,
+   "expectedFlag": "expires",
+   "firstLine": "missing --expires",
+   "fixes": 0,
+   "fixNamesFlag": false,
+   "takesListReal": false,
+   "codeOnce": false,
+   "stdoutEmpty": true,
+   "exit2": true,
+   "noHostPath": true,
+   "holds": false
+  },
+  {
+   "id": "grant_remove_needs_name",
+   "code": "missing_flag",
+   "argv": [
+    "grant-remove",
+    "--grants",
+    "<tmp>"
+   ],
+   "exit": 2,
+   "named": null,
+   "expectedFlag": "name",
+   "firstLine": "missing --name",
+   "fixes": 0,
+   "fixNamesFlag": false,
+   "takesListReal": false,
+   "codeOnce": false,
+   "stdoutEmpty": true,
+   "exit2": true,
+   "noHostPath": true,
+   "holds": false
+  },
+  {
+   "id": "status_needs_grants",
+   "code": "missing_flag",
+   "argv": [
+    "status"
+   ],
+   "exit": 2,
+   "named": null,
+   "expectedFlag": "grants",
+   "firstLine": "missing --grants",
+   "fixes": 0,
+   "fixNamesFlag": false,
+   "takesListReal": false,
+   "codeOnce": false,
+   "stdoutEmpty": true,
+   "exit2": true,
+   "noHostPath": true,
+   "holds": false
+  },
+  {
+   "id": "seal_grants_needs_passphrase",
+   "code": "missing_flag",
+   "argv": [
+    "seal-grants",
+    "--grants",
+    "<tmp>"
+   ],
+   "exit": 2,
+   "named": null,
+   "expectedFlag": "seal-passphrase-file",
+   "firstLine": "missing --seal-passphrase-file",
+   "fixes": 0,
+   "fixNamesFlag": false,
+   "takesListReal": false,
+   "codeOnce": false,
+   "stdoutEmpty": true,
+   "exit2": true,
+   "noHostPath": true,
+   "holds": false
+  },
+  {
+   "id": "verify_grants_needs_passphrase",
+   "code": "missing_flag",
+   "argv": [
+    "verify-grants",
+    "--grants",
+    "<tmp>"
+   ],
+   "exit": 2,
+   "named": null,
+   "expectedFlag": "seal-passphrase-file",
+   "firstLine": "missing --seal-passphrase-file",
+   "fixes": 0,
+   "fixNamesFlag": false,
+   "takesListReal": false,
+   "codeOnce": false,
+   "stdoutEmpty": true,
+   "exit2": true,
+   "noHostPath": true,
+   "holds": false
+  },
+  {
+   "id": "seal_journal_needs_journal",
+   "code": "missing_flag",
+   "argv": [
+    "seal-journal"
+   ],
+   "exit": 2,
+   "named": null,
+   "expectedFlag": "journal",
+   "firstLine": "missing --journal",
+   "fixes": 0,
+   "fixNamesFlag": false,
+   "takesListReal": false,
+   "codeOnce": false,
+   "stdoutEmpty": true,
+   "exit2": true,
+   "noHostPath": true,
+   "holds": false
+  },
+  {
+   "id": "migrate_needs_ledger",
+   "code": "missing_flag",
+   "argv": [
+    "migrate"
+   ],
+   "exit": 2,
+   "named": null,
+   "expectedFlag": "ledger",
+   "firstLine": "missing --ledger",
+   "fixes": 0,
+   "fixNamesFlag": false,
+   "takesListReal": false,
+   "codeOnce": false,
+   "stdoutEmpty": true,
+   "exit2": true,
+   "noHostPath": true,
+   "holds": false
+  }
+ ],
+ "rules": [
+  "missing_flag-first-line",
+  "fix-names-flag",
+  "takes-list-real-surface",
+  "exit-2",
+  "stdout-empty",
+  "code-once",
+  "no-host-path"
+ ]
+}

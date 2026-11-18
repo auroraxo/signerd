@@ -233,6 +233,10 @@ with certainty instead of a wide set with guesses.
   daemon can run is refused there too, instead of being reported `ok:true` or
   sealed into an authenticated file that will never sign.
 - Refusals name the flag and the fix instead of failing silently. That holds
+  for a flag you simply forgot too: an absent required flag answers
+  `missing_flag: --<flag>` with a `fix:` line naming the flag and the flags
+  the command actually takes (it used to answer bare prose), exit 2, nothing
+  run. That holds
   for the journal too: a tampered chain, a torn tail, a truncated journal,
   a live lock or a format-1 history is refused by name with the repair
   (`ledger_tampered` → restore from backup; `ledger_torn_tail` → start the

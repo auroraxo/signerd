@@ -45,6 +45,14 @@
 // same - the documented invocation does not run - so both answers are
 // reported as a flag defect, with the flag named in the CLI's own words.
 //
+// MEASURED NOTE (2026-11-19): the ABSENT flag got its own voice too -
+// `missing_flag: --<flag>` + a fix line, in the same code-and-repair shape
+// as every other refusal (measured 14/14 faces mute before the fix,
+// tools/measure-missing-flag-voice.js). The classifier therefore accepts
+// BOTH shapes: the new `missing_flag:` and the old bare `missing --<flag>`
+// that a PINNED TAG still ships (the tag's CLI is a different tree, and
+// this instrument runs against tags as well as main).
+//
 // Usage:
 //   node tools/measure-documented-flags.mjs --cli <path/to/bin/signerd.js> \
 //        --readme <path/to/README.md> [--label <name>] [--out <file>]
@@ -123,8 +131,12 @@ export function classifyRun(invocation, result) {
   if (/Cannot find module/.test(out)) return { kind: 'other', reason: 'measurement broken' };
   const first = (out.split('\n')[0] || '').trim();
   if (first === USAGE_BANNER) return { kind: 'unknown-command' };
-  const missing = /^missing --([^\s]+)/m.exec(out);
+  const missing = /^missing_flag: --([^\s]+)/m.exec(out);
   if (missing) return { kind: 'missing-flag', flag: missing[1] };
+  // The OLD shape, still shipped by every PINNED tag (the tag's CLI is its
+  // own tree): bare prose, no code, no fix.
+  const missingLegacy = /^missing --([^\s]+)/m.exec(out);
+  if (missingLegacy) return { kind: 'missing-flag', flag: missingLegacy[1] };
   // The CLI's strict flag surface: the README named a flag the command does
   // not take. Same defect class as missing-flag (the documented line does not
   // run), reported with the flag the README got wrong.
