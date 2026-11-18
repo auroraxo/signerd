@@ -486,13 +486,17 @@ async function main() {
     } catch (err) {
       if (err instanceof BuildTxError) {
         // Refusals name the repair (the passphrase/grant-file/tx-file rule).
+        // A code without its own fix falls back to the per-code wording
+        // below; the value-input refusals carry theirs on the error.
         const fix = err.code === 'missing_argument'
           ? '  fix: see `signerd` usage — build-tx --keystore <file> --to <pubkey> --lamports <u64> --out <file>'
           : err.code === 'invalid_lamports'
             ? '  fix: pass a plain non-negative integer, e.g. --lamports 42'
             : err.code === 'keystore_unreadable'
               ? '  fix: point --keystore at a keystore created by `signerd keygen`'
-              : `  fix: ${detailOf(err)}`;
+              : typeof err.fix === 'string' && err.fix.length > 0
+                ? `  fix: ${err.fix}`
+                : `  fix: ${detailOf(err)}`;
         process.stderr.write(`${err.code}: ${detailOf(err)}\n${fix}\n`);
         process.exit(2);
       }

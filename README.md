@@ -237,7 +237,11 @@ with certainty instead of a wide set with guesses.
   a live lock or a format-1 history is refused by name with the repair
   (`ledger_tampered` → restore from backup; `ledger_torn_tail` → start the
   daemon once and it repairs the tail; `legacy_wire_required` → `--wires`
-  or `--discard-legacy`), on stderr, without changing the exit code.
+  or `--discard-legacy`), on stderr, without changing the exit code. It
+  holds for the values you pass as well: a mistyped `--to` or `--blockhash`
+  is refused by `build-tx` itself (`invalid_key_argument`, the flag named,
+  the shape stated) instead of surfacing web3.js's prose with a fix line
+  that echoed it.
 - Exit codes are part of the contract, including "signed but could not deliver".
 
 ## Prior art
