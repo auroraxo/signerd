@@ -1,5 +1,5 @@
 {
-  "measuredAt": "2026-11-18T21:18:52.561Z",
+  "measuredAt": "2026-11-18T21:23:24.343Z",
   "tool": "user-zero-d4-dry",
   "tag": "v0.2.39",
   "path": "npm install github:auroraxo/signerd#v0.2.39 into an empty directory",
@@ -22,7 +22,7 @@
     "u0_setup": {
       "keygenExit": 0,
       "grantExit": 0,
-      "keygenError": "{\"file\":\"ks.json\",\"publicKey\":\"6vvqYfDsuF1KiNkwTuMszRcUDbjvskZu1Q9nrMfwaqoC\"}\n",
+      "keygenError": "{\"file\":\"ks.json\",\"publicKey\":\"DRCVsTh37DG5kSgMioQAjkDzNjRrGkTnNtyEoCioS8ff\"}\n",
       "grantError": "{\"ok\":true,\"file\":\"<tmp>\",\"grant\":\"demo\"}\n",
       "pass": true
     },
@@ -72,22 +72,22 @@
     {
       "out": "tx3.json",
       "exit": 0,
-      "error": "{\"ok\":true,\"out\":\"tx3.json\",\"bytes\":215,\"from\":\"6vvqYfDsuF1KiNkwTuMszRcUDbjvskZu1Q9nrMfwaqoC\",\"to\":\"3c5yCX8Zr2u4C9qyFQs6wvUrQG9Jm4HzSLsRfojxoxvK\",\"lamports\":123,\"blockhash\":\"5ow2aW7t665fh8NbQkDtbzEW9R"
+      "error": "{\"ok\":true,\"out\":\"tx3.json\",\"bytes\":215,\"from\":\"DRCVsTh37DG5kSgMioQAjkDzNjRrGkTnNtyEoCioS8ff\",\"to\":\"577Pkj1fZt7NG4HAvk73tpSsBKTaNHr3G7NDVD7wpUQ3\",\"lamports\":123,\"blockhash\":\"J3nHGJMCNwx1UdCQuUeHwpXGom"
     },
     {
       "out": "tx4.json",
       "exit": 0,
-      "error": "{\"ok\":true,\"out\":\"tx4.json\",\"bytes\":215,\"from\":\"6vvqYfDsuF1KiNkwTuMszRcUDbjvskZu1Q9nrMfwaqoC\",\"to\":\"3c5yCX8Zr2u4C9qyFQs6wvUrQG9Jm4HzSLsRfojxoxvK\",\"lamports\":124,\"blockhash\":\"BHjhBRe4SP5oJcvr17YKup9Yp9"
+      "error": "{\"ok\":true,\"out\":\"tx4.json\",\"bytes\":215,\"from\":\"DRCVsTh37DG5kSgMioQAjkDzNjRrGkTnNtyEoCioS8ff\",\"to\":\"577Pkj1fZt7NG4HAvk73tpSsBKTaNHr3G7NDVD7wpUQ3\",\"lamports\":124,\"blockhash\":\"AAtVxzgRciSd6rhv7dyxfjNKDz"
     },
     {
       "out": "tx5.json",
       "exit": 0,
-      "error": "{\"ok\":true,\"out\":\"tx5.json\",\"bytes\":215,\"from\":\"6vvqYfDsuF1KiNkwTuMszRcUDbjvskZu1Q9nrMfwaqoC\",\"to\":\"3c5yCX8Zr2u4C9qyFQs6wvUrQG9Jm4HzSLsRfojxoxvK\",\"lamports\":125,\"blockhash\":\"FUnvyMDrQsEaF761EbwvFVNyBP"
+      "error": "{\"ok\":true,\"out\":\"tx5.json\",\"bytes\":215,\"from\":\"DRCVsTh37DG5kSgMioQAjkDzNjRrGkTnNtyEoCioS8ff\",\"to\":\"577Pkj1fZt7NG4HAvk73tpSsBKTaNHr3G7NDVD7wpUQ3\",\"lamports\":125,\"blockhash\":\"2dhWyg55kpX6YvJhbzD8Sxdrdw"
     },
     {
       "out": "tx6.json",
       "exit": 0,
-      "error": "{\"ok\":true,\"out\":\"tx6.json\",\"bytes\":215,\"from\":\"6vvqYfDsuF1KiNkwTuMszRcUDbjvskZu1Q9nrMfwaqoC\",\"to\":\"3c5yCX8Zr2u4C9qyFQs6wvUrQG9Jm4HzSLsRfojxoxvK\",\"lamports\":126,\"blockhash\":\"FrXTRShtctuYCJxz73UcmgJy6e"
+      "error": "{\"ok\":true,\"out\":\"tx6.json\",\"bytes\":215,\"from\":\"DRCVsTh37DG5kSgMioQAjkDzNjRrGkTnNtyEoCioS8ff\",\"to\":\"577Pkj1fZt7NG4HAvk73tpSsBKTaNHr3G7NDVD7wpUQ3\",\"lamports\":126,\"blockhash\":\"7jdJJ2vAKQfNn2b5er5bnLxCWu"
     }
   ],
   "allPass": true,
