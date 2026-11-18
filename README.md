@@ -40,7 +40,7 @@ npm install -g signerd
 The same tree from a release tag:
 
 ```bash
-npm install github:auroraxo/signerd#v0.2.35
+npm install github:auroraxo/signerd#v0.2.36
 ```
 
 You need Node.js and a C compiler (`cc`) once: the daemon builds a small
@@ -232,7 +232,12 @@ with certainty instead of a wide set with guesses.
   — `status`, `verify-grants` and `seal-grants` — judge the same rule: a file no
   daemon can run is refused there too, instead of being reported `ok:true` or
   sealed into an authenticated file that will never sign.
-- Refusals name the flag and the fix instead of failing silently.
+- Refusals name the flag and the fix instead of failing silently. That holds
+  for the journal too: a tampered chain, a torn tail, a truncated journal,
+  a live lock or a format-1 history is refused by name with the repair
+  (`ledger_tampered` → restore from backup; `ledger_torn_tail` → start the
+  daemon once and it repairs the tail; `legacy_wire_required` → `--wires`
+  or `--discard-legacy`), on stderr, without changing the exit code.
 - Exit codes are part of the contract, including "signed but could not deliver".
 
 ## Prior art
