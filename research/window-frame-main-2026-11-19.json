@@ -1,0 +1,109 @@
+{
+ "generatedAt": "2026-11-19T19:58:54.518Z",
+ "cli": "signerd.js",
+ "verdict": "window-frame-fee-blind",
+ "faces": 9,
+ "faceDefects": 5,
+ "defectIds": [
+  "d1_d2_readme_pairing_ops-24h_max500000000",
+  "d1_d2_readme_pairing_ops-payroll_max1000000",
+  "d3_named_repair_not_runnable",
+  "d4_ceiling_is_window_minus_fee",
+  "d5_creation_accepts_dead_grant"
+ ],
+ "guardBroken": [],
+ "rows": [
+  {
+   "id": "d1_d2_readme_pairing_ops-24h_max500000000",
+   "hold": true,
+   "observed": {
+    "where": "README.md:68 / docs/GUIDE.md:24",
+    "exitCode": 1,
+    "error": "window_cap",
+    "windowSpentLamports": "0",
+    "windowRemainingLamports": "500000000",
+    "fixNamesAppend": true,
+    "journalRecords": 0
+   }
+  },
+  {
+   "id": "d1_d2_readme_pairing_ops-payroll_max1000000",
+   "hold": true,
+   "observed": {
+    "where": "README.md:74 / docs/GUIDE.md:39",
+    "exitCode": 1,
+    "error": "window_cap",
+    "windowSpentLamports": "0",
+    "windowRemainingLamports": "1000000",
+    "fixNamesAppend": true,
+    "journalRecords": 0
+   }
+  },
+  {
+   "id": "d3_named_repair_not_runnable",
+   "hold": true,
+   "observed": {
+    "exitCode": 1,
+    "stderrCode": "grant_exists",
+    "stderrFirstLine": "grant_exists: ops-24h is already in /tmp/signerd-winframe-Bt3beI/g-ops-24h.json"
+   }
+  },
+  {
+   "id": "d4_ceiling_is_window_minus_fee",
+   "hold": true,
+   "observed": {
+    "signsAt": true,
+    "atLamports": 995000,
+    "refusesOver": true,
+    "overLamports": 995001
+   }
+  },
+  {
+   "id": "d5_creation_accepts_dead_grant",
+   "hold": true,
+   "observed": {
+    "creationOk": true,
+    "error": "window_cap",
+    "windowSpentLamports": "0",
+    "journalRecordsAfter": 0
+   }
+  },
+  {
+   "id": "g1_transfer_at_window_minus_fee_signs",
+   "hold": true,
+   "observed": {
+    "signed": true,
+    "lamports": 995000
+   }
+  },
+  {
+   "id": "g2_small_transfer_signs",
+   "hold": true,
+   "observed": {
+    "signed": true
+   }
+  },
+  {
+   "id": "g3_post_spend_window_report_true",
+   "hold": true,
+   "observed": {
+    "windowSpentLamports": "6000",
+    "windowRemainingLamports": "994000"
+   }
+  },
+  {
+   "id": "g4_replay_refused",
+   "hold": true,
+   "observed": {
+    "error": "replay"
+   }
+  }
+ ],
+ "rules": [
+  "cost-is-amount-plus-5000-base-fee",
+  "policy-judges-maxLamports-alone",
+  "empty-window-refusal-reports-spent-0",
+  "named-repair-runs-elsewhere",
+  "no-host-path"
+ ]
+}
