@@ -1,0 +1,40 @@
+{
+  "schema": "signerd-refusal-voice-registry/1",
+  "measuredAt": "2026-11-19T08:54:13.089Z",
+  "channel": "registry (npm install signerd, no clone)",
+  "version": "0.2.42",
+  "verdict": "refusal-voice-reaches-the-published-channel",
+  "failures": [],
+  "cases": [
+    {
+      "case": "destination",
+      "exit": 1,
+      "stderrCodeLine": "destination",
+      "stderrLineCount": 2,
+      "fixPresent": true,
+      "machineUnchanged": true,
+      "repairNamesRealCommand": true,
+      "repairCarriesGrantName": true,
+      "stderrHasHostPath": false,
+      "stdoutHasHostPath": false
+    },
+    {
+      "case": "grant_not_found",
+      "exit": 1,
+      "stderrCodeLine": "grant_not_found",
+      "stderrLineCount": 2,
+      "fixPresent": true,
+      "machineUnchanged": true,
+      "repairCarriesGrantName": true,
+      "stderrHasHostPath": false,
+      "stdoutHasHostPath": false
+    },
+    {
+      "case": "legal_sign_stays_silent",
+      "exit": 0,
+      "stderrBytes": 0,
+      "wroteOutput": true
+    }
+  ],
+  "hostPathFree": true
+}
