@@ -1,0 +1,69 @@
+{
+ "generatedAt": "2026-11-19T08:29:25.798Z",
+ "cli": "signerd.js",
+ "verdict": "duplicate-key-refused",
+ "faces": 6,
+ "faceDefects": 0,
+ "guardBroken": [],
+ "rows": [
+  {
+   "id": "status_refuses_duplicate",
+   "hold": true,
+   "observed": {
+    "status": 1,
+    "names": true,
+    "stdoutOk": false
+   }
+  },
+  {
+   "id": "append_refuses_and_preserves_file",
+   "hold": true,
+   "observed": {
+    "status": 1,
+    "names": true,
+    "bytesChanged": false
+   }
+  },
+  {
+   "id": "daemon_refuses_to_start",
+   "hold": true,
+   "observed": {
+    "status": 1,
+    "signal": null,
+    "names": true
+   }
+  },
+  {
+   "id": "verify_names_the_duplicate",
+   "hold": true,
+   "observed": {
+    "status": 1,
+    "names": true
+   }
+  },
+  {
+   "id": "grant_remove_refuses_and_preserves_file",
+   "hold": true,
+   "observed": {
+    "status": 1,
+    "names": true,
+    "bytesChanged": false
+   }
+  },
+  {
+   "id": "guard_legal_file_still_served",
+   "hold": true,
+   "observed": {
+    "status": 0,
+    "stdoutOk": true
+   }
+  }
+ ],
+ "rules": [
+  "duplicate-key-refused-by-name",
+  "file-byte-identical",
+  "daemon-start-refused",
+  "no-host-path",
+  "legal-file-served"
+ ]
+}

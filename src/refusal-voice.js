@@ -123,6 +123,7 @@ const REPAIRS = {
   // same shape for the family, with the family-specific wording.
   grant_file_unreadable: 'the grant file cannot be read — create or repair it: signerd grant-add --grants <grants> --name <grant> --keystore <keystore> --destination <pubkey> --max-lamports <u64> --window-max-lamports <u64> --window-seconds <secs> --expires <iso>',
   grant_file_invalid: 'the grant file is not a valid grant document — recreate it: signerd grant-add --grants <grants> --name <grant> --keystore <keystore> --destination <pubkey> --max-lamports <u64> --window-max-lamports <u64> --window-seconds <secs> --expires <iso>',
+  grant_duplicate_key: 'the grant file names a key twice and only the last spelling would run — open it and delete the stale duplicate block (keep exactly one member per name): signerd status --grants <grants> --ledger <ledger>',
   grant_file_mode: 'the grant file is readable or writable by others — owner-only it: chmod 600 <grants>',
   grant_file_owner: 'the grant file is not owned by this user — chown it back to yourself: chown $(id -u) <grants> && chmod 600 <grants>',
   grant_file_dir_mode: 'the grant file\'s directory allows group/other access — owner-only it: chmod 700 $(dirname <grants>)',

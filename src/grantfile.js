@@ -37,6 +37,103 @@ function fail(reason, detail) {
 }
 
 /**
+ * The name of a document key that is written TWICE, or null.
+ *
+ * WHY THIS EXISTS (measured 2026-11-19, tree 260384b): JSON.parse keeps
+ * the LAST spelling of a duplicated key and says nothing. In the grant
+ * file - a security file whose whole content is "what this daemon may
+ * sign" - that means the file can DISPLAY one scope and RUN another. The
+ * loader enforced the hidden spelling while `status` reported {"ok":true},
+ * `grant-add --append` accepted the file and wrote it back without the
+ * duplicate, and the daemon started and served the hidden cap.
+ *
+ * WHY A SCANNER AND NOT JSON.parse: the information is gone by the time
+ * JSON.parse returns. So the RAW bytes are scanned for member names.
+ *
+ * THE SCAN IS PER OBJECT, NOT PER DOCUMENT:
+ *   - only member names of the SAME object are compared. Two DIFFERENT
+ *     grants may legitimately repeat every field name of every other
+ *     (1000 grants in G5) - those are separate objects and stay legal;
+ *   - a duplicated name INSIDE one object is a hazard at every level: a
+ *     duplicated grant name runs the hidden cap, and a duplicated FIELD
+ *     inside a grant runs the hidden field. Both are the same defect -
+ *     the file says one thing and the product runs another - so both are
+ *     refused by the same code;
+ *   - strings, numbers, escapes and comments-free JSON only: the scanner
+ *     walks the text and understands "this string is a VALUE" vs "this
+ *     string is a KEY".
+ *
+ * The scanner is deliberately conservative: when it cannot understand the
+ * text it returns null (no duplicate found) rather than guessing. A
+ * malformed document is refused by the ordinary parse in the caller, so a
+ * scanner miss can never make an invalid document readable.
+ */
+function duplicateDocumentKey(raw) {
+  if (typeof raw !== 'string' || raw.length === 0) return null;
+  // The stack of object member-name sets we are currently inside. A member
+  // name belongs to the object that CONTAINS it.
+  const stack = [];
+  let i = 0;
+  const n = raw.length;
+  while (i < n) {
+    const ch = raw[i];
+    if (ch === '{') {
+      stack.push(new Set());
+      i += 1;
+      continue;
+    }
+    if (ch === '}') {
+      stack.pop();
+      i += 1;
+      continue;
+    }
+    if (ch === '"') {
+      // Read the string literal (with escapes).
+      let j = i + 1;
+      let name = '';
+      while (j < n) {
+        const c = raw[j];
+        if (c === '\\') {
+          // Keep escapes as they are: two spellings of the same name must
+          // compare EQUAL, so the escape is decoded the way JSON decodes it
+          // for the simple cases (\" \\ \/ \b \f \n \r \t \uXXXX).
+          const esc = raw[j + 1];
+          if (esc === 'u') {
+            const hex = raw.slice(j + 2, j + 6);
+            if (!/^[0-9a-fA-F]{4}$/.test(hex)) return null; // cannot read it
+            name += String.fromCharCode(parseInt(hex, 16));
+            j += 6;
+            continue;
+          }
+          const simple = { '"': '"', '\\': '\\', '/': '/', b: '\b', f: '\f', n: '\n', r: '\r', t: '\t' };
+          if (!(esc in simple)) return null; // an escape we do not decode
+          name += simple[esc];
+          j += 2;
+          continue;
+        }
+        if (c === '"') break;
+        if (c === '\n' || c === '\r') return null; // not a JSON string
+        name += c;
+        j += 1;
+      }
+      if (j >= n) return null; // unterminated string: not readable here
+      i = j + 1;
+      // Is this string a KEY (followed by ':') or a VALUE?
+      let k = i;
+      while (k < n && (raw[k] === ' ' || raw[k] === '\t' || raw[k] === '\n' || raw[k] === '\r')) k += 1;
+      if (raw[k] !== ':') continue; // a VALUE, not a member name
+      const current = stack[stack.length - 1];
+      if (current === undefined) return null; // a key outside any object
+      if (current.has(name)) return name; // THE DUPLICATE
+      current.add(name);
+      continue;
+    }
+    i += 1;
+  }
+  return null;
+}
+
+/**
  * Strict per-grant schema check, run at load time so a typo fails at startup
  * instead of silently weakening a live grant. Value semantics (key validity,
  * canonical expiry, u64 ranges) are re-checked by policy.js/ledger.js on every
@@ -278,6 +375,28 @@ function loadGrantFile(file, options = {}) {
     doc = JSON.parse(raw);
   } catch {
     throw fail('grant_file_invalid');
+  }
+  // THE DOCUMENT-KEY LEVEL IS JUDGED TOO (2026-11-19, duplicate-key voice):
+  // JSON.parse silently keeps the LAST spelling of a key written twice, so
+  // a hand edit that leaves one block behind ran a cap the file does not
+  // display - measured on tree 260384b: the loader enforced the hidden
+  // 500000000 while `status` said {"ok":true} on the same file,
+  // `grant-add --append` accepted it and rewrote it without the duplicate,
+  // and the daemon STARTED and served the hidden cap. Every other typo in
+  // a security file is refused by name (unknown field, bad value,
+  // duplicate_flag for flags); a duplicated document key was the one
+  // spelling that silently meant something else than it looks like. One
+  // judge: this scanner runs here, before the shape and seal branches, so
+  // the daemon's per-request reload, status, verify-grants, seal-grants
+  // (which must not authenticate an ambiguous document), grant-add
+  // --append and grant-remove all inherit the refusal. The scanner is
+  // grammar-level: it sees raw member names, not fields, so 1000 grants
+  // that legitimately repeat field names stay legal (G5).
+  const dup = duplicateDocumentKey(raw);
+  if (dup !== null) {
+    throw fail('grant_duplicate_key',
+      `the document names "${dup}" twice - JSON would silently keep the LAST spelling, ` +
+      'which is not the file you read: remove the stale block and keep one');
   }
   if (doc === null || typeof doc !== 'object' || doc.version !== 1 ||
       typeof doc.grants !== 'object' || doc.grants === null || Array.isArray(doc.grants)) {
