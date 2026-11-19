@@ -1,0 +1,48 @@
+{
+  "tool": "seal-mode on the registry channel (npm install signerd)",
+  "measuredAt": "2026-11-19T06:46:09.135Z",
+  "channel": "npm install signerd (registry, NO git clone)",
+  "packageVersion": "0.2.41",
+  "expectedVersion": "0.2.41",
+  "installExit": 0,
+  "results": {
+    "S1_keyless_read_refused": {
+      "sealedExit": 0,
+      "loaded": false,
+      "code": "grant_file_sealed",
+      "readTampered": false,
+      "pass": true
+    },
+    "S2_status_refused": {
+      "exit": 1,
+      "named": true,
+      "reportedOk": false,
+      "reportedUnsealed": false,
+      "pass": true
+    },
+    "S3_daemon_refused": {
+      "exit": 1,
+      "named": true,
+      "reportedServing": false,
+      "pass": true
+    },
+    "S4_reseal_still_works": {
+      "resealExit": 0,
+      "verifyExit": 0,
+      "pass": true
+    },
+    "S5_keyed_read_still_refuses": {
+      "exit": 1,
+      "named": true,
+      "pass": true
+    },
+    "G1_unsealed_still_loads": {
+      "loaded": true,
+      "destination": "So11111111111111111111111111111111111111112",
+      "statusExit": 0,
+      "pass": true
+    }
+  },
+  "failures": [],
+  "verdict": "registry-seal-mode-holds"
+}
