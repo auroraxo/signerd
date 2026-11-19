@@ -1,0 +1,100 @@
+{
+ "generatedAt": "2026-11-19T06:24:37.270Z",
+ "root": "<home>",
+ "readme": "README.md",
+ "verdict": "documented-envelope-truthful",
+ "faces": 8,
+ "faceDefects": 0,
+ "results": [
+  {
+   "id": "system_transfer",
+   "kind": "sign-claim",
+   "claimedCells": [
+    "ONE legacy System transfer: a single instruction, three keys, one signer (the fee payer)"
+   ],
+   "expected": "allowed",
+   "measured": "allowed:42",
+   "defect": false,
+   "why": "claimed and the product admits the shape (allowed:42)"
+  },
+  {
+   "id": "spend_cap",
+   "kind": "sign-claim",
+   "claimedCells": [
+    "Within per-transaction (`maxLamports`) and rolling-window caps"
+   ],
+   "expected": "refused:amount",
+   "measured": "refused:amount",
+   "defect": false,
+   "why": "claimed and the product admits the shape (refused:amount)"
+  },
+  {
+   "id": "message_receipt",
+   "kind": "sign-claim",
+   "claimedCells": [
+    "A receipt body from a message grant (openreceipts/v1)"
+   ],
+   "expected": "allowed",
+   "measured": "allowed:188",
+   "defect": false,
+   "why": "claimed and the product admits the shape (allowed:188)"
+  },
+  {
+   "id": "alt_lookup_wire",
+   "kind": "refuse-guard",
+   "claimedCells": [
+    "Address lookup tables (all v0/v1 versioned wire) and programs that can call other programs (Whirlpool, Jupiter, ...)"
+   ],
+   "expected": "refused:version_or_alt",
+   "measured": "refused:version_or_alt",
+   "defect": false,
+   "why": "still refuses version_or_alt (guard holds)"
+  },
+  {
+   "id": "cpi_capable_program",
+   "kind": "refuse-guard",
+   "claimedCells": [
+    "Address lookup tables (all v0/v1 versioned wire) and programs that can call other programs (Whirlpool, Jupiter, ...)"
+   ],
+   "expected": "refused:program",
+   "measured": "refused:program",
+   "defect": false,
+   "why": "still refuses program (guard holds)"
+  },
+  {
+   "id": "token_2022",
+   "kind": "refuse-guard",
+   "claimedCells": [
+    "Token-2022, and any transaction it cannot verify from the bytes alone"
+   ],
+   "expected": "refused:program",
+   "measured": "refused:program",
+   "defect": false,
+   "why": "still refuses program (guard holds)"
+  },
+  {
+   "id": "claims_readable",
+   "kind": "coverage",
+   "claimedCells": [],
+   "expected": "every Sign cell has a probe",
+   "measured": "covered",
+   "defect": false,
+   "why": "all 3 Sign cells match a measured probe"
+  },
+  {
+   "id": "refusal_example_minted",
+   "kind": "example-code",
+   "claimedCells": [
+    "{refused: \"version_or_alt\"}"
+   ],
+   "expected": "every quoted code exists in src/",
+   "measured": "all-minted",
+   "defect": false,
+   "why": "every quoted refusal code exists in src/ (158 minted)"
+  }
+ ],
+ "quotedRefusalExamples": [
+  "version_or_alt"
+ ],
+ "mintedCodeCount": 158
+}

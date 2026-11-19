@@ -121,7 +121,7 @@ const answer = await signViaDaemon({ socketPath, grant: 'ops-24h', wire });
 if (answer.ok) {
   const signedWire = Buffer.from(answer.signed, 'base64');
 } else {
-  console.log(answer.error);   // e.g. 'alt', 'version_or_alt', 'window_cap'
+  console.log(answer.error);   // e.g. 'version_or_alt', 'window_cap'
 }
 ```
 
@@ -187,13 +187,13 @@ daemon then refuses the file (`grant_file_seal_mismatch`).
 ## What it will and will not sign
 
 signerd signs only what it can fully decide offline, and refuses everything
-else with a machine-readable reason (`{refused: "alt", ...}`).
+else with a machine-readable reason (`{refused: "version_or_alt", ...}`).
 
-| Signs (v1) | Refuses |
+| Signs (v0) | Refuses |
 |---|---|
-| System transfers, Memo, ComputeBudget | Address lookup tables |
-| SPL Token `Transfer` / `TransferChecked` on allowlisted mints and destinations | Programs that can call other programs (Whirlpool, Jupiter, ...) |
-| Within per-transaction and rolling-window caps | Token-2022, authority changes (`Approve`, `SetAuthority`, `CloseAccount`, ...) |
+| ONE legacy System transfer: a single instruction, three keys, one signer (the fee payer) | Every other instruction: Memo, ComputeBudget, SPL Token `Transfer` / `TransferChecked`, authority changes (`Approve`, `SetAuthority`, `CloseAccount`, ...) |
+| Within per-transaction (`maxLamports`) and rolling-window caps | Address lookup tables (all v0/v1 versioned wire) and programs that can call other programs (Whirlpool, Jupiter, ...) |
+| A receipt body from a message grant (openreceipts/v1) | Token-2022, and any transaction it cannot verify from the bytes alone |
 
 Measured on 2,835 finalized mainnet transactions, the current envelope covers
 roughly 7 in 100 of them. That is a deliberate trade: it signs a narrow set
