@@ -1,0 +1,122 @@
+{
+ "generatedAt": "2026-11-19T06:24:59.845Z",
+ "root": "<tmp>",
+ "readme": "<tmp>",
+ "verdict": "documented-envelope-overclaim",
+ "faces": 10,
+ "faceDefects": 4,
+ "results": [
+  {
+   "id": "system_transfer",
+   "kind": "sign-claim",
+   "claimedCells": [
+    "System transfers, Memo, ComputeBudget"
+   ],
+   "expected": "allowed",
+   "measured": "allowed:42",
+   "defect": false,
+   "why": "claimed and the product admits the shape (allowed:42)"
+  },
+  {
+   "id": "memo",
+   "kind": "sign-claim",
+   "claimedCells": [
+    "System transfers, Memo, ComputeBudget"
+   ],
+   "expected": "allowed",
+   "measured": "refused:envelope",
+   "defect": true,
+   "why": "claimed as \"System transfers, Memo, ComputeBudget\" but the product says refused:envelope (expected allowed)"
+  },
+  {
+   "id": "compute_budget",
+   "kind": "sign-claim",
+   "claimedCells": [
+    "System transfers, Memo, ComputeBudget"
+   ],
+   "expected": "allowed",
+   "measured": "refused:envelope",
+   "defect": true,
+   "why": "claimed as \"System transfers, Memo, ComputeBudget\" but the product says refused:envelope (expected allowed)"
+  },
+  {
+   "id": "spl_token_transfer",
+   "kind": "sign-claim",
+   "claimedCells": [
+    "SPL Token `Transfer` / `TransferChecked` on allowlisted mints and destinations"
+   ],
+   "expected": "allowed",
+   "measured": "refused:envelope",
+   "defect": true,
+   "why": "claimed as \"SPL Token `Transfer` / `TransferChecked` on allowlisted mints and destinations\" but the product says refused:envelope (expected allowed)"
+  },
+  {
+   "id": "spend_cap",
+   "kind": "sign-claim",
+   "claimedCells": [
+    "Within per-transaction and rolling-window caps"
+   ],
+   "expected": "refused:amount",
+   "measured": "refused:amount",
+   "defect": false,
+   "why": "claimed and the product admits the shape (refused:amount)"
+  },
+  {
+   "id": "alt_lookup_wire",
+   "kind": "refuse-guard",
+   "claimedCells": [
+    "Address lookup tables"
+   ],
+   "expected": "refused:version_or_alt",
+   "measured": "refused:version_or_alt",
+   "defect": false,
+   "why": "still refuses version_or_alt (guard holds)"
+  },
+  {
+   "id": "cpi_capable_program",
+   "kind": "refuse-guard",
+   "claimedCells": [
+    "Programs that can call other programs (Whirlpool, Jupiter, ...)"
+   ],
+   "expected": "refused:program",
+   "measured": "refused:program",
+   "defect": false,
+   "why": "still refuses program (guard holds)"
+  },
+  {
+   "id": "token_2022",
+   "kind": "refuse-guard",
+   "claimedCells": [
+    "Token-2022, authority changes (`Approve`, `SetAuthority`, `CloseAccount`, ...)"
+   ],
+   "expected": "refused:program",
+   "measured": "refused:program",
+   "defect": false,
+   "why": "still refuses program (guard holds)"
+  },
+  {
+   "id": "claims_readable",
+   "kind": "coverage",
+   "claimedCells": [],
+   "expected": "every Sign cell has a probe",
+   "measured": "covered",
+   "defect": false,
+   "why": "all 3 Sign cells match a measured probe"
+  },
+  {
+   "id": "refusal_example_minted",
+   "kind": "example-code",
+   "claimedCells": [
+    "{refused: \"alt\"}"
+   ],
+   "expected": "every quoted code exists in src/",
+   "measured": "unminted:alt",
+   "defect": true,
+   "why": "the README quotes {refused: \"alt\" } and src/ mints no such code (158 minted)"
+  }
+ ],
+ "quotedRefusalExamples": [
+  "alt"
+ ],
+ "mintedCodeCount": 158
+}
